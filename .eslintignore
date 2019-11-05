@@ -1,0 +1,6 @@
+tmp/**
+build/**
+node_modules/**
+contracts/**
+truffle.js
+

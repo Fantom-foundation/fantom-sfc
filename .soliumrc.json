@@ -1,0 +1,7 @@
+{
+   "extends": "solium:all",
+   "rules": {
+    	   "uppercase": "off"
+   }
+}
+
