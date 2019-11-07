@@ -4,6 +4,7 @@ import "@openzeppelin/contracts/math/SafeMath.sol";
 
 contract Stakers {
     using SafeMath for uint256;
+
     uint256 public constant minValidationStake = 1 ether;
     uint256 public constant minDelegation = 1 ether;
 
@@ -78,7 +79,7 @@ contract Stakers {
 
     event CreatedVStake(address indexed staker, uint256 amount);
 
-    function createVStake() external payable {
+    function createVStake() public payable {
         address staker = msg.sender;
 
         require(vStakers[staker].stakeAmount == 0); // staker doesn't exist yet
@@ -332,5 +333,47 @@ contract Stakers {
         if (len == 0) {
             delete delegations[delegator];
         }
+    }
+}
+
+contract TestStakers is Stakers {
+    address[] public validatorAddresses;
+
+    constructor (uint256 firstEpoch) public {
+        lastEpoch = firstEpoch;
+    }
+
+    function _markValidationStakeAsCheater(address validatorAddress, bool status) external {
+        if (vStakers[validatorAddress].stakerIdx != 0x0) {
+            vStakers[validatorAddress].isCheater = status;
+        }
+    }
+
+    function createVStake() public payable {
+        validatorAddresses.push(msg.sender); // SS Check existing?
+        super.createVStake();
+    }
+
+    function _makeEpochSnapshots() external {
+        EpochSnapshot storage newSnapshots = epochSnapshots[lastEpoch];
+
+        newSnapshots.endTime = block.timestamp;
+        newSnapshots.duration = block.timestamp.sub(epochSnapshots[lastEpoch].endTime);
+        for (uint256 i = 0; i < validatorAddresses.length; i++) {
+            if (block.timestamp < vStakers[validatorAddresses[i]].deactivatedTime) {
+                uint256 power = 0.5 ether;
+                newSnapshots.totalValidatingPower = newSnapshots.totalValidatingPower.add(power);
+                newSnapshots.validators[validatorAddresses[i]] = ValidatorMerit(
+                    power,
+                    vStakers[validatorAddresses[i]].stakeAmount,
+                    vStakers[validatorAddresses[i]].delegatedMe,
+                    vStakers[validatorAddresses[i]].stakerIdx
+                );
+            }
+        }
+
+        newSnapshots.epochFee = 2 ether;
+
+        lastEpoch++;
     }
 }
