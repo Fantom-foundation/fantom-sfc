@@ -82,8 +82,8 @@ contract Stakers {
     function createVStake() public payable {
         address staker = msg.sender;
 
-        require(vStakers[staker].stakeAmount == 0); // staker doesn't exist yet
-        require(msg.value >= minValidationStake);
+        require(vStakers[staker].stakeAmount == 0, "staker doesn't exist yet");
+        require(msg.value >= minValidationStake, "insufficient amount for staking");
 
         vStakers[staker].stakeAmount = msg.value;
         vStakers[staker].createdEpoch = lastEpoch;
@@ -91,7 +91,7 @@ contract Stakers {
         vStakers[staker].stakerIdx = ++vStakersLastIdx;
 
         vStakersNum++;
-        vStakeTotalAmount += msg.value; // SS safeMath
+        vStakeTotalAmount = vStakeTotalAmount.add(msg.value);
         emit CreatedVStake(staker, msg.value);
     }
 
@@ -100,10 +100,10 @@ contract Stakers {
     function increaseVStake() external payable {
         address staker = msg.sender;
 
-        require(vStakers[staker].stakeAmount != 0); // staker exists
-        uint256 newAmount = vStakers[staker].stakeAmount + msg.value; // SS safeMath
+        require(vStakers[staker].stakeAmount != 0, "staker doesn't created");
+        uint256 newAmount = vStakers[staker].stakeAmount.add(msg.value);
         vStakers[staker].stakeAmount = newAmount;
-        vStakeTotalAmount += msg.value; // SS safeMath
+        vStakeTotalAmount = vStakeTotalAmount.add(msg.value);
         emit IncreasedVStake(staker, newAmount, msg.value);
     }
 
@@ -112,24 +112,23 @@ contract Stakers {
     function createDelegation(address to) external payable {
         address from = msg.sender;
 
-        require(vStakers[to].stakeAmount != 0); // staker exist
-        require(msg.value >= minDelegation);
-        require((vStakers[to].stakeAmount * maxDelegatedMeRatio) / percentUnit >= vStakers[to].delegatedMe + msg.value); // SS safeMath
-        uint256 i = delegations[from].length++;
-        delegations[from][i].createdEpoch = lastEpoch;
-        delegations[from][i].createdTime = block.timestamp;
-        delegations[from][i].amount = msg.value;
-        delegations[from][i].toStakerAddress = to;
-        delegations[from][i].toStakerIdx = vStakers[to].stakerIdx;
-        vStakers[to].delegatedMe += msg.value; // SS safeMath
+        require(vStakers[to].stakeAmount != 0, "staker doesn't created");
+        require(msg.value >= minDelegation, "insufficient amount for delegation");
+        require((vStakers[to].stakeAmount.mul(maxDelegatedMeRatio)).div(percentUnit) >= vStakers[to].delegatedMe.add(msg.value), "delegated limit is exceeded");
+        Delegation memory newDelegation;
+        newDelegation.createdEpoch = lastEpoch;
+        newDelegation.createdTime = block.timestamp;
+        newDelegation.amount = msg.value;
+        newDelegation.toStakerAddress = to;
+        newDelegation.toStakerIdx = vStakers[to].stakerIdx;
+        delegations[from].push(newDelegation);
+
+        vStakers[to].delegatedMe = vStakers[to].delegatedMe.add(msg.value);
         delegationsNum++;
-        delegationsTotalAmount += msg.value;
+        delegationsTotalAmount = delegationsTotalAmount.add(msg.value);
 
-        emit CreatedDelegation(from, to, msg.value, getEffectiveStake(to));
-    }
-
-    function getEffectiveStake(address staker) view internal returns (uint256) {
-        return vStakers[staker].delegatedMe + vStakers[staker].stakeAmount; // SS safeMath
+        uint256 effectiveStake = vStakers[to].delegatedMe.add(vStakers[to].stakeAmount);
+        emit CreatedDelegation(from, to, msg.value, effectiveStake);
     }
 
     function calcTotalReward(address staker, uint256 epoch) view internal returns (uint256) {
