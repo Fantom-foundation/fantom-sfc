@@ -134,13 +134,13 @@ contract Stakers {
     function calcTotalReward(address staker, uint256 epoch) view internal returns (uint256) {
         uint256 totalValidatingPower = epochSnapshots[epoch].totalValidatingPower;
         uint256 validatingPower = epochSnapshots[epoch].validators[staker].validatingPower;
-        require(totalValidatingPower != 0);
+        require(totalValidatingPower != 0, "total validating power can't be null");
 
         uint256 reward = 0;
         // base reward
-        reward += (epochSnapshots[epoch].duration * validatingPower) / totalValidatingPower; // SS safeMath
+        reward = reward.add(epochSnapshots[epoch].duration.mul(validatingPower).div(totalValidatingPower));
         // fee reward
-        reward += (epochSnapshots[epoch].epochFee * validatingPower) / totalValidatingPower; // SS safeMath
+        reward = reward.add(epochSnapshots[epoch].epochFee.mul(validatingPower).div(totalValidatingPower));
         return reward;
     }
 
@@ -149,9 +149,9 @@ contract Stakers {
 
         uint256 stake = epochSnapshots[epoch].validators[staker].stakeAmount;
         uint256 delegatedTotal = epochSnapshots[epoch].validators[staker].delegatedMe;
-        uint256 totalStake = stake + delegatedTotal; // SS safeMath
-        uint256 weightedTotalStake = stake + (delegatedTotal * validatorCommission) / percentUnit; // SS safeMath
-        return (fullReward * totalStake) / weightedTotalStake; // SS safeMath
+        uint256 totalStake = stake.add(delegatedTotal);
+        uint256 weightedTotalStake = stake.add((delegatedTotal.mul(validatorCommission)).div(percentUnit));
+        return (fullReward.mul(weightedTotalStake)).div(totalStake);
     }
 
     function calcDelegatorReward(address staker, uint256 epoch, uint256 delegatedAmount) view internal returns (uint256) {
@@ -159,9 +159,9 @@ contract Stakers {
 
         uint256 stake = epochSnapshots[epoch].validators[staker].stakeAmount;
         uint256 delegatedTotal = epochSnapshots[epoch].validators[staker].delegatedMe;
-        uint256 totalStake = stake + delegatedTotal; // SS safeMath
-        uint256 weightedTotalStake = (delegatedAmount * (percentUnit - validatorCommission)) / percentUnit; // SS safeMath
-        return (fullReward * totalStake) / weightedTotalStake; // SS safeMath
+        uint256 totalStake = stake.add(delegatedTotal);
+        uint256 weightedTotalStake = (delegatedAmount.mul(percentUnit.sub(validatorCommission))).div(percentUnit);
+        return (fullReward.mul(weightedTotalStake)).div(totalStake);
     }
 
     function withDefault(uint256 a, uint256 defaultA) pure private returns(uint256) {
@@ -348,21 +348,29 @@ contract TestStakers is Stakers {
         }
     }
 
-    function createVStake() public payable {
+    function _createVStake() external payable {
         validatorAddresses.push(msg.sender); // SS Check existing?
         super.createVStake();
     }
 
-    function _makeEpochSnapshots() external {
-        EpochSnapshot storage newSnapshots = epochSnapshots[lastEpoch];
+    function _makeEpochSnapshots(uint256 optionalDuration) external returns(uint256) {
+        EpochSnapshot storage newSnapshot = epochSnapshots[lastEpoch];
+        uint256 epochPay = 0;
 
-        newSnapshots.endTime = block.timestamp;
-        newSnapshots.duration = block.timestamp.sub(epochSnapshots[lastEpoch].endTime);
+        newSnapshot.endTime = block.timestamp;
+        if (optionalDuration != 0 || lastEpoch == 0) {
+            newSnapshot.duration = optionalDuration;
+        } else {
+            newSnapshot.duration = block.timestamp.sub(epochSnapshots[lastEpoch.sub(1)].endTime);
+        }
+        epochPay = epochPay.add(newSnapshot.duration);
+
         for (uint256 i = 0; i < validatorAddresses.length; i++) {
-            if (block.timestamp < vStakers[validatorAddresses[i]].deactivatedTime) {
-                uint256 power = 0.5 ether;
-                newSnapshots.totalValidatingPower = newSnapshots.totalValidatingPower.add(power);
-                newSnapshots.validators[validatorAddresses[i]] = ValidatorMerit(
+            uint256 deactivatedTime =  vStakers[validatorAddresses[i]].deactivatedTime;
+            if (deactivatedTime == 0 || block.timestamp < deactivatedTime) {
+                uint256 power = i.mul(2).add(1).mul(0.5 ether);
+                newSnapshot.totalValidatingPower = newSnapshot.totalValidatingPower.add(power);
+                newSnapshot.validators[validatorAddresses[i]] = ValidatorMerit(
                     power,
                     vStakers[validatorAddresses[i]].stakeAmount,
                     vStakers[validatorAddresses[i]].delegatedMe,
@@ -371,8 +379,23 @@ contract TestStakers is Stakers {
             }
         }
 
-        newSnapshots.epochFee = 2 ether;
+        newSnapshot.epochFee = 2 ether;
+        epochPay = epochPay.add(newSnapshot.epochFee);
 
         lastEpoch++;
+
+        return epochPay;
+    }
+
+    function _calcTotalReward(address staker, uint256 epoch) view external returns (uint256) {
+        return super.calcTotalReward(staker, epoch);
+    }
+
+    function _calcValidatorReward(address staker, uint256 epoch) view external returns (uint256) {
+        return super.calcValidatorReward(staker, epoch);
+    }
+
+    function _calcDelegatorReward(address staker, uint256 epoch, uint256 delegatedAmount) view external returns (uint256) {
+        return super.calcDelegatorReward(staker, epoch, delegatedAmount);
     }
 }

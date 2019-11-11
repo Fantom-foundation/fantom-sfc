@@ -29,10 +29,10 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
 
     it('checking createVStake function', async () => {
         expect(await this.stakers.vStakersNum.call()).to.be.bignumber.equal(new BN('0'));
-        await this.stakers.createVStake({from: firstStaker, value: ether('2.0')});
-        await this.stakers.createVStake({from: secondStaker, value: ether('1.01')});
-        await expectRevert(this.stakers.createVStake({from: thirdStaker, value: ether('0.99') }), 'insufficient amount for staking');
-        await expectRevert(this.stakers.createVStake({from: firstStaker}), 'staker doesn\'t exist yet');
+        await this.stakers._createVStake({from: firstStaker, value: ether('2.0')});
+        await this.stakers._createVStake({from: secondStaker, value: ether('1.01')});
+        await expectRevert(this.stakers._createVStake({from: thirdStaker, value: ether('0.99') }), 'insufficient amount for staking');
+        await expectRevert(this.stakers._createVStake({from: firstStaker}), 'staker doesn\'t exist yet');
 
         expect(await this.stakers.vStakersNum.call()).to.be.bignumber.equal(new BN('2'));
         expect(await this.stakers.vStakeTotalAmount.call()).to.be.bignumber.equal(ether('3.01'));
@@ -48,7 +48,7 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
     });
 
     it('checking increaseVStake function', async () => {
-        await this.stakers.createVStake({from: firstStaker, value: ether('2.0')});
+        await this.stakers._createVStake({from: firstStaker, value: ether('2.0')});
         await this.stakers.increaseVStake({from: firstStaker, value: ether('1.0')});
         await this.stakers.increaseVStake({from: firstStaker, value: ether('1.0')});
         await this.stakers.increaseVStake({from: firstStaker, value: ether('1.0')});
@@ -62,7 +62,7 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
         const getDeposition = async (depositor, number) => this.stakers.delegations.call(depositor, number);
         const getStaker = async (staker) => this.stakers.vStakers.call(staker);
 
-        await this.stakers.createVStake({from: firstStaker, value: ether('2.0')});
+        await this.stakers._createVStake({from: firstStaker, value: ether('2.0')});
 
         await this.stakers.createDelegation(firstStaker, {from: firstDepositor, value: ether('1.0')});
         await expectRevert(this.stakers.createDelegation(secondStaker, {from: secondDepositor, value: ether('1.0')}), 'staker doesn\'t created');
@@ -76,19 +76,58 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
         const firstStakerEntity = await getStaker(firstStaker);
         expect(firstDepositionEntity.amount).to.be.bignumber.equal(ether('1'));
         expect(firstDepositionEntity.createdEpoch).to.be.bignumber.equal(new BN('0'));
-        expect(firstDepositionEntity.createdTime).to.be.bignumber.equal(now);
+        expect(now.sub(firstDepositionEntity.createdTime)).to.be.bignumber.lessThan(new BN('2'));
         expect(firstDepositionEntity.toStakerAddress).to.equal(firstStaker);
         expect(firstDepositionEntity.toStakerIdx).to.be.bignumber.equal(firstStakerEntity.stakerIdx);
 
         const secondDepositionEntity = await getDeposition(secondDepositor, new BN('0'));
         expect(secondDepositionEntity.amount).to.be.bignumber.equal(ether('29'));
         expect(secondDepositionEntity.createdEpoch).to.be.bignumber.equal(new BN('0'));
-        expect(secondDepositionEntity.createdTime).to.be.bignumber.equal(now);
+        expect(now.sub(secondDepositionEntity.createdTime)).to.be.bignumber.lessThan(new BN('2'));
         expect(secondDepositionEntity.toStakerAddress).to.equal(firstStaker);
         expect(secondDepositionEntity.toStakerIdx).to.be.bignumber.equal(firstStakerEntity.stakerIdx);
 
         expect(firstStakerEntity.delegatedMe).to.be.bignumber.equal(ether('30.0'));
         expect(await this.stakers.delegationsTotalAmount.call()).to.be.bignumber.equal(ether('30.0'));
         expect(await this.stakers.delegationsNum.call()).to.be.bignumber.equal(new BN('2'));
+    });
+
+    it('checking calcTotalReward function', async () => {
+        await expectRevert(this.stakers._calcTotalReward(firstStaker, new BN('0')), 'total validating power can\'t be null');
+        await this.stakers._createVStake({from: firstStaker, value: ether('1.0')});
+        await this.stakers.createDelegation(firstStaker, {from: firstDepositor, value: ether('5.0')});
+        await this.stakers.createDelegation(firstStaker, {from: secondDepositor, value: ether('10.0')});
+
+        await this.stakers._createVStake({from: secondStaker, value: ether('1.0')});
+        await this.stakers._makeEpochSnapshots(10000);
+
+        expect(await this.stakers._calcTotalReward(firstStaker, new BN('0'))).to.be.bignumber.equal(ether('0.5000000000000025'));
+        expect(await this.stakers._calcTotalReward(secondStaker, new BN('0'))).to.be.bignumber.equal(ether('1.5000000000000075'));
+    });
+
+    it('checking calcValidatorReward function', async () => {
+        await expectRevert(this.stakers._calcTotalReward(firstStaker, new BN('0')), 'total validating power can\'t be null');
+        await this.stakers._createVStake({from: firstStaker, value: ether('1.0')});
+        await this.stakers.createDelegation(firstStaker, {from: firstDepositor, value: ether('5.0')});
+        await this.stakers.createDelegation(firstStaker, {from: secondDepositor, value: ether('10.0')});
+
+        await this.stakers._createVStake({from: secondStaker, value: ether('1.0')});
+        await this.stakers._makeEpochSnapshots(10000);
+
+        expect(await this.stakers._calcValidatorReward(firstStaker, new BN('0'))).to.be.bignumber.equal(ether('0.101562500000000507'));
+        expect(await this.stakers._calcValidatorReward(secondStaker, new BN('0'))).to.be.bignumber.equal(ether('1.5000000000000075'));
+
+    });
+
+    it('checking calcDelegatorReward function', async () => {
+        await expectRevert(this.stakers._calcTotalReward(firstStaker, new BN('0')), 'total validating power can\'t be null');
+        await this.stakers._createVStake({from: firstStaker, value: ether('1.0')});
+        await this.stakers.createDelegation(firstStaker, {from: firstDepositor, value: ether('5.0')});
+        await this.stakers.createDelegation(firstStaker, {from: secondDepositor, value: ether('10.0')});
+
+        await this.stakers._createVStake({from: secondStaker, value: ether('1.0')});
+        await this.stakers._makeEpochSnapshots(10000);
+
+        expect(await this.stakers._calcDelegatorReward(firstStaker, new BN('0'), ether('15.0'))).to.be.bignumber.equal(ether('0.398437500000001992'));
     });
 });
