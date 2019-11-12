@@ -71,7 +71,7 @@ contract Stakers {
     uint256 public delegationsNum;
     uint256 public delegationsTotalAmount;
 
-    mapping(address => Delegation[]) public delegations; // from -> delegations array
+    mapping(address => Delegation) public delegations; // from -> delegation
 
     /*
     Methods
@@ -114,6 +114,7 @@ contract Stakers {
 
         require(vStakers[to].stakeAmount != 0, "staker doesn't created");
         require(msg.value >= minDelegation, "insufficient amount for delegation");
+        // TODO add requirement for empty delegate
         require((vStakers[to].stakeAmount.mul(maxDelegatedMeRatio)).div(percentUnit) >= vStakers[to].delegatedMe.add(msg.value), "delegated limit is exceeded");
         Delegation memory newDelegation;
         newDelegation.createdEpoch = lastEpoch;
@@ -121,7 +122,7 @@ contract Stakers {
         newDelegation.amount = msg.value;
         newDelegation.toStakerAddress = to;
         newDelegation.toStakerIdx = vStakers[to].stakerIdx;
-        delegations[from].push(newDelegation);
+        delegations[from] = newDelegation;
 
         vStakers[to].delegatedMe = vStakers[to].delegatedMe.add(msg.value);
         delegationsNum++;
@@ -171,39 +172,39 @@ contract Stakers {
         return a;
     }
 
-    event ClaimedDelegationReward(address indexed from, address indexed staker, uint256 reward, uint256 delegationIdx, uint256 fromEpoch, uint256 untilEpoch);
+    event ClaimedDelegationReward(address indexed from, address indexed staker, uint256 reward, uint256 fromEpoch, uint256 untilEpoch);
 
-    function claimDelegationReward(uint256 dIdx, uint256 _fromEpoch, uint256 _untilEpoch) external {
+    function claimDelegationReward(uint256 _fromEpoch, uint256 _untilEpoch) external {
         address payable from = msg.sender;
 
-        require(delegations[from][dIdx].amount != 0); // delegation exists
-        require(delegations[from][dIdx].deactivatedTime == 0); // not deactivated
+        require(delegations[from].amount != 0, "delegation doesn't exists");
+        require(delegations[from].deactivatedTime == 0, "delegation can't be deactivated yet"); // TODO: test that
 
-        uint256 paidUntilEpoch = delegations[from][dIdx].paidUntilEpoch;
-        uint256 delegatedAmount = delegations[from][dIdx].amount;
-        uint256 stakerIdx = delegations[from][dIdx].toStakerIdx;
-        address staker = delegations[from][dIdx].toStakerAddress;
-        uint256 fromEpoch = withDefault(_fromEpoch, paidUntilEpoch);
+        uint256 paidUntilEpoch = delegations[from].paidUntilEpoch;
+        uint256 delegatedAmount = delegations[from].amount;
+        uint256 stakerIdx = delegations[from].toStakerIdx;
+        address stakerAddress = delegations[from].toStakerAddress;
+        uint256 fromEpoch = withDefault(_fromEpoch, paidUntilEpoch + 1);
         uint256 untilEpoch = withDefault(_untilEpoch, lastEpoch);
 
-        require(fromEpoch <= untilEpoch);
-        require(untilEpoch <= lastEpoch);
-        require(paidUntilEpoch < fromEpoch); // not paid yet
+        require(fromEpoch <= untilEpoch, "invalid fromEpoch");
+        require(untilEpoch <= lastEpoch, "invalid untilEpoch");
+        require(paidUntilEpoch < fromEpoch, ""); // TODO: add message
 
         uint256 reward = 0;
         for (uint256 e = fromEpoch; e <= untilEpoch; e++) {
-            if (stakerIdx != epochSnapshots[e].validators[staker].stakerIdx) {
+            if (stakerIdx != epochSnapshots[e].validators[stakerAddress].stakerIdx) {
                 // it's different staker, although the same address
                 continue;
             }
-            reward += calcDelegatorReward(staker, e, delegatedAmount); // SS safeMath
+            reward += calcDelegatorReward(stakerAddress, e, delegatedAmount); // SS safeMath
         }
-        delegations[from][dIdx].paidUntilEpoch = untilEpoch;
+        delegations[from].paidUntilEpoch = untilEpoch;
 
         // It's important that we transfer after updating paidUntilEpoch (protection against Re-Entrancy)
-        from.transfer(reward);
+        msg.sender.transfer(reward);
 
-        emit ClaimedDelegationReward(from, staker, reward, dIdx, fromEpoch, untilEpoch);
+        emit ClaimedDelegationReward(from, stakerAddress, reward, fromEpoch, untilEpoch);
     }
 
     event ClaimedValidatorReward(address indexed staker, uint256 reward, uint256 fromEpoch, uint256 untilEpoch);
@@ -211,17 +212,17 @@ contract Stakers {
     // may be already deactivated, but still allowed to withdraw old rewards
     function claimValidatorReward(uint256 _fromEpoch, uint256 _untilEpoch) external {
         address payable staker = msg.sender;
-        require(vStakers[staker].stakeAmount != 0); // staker exists
+        require(vStakers[staker].stakeAmount != 0, "staker doesn't exists");
 
         uint256 paidUntilEpoch = vStakers[staker].paidUntilEpoch;
         uint256 stakerIdx = vStakers[staker].stakerIdx;
 
-        uint256 fromEpoch = withDefault(_fromEpoch, paidUntilEpoch);
+        uint256 fromEpoch = withDefault(_fromEpoch, paidUntilEpoch + 1);
         uint256 untilEpoch = withDefault(_untilEpoch, lastEpoch);
 
-        require(fromEpoch <= untilEpoch);
-        require(untilEpoch <= lastEpoch);
-        require(paidUntilEpoch < fromEpoch); // not paid yet
+        require(fromEpoch <= untilEpoch, "invalid fromEpoch");
+        require(untilEpoch <= lastEpoch, "invalid untilEpoch");
+        require(paidUntilEpoch < fromEpoch, ""); // TODO: add message
 
         uint256 reward = 0;
         for (uint256 e = fromEpoch; e <= untilEpoch; e++) {
@@ -245,8 +246,8 @@ contract Stakers {
     // deactivate stake, to be able to withdraw later
     function prepareToWithdrawVStake() external {
         address staker = msg.sender;
-        require(vStakers[staker].stakeAmount != 0); // staker exist
-        require(vStakers[staker].deactivatedTime == 0); // not deactivated yet
+        require(vStakers[staker].stakeAmount != 0, "staker doesn't exists");
+        require(vStakers[staker].deactivatedTime == 0, "staker can't be deactivated yet");
 
         vStakers[staker].deactivatedEpoch = lastEpoch;
         vStakers[staker].deactivatedTime = block.timestamp;
@@ -278,39 +279,39 @@ contract Stakers {
     event PreparedToWithdrawDelegation(address indexed from);
 
     // deactivate delegation, to be able to withdraw later
-    function prepareToWithdrawDelegation(uint256 dIdx) external {
+    function prepareToWithdrawDelegation() external {
         address from = msg.sender;
-        require(delegations[from][dIdx].amount != 0); // delegation exists
-        require(delegations[from][dIdx].deactivatedTime == 0); // not deactivated yet
+        require(delegations[from].amount != 0, "delegation doesn't exists");
+        require(delegations[from].deactivatedTime == 0, "delegation can't be deactivated yet");
 
-        delegations[from][dIdx].deactivatedEpoch = lastEpoch;
-        delegations[from][dIdx].deactivatedTime = block.timestamp;
-        address staker = delegations[from][dIdx].toStakerAddress;
-        uint256 delegatedAmount = delegations[from][dIdx].amount;
-        if (!isStakerErased(from, dIdx, staker)) {
-            vStakers[staker].delegatedMe -= delegatedAmount; // SS safeMath
+        delegations[from].deactivatedEpoch = lastEpoch;
+        delegations[from].deactivatedTime = block.timestamp;
+        address staker = delegations[from].toStakerAddress;
+        uint256 delegatedAmount = delegations[from].amount;
+        if (!isStakerErased(from, staker)) {
+            vStakers[staker].delegatedMe = vStakers[staker].delegatedMe.sub(delegatedAmount); // TODO: test this
         }
 
         emit PreparedToWithdrawDelegation(from);
     }
 
     // return true if staker was overwritten with another staker (with the same address), or was withdrawn
-    function isStakerErased(address deligator, uint256 dIdx, address staker) view internal returns(bool) {
-        return vStakers[staker].stakerIdx != delegations[deligator][dIdx].toStakerIdx;
+    function isStakerErased(address deligator, address staker) view internal returns(bool) {
+        return vStakers[staker].stakerIdx != delegations[deligator].toStakerIdx;
     }
 
     event WithdrawnDelegation(address indexed staker, bool isCheater);
 
-    function withdrawDelegation(uint256 dIdx) external {
+    function withdrawDelegation() external {
         address payable from = msg.sender;
-        require(delegations[from][dIdx].deactivatedTime != 0); // deactivated
-        require(block.timestamp >= delegations[from][dIdx].deactivatedTime + deleagtionLockPeriodTime); // passed enough time // SS safeMath
-        require(lastEpoch >= delegations[from][dIdx].deactivatedEpoch + deleagtionLockPeriodEpochs); // passed enough epochs // SS safeMath
-        address staker = delegations[from][dIdx].toStakerAddress;
+        require(delegations[from].deactivatedTime != 0); // deactivated
+        require(block.timestamp >= delegations[from].deactivatedTime + deleagtionLockPeriodTime); // passed enough time // SS safeMath
+        require(lastEpoch >= delegations[from].deactivatedEpoch + deleagtionLockPeriodEpochs); // passed enough epochs // SS safeMath
+        address staker = delegations[from].toStakerAddress;
         bool isCheater = vStakers[staker].isCheater;
-        uint256 delegatedAmount = delegations[from][dIdx].amount;
+        uint256 delegatedAmount = delegations[from].amount;
 
-        _removeDelegation(from, dIdx);
+        _removeDelegation(from);
 
         delegationsNum--;
         delegationsTotalAmount -= delegatedAmount; // SS safeMath
@@ -323,15 +324,15 @@ contract Stakers {
     }
 
     // free the storage
-    function _removeDelegation(address delegator, uint256 dIdx) private {
-        // Move the last element to the deleted slot
-        uint256 len = delegations[delegator].length;
-        delegations[delegator][dIdx] = delegations[delegator][len - 1]; // SS safeMath
-        len--;
-        delegations[delegator].length = len;
-        if (len == 0) {
-            delete delegations[delegator];
-        }
+    function _removeDelegation(address delegator) private {
+//        // Move the last element to the deleted slot // TODO review and return this
+//        uint256 len = delegations[delegator].length;
+//        delegations[delegator][dIdx] = delegations[delegator][len - 1]; // SS safeMath
+//        len--;
+//        delegations[delegator].length = len;
+//        if (len == 0) {
+//            delete delegations[delegator];
+//        }
     }
 }
 
