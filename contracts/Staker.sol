@@ -82,7 +82,7 @@ contract Stakers {
     function createVStake() public payable {
         address staker = msg.sender;
 
-        require(vStakers[staker].stakeAmount == 0, "staker doesn't exist yet");
+        require(vStakers[staker].stakeAmount == 0, "staker already exists");
         require(msg.value >= minValidationStake, "insufficient amount for staking");
 
         vStakers[staker].stakeAmount = msg.value;
@@ -100,7 +100,7 @@ contract Stakers {
     function increaseVStake() external payable {
         address staker = msg.sender;
 
-        require(vStakers[staker].stakeAmount != 0, "staker doesn't created");
+        require(vStakers[staker].stakeAmount != 0, "staker wasn't created");
         uint256 newAmount = vStakers[staker].stakeAmount.add(msg.value);
         vStakers[staker].stakeAmount = newAmount;
         vStakeTotalAmount = vStakeTotalAmount.add(msg.value);
@@ -112,7 +112,7 @@ contract Stakers {
     function createDelegation(address to) external payable {
         address from = msg.sender;
 
-        require(vStakers[to].stakeAmount != 0, "staker doesn't created");
+        require(vStakers[to].stakeAmount != 0, "staker wasn't created");
         require(msg.value >= minDelegation, "insufficient amount for delegation");
         require(delegations[from].createdTime == 0, "delegate already exists");
         require((vStakers[to].stakeAmount.mul(maxDelegatedMeRatio)).div(percentUnit) >= vStakers[to].delegatedMe.add(msg.value), "delegated limit is exceeded");
@@ -135,7 +135,7 @@ contract Stakers {
     function calcTotalReward(address staker, uint256 epoch) view internal returns (uint256) {
         uint256 totalValidatingPower = epochSnapshots[epoch].totalValidatingPower;
         uint256 validatingPower = epochSnapshots[epoch].validators[staker].validatingPower;
-        require(totalValidatingPower != 0, "total validating power can't be null");
+        require(totalValidatingPower != 0, "total validating power can't be zero");
 
         uint256 reward = 0;
         // base reward
@@ -178,7 +178,7 @@ contract Stakers {
         address payable from = msg.sender;
 
         require(delegations[from].amount != 0, "delegation doesn't exists");
-        require(delegations[from].deactivatedTime == 0, "delegation can't be deactivated yet");
+        require(delegations[from].deactivatedTime == 0, "delegation shouldn't be deactivated yet");
 
         uint256 paidUntilEpoch = delegations[from].paidUntilEpoch;
         uint256 delegatedAmount = delegations[from].amount;
@@ -247,7 +247,7 @@ contract Stakers {
     function prepareToWithdrawVStake() external {
         address staker = msg.sender;
         require(vStakers[staker].stakeAmount != 0, "staker doesn't exists");
-        require(vStakers[staker].deactivatedTime == 0, "staker can't be deactivated yet");
+        require(vStakers[staker].deactivatedTime == 0, "staker shouldn't be deactivated yet");
 
         vStakers[staker].deactivatedEpoch = lastEpoch;
         vStakers[staker].deactivatedTime = block.timestamp;
@@ -260,8 +260,8 @@ contract Stakers {
     function withdrawVStake() external {
         address payable staker = msg.sender;
         require(vStakers[staker].deactivatedTime != 0, "staker wasn't deactivated");
-        require(block.timestamp >= vStakers[staker].deactivatedTime.add(vStakeLockPeriodTime), "not passed enough time");
-        require(lastEpoch >= vStakers[staker].deactivatedEpoch.add(vStakeLockPeriodEpochs), "not passed enough epochs");
+        require(block.timestamp >= vStakers[staker].deactivatedTime.add(vStakeLockPeriodTime), "not enough time passed");
+        require(lastEpoch >= vStakers[staker].deactivatedEpoch.add(vStakeLockPeriodEpochs), "not enough epochs passed");
         uint256 stake = vStakers[staker].stakeAmount;
         bool isCheater = vStakers[staker].isCheater;
         delete vStakers[staker];
@@ -282,7 +282,7 @@ contract Stakers {
     function prepareToWithdrawDelegation() external {
         address from = msg.sender;
         require(delegations[from].amount != 0, "delegation doesn't exists");
-        require(delegations[from].deactivatedTime == 0, "delegation can't be deactivated yet");
+        require(delegations[from].deactivatedTime == 0, "delegation shouldn't be deactivated yet");
 
         delegations[from].deactivatedEpoch = lastEpoch;
         delegations[from].deactivatedTime = block.timestamp;
@@ -305,8 +305,8 @@ contract Stakers {
     function withdrawDelegation() external {
         address payable from = msg.sender;
         require(delegations[from].deactivatedTime != 0, "delegation wasn't deactivated");
-        require(block.timestamp >= delegations[from].deactivatedTime.add(deleagtionLockPeriodTime), "not passed enough time");
-        require(lastEpoch >= delegations[from].deactivatedEpoch.add(deleagtionLockPeriodEpochs), "not passed enough epochs");
+        require(block.timestamp >= delegations[from].deactivatedTime.add(deleagtionLockPeriodTime), "not enough time passed");
+        require(lastEpoch >= delegations[from].deactivatedEpoch.add(deleagtionLockPeriodEpochs), "not enough epochs passed");
         address staker = delegations[from].toStakerAddress;
         bool isCheater = vStakers[staker].isCheater;
         uint256 delegatedAmount = delegations[from].amount;
