@@ -114,7 +114,7 @@ contract Stakers {
 
         require(vStakers[to].stakeAmount != 0, "staker doesn't created");
         require(msg.value >= minDelegation, "insufficient amount for delegation");
-        // TODO add requirement for empty delegate
+        require(delegations[from].createdTime == 0, "delegate already exists");
         require((vStakers[to].stakeAmount.mul(maxDelegatedMeRatio)).div(percentUnit) >= vStakers[to].delegatedMe.add(msg.value), "delegated limit is exceeded");
         Delegation memory newDelegation;
         newDelegation.createdEpoch = lastEpoch;
@@ -178,7 +178,7 @@ contract Stakers {
         address payable from = msg.sender;
 
         require(delegations[from].amount != 0, "delegation doesn't exists");
-        require(delegations[from].deactivatedTime == 0, "delegation can't be deactivated yet"); // TODO: test that
+        require(delegations[from].deactivatedTime == 0, "delegation can't be deactivated yet");
 
         uint256 paidUntilEpoch = delegations[from].paidUntilEpoch;
         uint256 delegatedAmount = delegations[from].amount;
@@ -189,7 +189,7 @@ contract Stakers {
 
         require(fromEpoch <= untilEpoch, "invalid fromEpoch");
         require(untilEpoch <= lastEpoch, "invalid untilEpoch");
-        require(paidUntilEpoch < fromEpoch, ""); // TODO: add message
+        require(paidUntilEpoch < fromEpoch, "epoch is already paid");
 
         uint256 reward = 0;
         for (uint256 e = fromEpoch; e <= untilEpoch; e++) {
@@ -222,7 +222,7 @@ contract Stakers {
 
         require(fromEpoch <= untilEpoch, "invalid fromEpoch");
         require(untilEpoch <= lastEpoch, "invalid untilEpoch");
-        require(paidUntilEpoch < fromEpoch, ""); // TODO: add message
+        require(paidUntilEpoch < fromEpoch, "epoch is already paid");
 
         uint256 reward = 0;
         for (uint256 e = fromEpoch; e <= untilEpoch; e++) {
@@ -259,15 +259,15 @@ contract Stakers {
 
     function withdrawVStake() external {
         address payable staker = msg.sender;
-        require(vStakers[staker].deactivatedTime != 0); // deactivated
-        require(block.timestamp >= vStakers[staker].deactivatedTime + vStakeLockPeriodTime); // passed enough time // SS safeMath
-        require(lastEpoch >= vStakers[staker].deactivatedEpoch + vStakeLockPeriodEpochs); // passed enough epochs // SS safeMath
+        require(vStakers[staker].deactivatedTime != 0, "staker wasn't deactivated");
+        require(block.timestamp >= vStakers[staker].deactivatedTime.add(vStakeLockPeriodTime), "not passed enough time");
+        require(lastEpoch >= vStakers[staker].deactivatedEpoch.add(vStakeLockPeriodEpochs), "not passed enough epochs");
         uint256 stake = vStakers[staker].stakeAmount;
         bool isCheater = vStakers[staker].isCheater;
         delete vStakers[staker];
 
         vStakersNum--;
-        vStakeTotalAmount -= stake; // SS safeMath
+        vStakeTotalAmount = vStakeTotalAmount.sub(stake);
         // It's important that we transfer after erasing (protection against Re-Entrancy)
         if (isCheater == false) {
             staker.transfer(stake);
@@ -289,7 +289,7 @@ contract Stakers {
         address staker = delegations[from].toStakerAddress;
         uint256 delegatedAmount = delegations[from].amount;
         if (!isStakerErased(from, staker)) {
-            vStakers[staker].delegatedMe = vStakers[staker].delegatedMe.sub(delegatedAmount); // TODO: test this
+            vStakers[staker].delegatedMe = vStakers[staker].delegatedMe.sub(delegatedAmount);
         }
 
         emit PreparedToWithdrawDelegation(from);
@@ -304,35 +304,22 @@ contract Stakers {
 
     function withdrawDelegation() external {
         address payable from = msg.sender;
-        require(delegations[from].deactivatedTime != 0); // deactivated
-        require(block.timestamp >= delegations[from].deactivatedTime + deleagtionLockPeriodTime); // passed enough time // SS safeMath
-        require(lastEpoch >= delegations[from].deactivatedEpoch + deleagtionLockPeriodEpochs); // passed enough epochs // SS safeMath
+        require(delegations[from].deactivatedTime != 0, "delegation wasn't deactivated");
+        require(block.timestamp >= delegations[from].deactivatedTime.add(deleagtionLockPeriodTime), "not passed enough time");
+        require(lastEpoch >= delegations[from].deactivatedEpoch.add(deleagtionLockPeriodEpochs), "not passed enough epochs");
         address staker = delegations[from].toStakerAddress;
         bool isCheater = vStakers[staker].isCheater;
         uint256 delegatedAmount = delegations[from].amount;
-
-        _removeDelegation(from);
+        delete delegations[from];
 
         delegationsNum--;
-        delegationsTotalAmount -= delegatedAmount; // SS safeMath
+        delegationsTotalAmount = delegationsTotalAmount.sub(delegatedAmount);
         // It's important that we transfer after erasing (protection against Re-Entrancy)
         if (isCheater == false) {
             from.transfer(delegatedAmount);
         }
 
         emit WithdrawnDelegation(staker, isCheater);
-    }
-
-    // free the storage
-    function _removeDelegation(address delegator) private {
-//        // Move the last element to the deleted slot // TODO review and return this
-//        uint256 len = delegations[delegator].length;
-//        delegations[delegator][dIdx] = delegations[delegator][len - 1]; // SS safeMath
-//        len--;
-//        delegations[delegator].length = len;
-//        if (len == 0) {
-//            delete delegations[delegator];
-//        }
     }
 }
 
