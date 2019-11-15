@@ -61,7 +61,7 @@ contract Stakers {
         uint256 totalValidatingPower;
     }
 
-    uint256 public lastEpoch; // written by consensus outside
+    uint256 public currentSealedEpoch; // written by consensus outside
     mapping(uint256 => EpochSnapshot) public epochSnapshots; // written by consensus outside
     mapping(address => ValidationStake) public vStakers; // staker -> stake
 
@@ -77,6 +77,10 @@ contract Stakers {
     Methods
     */
 
+    function currentEpoch() public view returns (uint256) {
+        return currentSealedEpoch + 1;
+    }
+
     event CreatedVStake(address indexed staker, uint256 amount);
 
     function createVStake() public payable {
@@ -86,7 +90,7 @@ contract Stakers {
         require(msg.value >= minValidationStake, "insufficient amount for staking");
 
         vStakers[staker].stakeAmount = msg.value;
-        vStakers[staker].createdEpoch = lastEpoch;
+        vStakers[staker].createdEpoch = currentEpoch();
         vStakers[staker].createdTime = block.timestamp;
         vStakers[staker].stakerIdx = ++vStakersLastIdx;
 
@@ -117,7 +121,7 @@ contract Stakers {
         require(delegations[from].createdTime == 0, "delegate already exists");
         require((vStakers[to].stakeAmount.mul(maxDelegatedMeRatio)).div(percentUnit) >= vStakers[to].delegatedMe.add(msg.value), "delegated limit is exceeded");
         Delegation memory newDelegation;
-        newDelegation.createdEpoch = lastEpoch;
+        newDelegation.createdEpoch = currentEpoch();
         newDelegation.createdTime = block.timestamp;
         newDelegation.amount = msg.value;
         newDelegation.toStakerAddress = to;
@@ -185,10 +189,10 @@ contract Stakers {
         uint256 stakerIdx = delegations[from].toStakerIdx;
         address stakerAddress = delegations[from].toStakerAddress;
         uint256 fromEpoch = withDefault(_fromEpoch, paidUntilEpoch + 1);
-        uint256 untilEpoch = withDefault(_untilEpoch, lastEpoch);
+        uint256 untilEpoch = withDefault(_untilEpoch, currentSealedEpoch);
 
         require(fromEpoch <= untilEpoch, "invalid fromEpoch");
-        require(untilEpoch <= lastEpoch, "invalid untilEpoch");
+        require(untilEpoch <= currentSealedEpoch, "invalid untilEpoch");
         require(paidUntilEpoch < fromEpoch, "epoch is already paid");
 
         uint256 reward = 0;
@@ -218,10 +222,10 @@ contract Stakers {
         uint256 stakerIdx = vStakers[staker].stakerIdx;
 
         uint256 fromEpoch = withDefault(_fromEpoch, paidUntilEpoch + 1);
-        uint256 untilEpoch = withDefault(_untilEpoch, lastEpoch);
+        uint256 untilEpoch = withDefault(_untilEpoch, currentSealedEpoch);
 
         require(fromEpoch <= untilEpoch, "invalid fromEpoch");
-        require(untilEpoch <= lastEpoch, "invalid untilEpoch");
+        require(untilEpoch <= currentSealedEpoch, "invalid untilEpoch");
         require(paidUntilEpoch < fromEpoch, "epoch is already paid");
 
         uint256 reward = 0;
@@ -249,7 +253,7 @@ contract Stakers {
         require(vStakers[staker].stakeAmount != 0, "staker doesn't exists");
         require(vStakers[staker].deactivatedTime == 0, "staker shouldn't be deactivated yet");
 
-        vStakers[staker].deactivatedEpoch = lastEpoch;
+        vStakers[staker].deactivatedEpoch = currentEpoch();
         vStakers[staker].deactivatedTime = block.timestamp;
 
         emit PreparedToWithdrawVStake(staker);
@@ -261,7 +265,7 @@ contract Stakers {
         address payable staker = msg.sender;
         require(vStakers[staker].deactivatedTime != 0, "staker wasn't deactivated");
         require(block.timestamp >= vStakers[staker].deactivatedTime.add(vStakeLockPeriodTime), "not enough time passed");
-        require(lastEpoch >= vStakers[staker].deactivatedEpoch.add(vStakeLockPeriodEpochs), "not enough epochs passed");
+        require(currentEpoch() >= vStakers[staker].deactivatedEpoch.add(vStakeLockPeriodEpochs), "not enough epochs passed");
         uint256 stake = vStakers[staker].stakeAmount;
         bool isCheater = vStakers[staker].isCheater;
         delete vStakers[staker];
@@ -284,7 +288,7 @@ contract Stakers {
         require(delegations[from].amount != 0, "delegation doesn't exists");
         require(delegations[from].deactivatedTime == 0, "delegation shouldn't be deactivated yet");
 
-        delegations[from].deactivatedEpoch = lastEpoch;
+        delegations[from].deactivatedEpoch = currentEpoch();
         delegations[from].deactivatedTime = block.timestamp;
         address staker = delegations[from].toStakerAddress;
         uint256 delegatedAmount = delegations[from].amount;
@@ -306,7 +310,7 @@ contract Stakers {
         address payable from = msg.sender;
         require(delegations[from].deactivatedTime != 0, "delegation wasn't deactivated");
         require(block.timestamp >= delegations[from].deactivatedTime.add(deleagtionLockPeriodTime), "not enough time passed");
-        require(lastEpoch >= delegations[from].deactivatedEpoch.add(deleagtionLockPeriodEpochs), "not enough epochs passed");
+        require(currentEpoch() >= delegations[from].deactivatedEpoch.add(deleagtionLockPeriodEpochs), "not enough epochs passed");
         address staker = delegations[from].toStakerAddress;
         bool isCheater = vStakers[staker].isCheater;
         uint256 delegatedAmount = delegations[from].amount;
@@ -327,7 +331,7 @@ contract TestStakers is Stakers {
     address[] public validatorAddresses;
 
     constructor (uint256 firstEpoch) public {
-        lastEpoch = firstEpoch;
+        currentSealedEpoch = firstEpoch;
     }
 
     function _markValidationStakeAsCheater(address validatorAddress, bool status) external {
@@ -342,14 +346,14 @@ contract TestStakers is Stakers {
     }
 
     function _makeEpochSnapshots(uint256 optionalDuration) external returns(uint256) {
-        EpochSnapshot storage newSnapshot = epochSnapshots[lastEpoch];
+        EpochSnapshot storage newSnapshot = epochSnapshots[currentSealedEpoch];
         uint256 epochPay = 0;
 
         newSnapshot.endTime = block.timestamp;
-        if (optionalDuration != 0 || lastEpoch == 0) {
+        if (optionalDuration != 0 || currentSealedEpoch == 0) {
             newSnapshot.duration = optionalDuration;
         } else {
-            newSnapshot.duration = block.timestamp.sub(epochSnapshots[lastEpoch.sub(1)].endTime);
+            newSnapshot.duration = block.timestamp.sub(epochSnapshots[currentSealedEpoch.sub(1)].endTime);
         }
         epochPay = epochPay.add(newSnapshot.duration);
 
@@ -370,7 +374,7 @@ contract TestStakers is Stakers {
         newSnapshot.epochFee = 2 ether;
         epochPay = epochPay.add(newSnapshot.epochFee);
 
-        lastEpoch++;
+        currentSealedEpoch++;
 
         return epochPay;
     }
