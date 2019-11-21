@@ -5,9 +5,9 @@ import "./SafeMath.sol";
 contract Stakers {
     using SafeMath for uint256;
 
-    uint256 public constant minValidationStake = 1 ether;
-    uint256 public constant minValidationStakeIncrease = 1 ether;
-    uint256 public constant minDelegation = 1 ether;
+    uint256 public constant minValidationStake = 1e18;
+    uint256 public constant minValidationStakeIncrease = 1e18;
+    uint256 public constant minDelegation = 1e18;
 
     uint256 public constant percentUnit = 1000000;
     uint256 public constant maxDelegatedMeRatio = 15 * percentUnit; // 1500%
@@ -27,13 +27,11 @@ contract Stakers {
 
         uint256 amount;
         uint256 paidUntilEpoch;
-        address toStakerAddress;
-        uint256 toStakerIdx;
+        uint256 toStakerID;
     }
 
     struct ValidationStake {
         bool isCheater; // written by consensus outside
-        uint256 stakerIdx;
 
         uint256 createdEpoch;
         uint256 createdTime;
@@ -44,17 +42,18 @@ contract Stakers {
         uint256 paidUntilEpoch;
 
         uint256 delegatedMe;
+
+        address stakerAddress;
     }
 
     struct ValidatorMerit {
         uint256 validatingPower;
         uint256 stakeAmount;
         uint256 delegatedMe;
-        uint256 stakerIdx;
     }
 
     struct EpochSnapshot {
-        mapping(address => ValidatorMerit) validators;
+        mapping(uint256 => ValidatorMerit) validators; //  stakerID -> ValidatorMerit
 
         uint256 endTime;
         uint256 duration;
@@ -64,32 +63,32 @@ contract Stakers {
 
     uint256 public currentSealedEpoch; // written by consensus outside
     mapping(uint256 => EpochSnapshot) public epochSnapshots; // written by consensus outside
-    mapping(address => ValidationStake) public vStakers; // staker -> stake
+    mapping(uint256 => ValidationStake) public vStakers; // stakerID -> stake
+    mapping(address => uint256) public vStakerIDs; // staker address -> stakerID
 
-    uint256 public vStakersLastIdx;
+    uint256 public vStakersLastID;
     uint256 public vStakersNum;
     uint256 public vStakeTotalAmount;
     uint256 public delegationsNum;
     uint256 public delegationsTotalAmount;
 
-    mapping(address => Delegation) public delegations; // from -> delegation
+    mapping(address => Delegation) public delegations; // delegationID -> delegation
 
     /*
     Methods
     */
 
-    function getEpochValidator(uint256 e, address v) external view returns (uint256, uint256, uint256, uint256) {
+    function getEpochValidator(uint256 e, uint256 v) external view returns (uint256, uint256, uint256) {
         return (epochSnapshots[e].validators[v].validatingPower,
                 epochSnapshots[e].validators[v].stakeAmount,
-                epochSnapshots[e].validators[v].delegatedMe,
-                epochSnapshots[e].validators[v].stakerIdx);
+                epochSnapshots[e].validators[v].delegatedMe);
     }
 
     function currentEpoch() public view returns (uint256) {
         return currentSealedEpoch + 1;
     }
 
-    event CreatedVStake(address indexed staker, uint256 stakerIdx, uint256 amount);
+    event CreatedVStake(uint256 indexed stakerID, address indexed stakerAddress, uint256 amount);
 
     function createVStake() external payable {
         implCreateVStake();
@@ -98,67 +97,68 @@ contract Stakers {
     function implCreateVStake() internal {
         address staker = msg.sender;
 
-        require(vStakers[staker].stakeAmount == 0, "staker already exists");
+        require(vStakerIDs[staker] == 0, "staker already exists");
         require(delegations[staker].amount == 0, "already delegating");
-        require(msg.value >= minValidationStake, "insufficient amount for staking");
+        require(msg.value >= minValidationStake, "insufficient amount");
 
-        vStakers[staker].stakeAmount = msg.value;
-        vStakers[staker].createdEpoch = currentEpoch();
-        vStakers[staker].createdTime = block.timestamp;
-        vStakers[staker].stakerIdx = ++vStakersLastIdx;
+        uint256 stakerID = ++vStakersLastID;
+        vStakerIDs[staker] = stakerID;
+        vStakers[stakerID].stakeAmount = msg.value;
+        vStakers[stakerID].createdEpoch = currentEpoch();
+        vStakers[stakerID].createdTime = block.timestamp;
+        vStakers[stakerID].stakerAddress = staker;
 
         vStakersNum++;
         vStakeTotalAmount = vStakeTotalAmount.add(msg.value);
-        emit CreatedVStake(staker, vStakers[staker].stakerIdx, msg.value);
+        emit CreatedVStake(stakerID, staker, msg.value);
     }
 
-    event IncreasedVStake(address indexed staker, uint256 newAmount, uint256 diff);
+    event IncreasedVStake(uint256 indexed stakerID, uint256 newAmount, uint256 diff);
 
     function increaseVStake() external payable {
         address staker = msg.sender;
+        uint256 stakerID = vStakerIDs[staker];
 
-        require(msg.value >= minValidationStakeIncrease, "insufficient amount for increasing stake");
-        require(vStakers[staker].stakeAmount != 0, "staker wasn't created");
-        require(vStakers[staker].deactivatedTime == 0, "staker shouldn't be deactivated yet");
-        require(vStakers[staker].isCheater == false, "staker shouldn't be cheater");
-        
-        uint256 newAmount = vStakers[staker].stakeAmount.add(msg.value);
-        vStakers[staker].stakeAmount = newAmount;
+        require(msg.value >= minValidationStakeIncrease, "insufficient amount");
+        require(vStakers[stakerID].stakeAmount != 0, "staker doesn't exist");
+        require(vStakers[stakerID].deactivatedTime == 0, "staker shouldn't be deactivated yet");
+        require(vStakers[stakerID].isCheater == false, "staker shouldn't be cheater");
+
+        uint256 newAmount = vStakers[stakerID].stakeAmount.add(msg.value);
+        vStakers[stakerID].stakeAmount = newAmount;
         vStakeTotalAmount = vStakeTotalAmount.add(msg.value);
-        emit IncreasedVStake(staker, newAmount, msg.value);
+        emit IncreasedVStake(stakerID, newAmount, msg.value);
     }
 
-    event CreatedDelegation(address indexed from, address indexed to, uint256 amount, uint256 newEffectiveStake);
+    event CreatedDelegation(address indexed from, uint256 indexed toStakerID, uint256 amount);
 
-    function createDelegation(address to) external payable {
+    function createDelegation(uint256 to) external payable {
         address from = msg.sender;
 
-        require(vStakers[to].stakeAmount != 0, "staker wasn't created");
+        require(vStakers[to].stakeAmount != 0, "staker doesn't exist");
         require(vStakers[to].isCheater == false, "staker shouldn't be cheater");
         require(msg.value >= minDelegation, "insufficient amount for delegation");
         require(delegations[from].amount == 0, "delegation already exists");
-        require(vStakers[from].stakeAmount == 0, "already staking");
+        require(vStakerIDs[from] == 0, "already staking");
         require((vStakers[to].stakeAmount.mul(maxDelegatedMeRatio)).div(percentUnit) >= vStakers[to].delegatedMe.add(msg.value), "staker's limit is exceeded");
 
         Delegation memory newDelegation;
         newDelegation.createdEpoch = currentEpoch();
         newDelegation.createdTime = block.timestamp;
         newDelegation.amount = msg.value;
-        newDelegation.toStakerAddress = to;
-        newDelegation.toStakerIdx = vStakers[to].stakerIdx;
+        newDelegation.toStakerID = to;
         delegations[from] = newDelegation;
 
         vStakers[to].delegatedMe = vStakers[to].delegatedMe.add(msg.value);
         delegationsNum++;
         delegationsTotalAmount = delegationsTotalAmount.add(msg.value);
 
-        uint256 effectiveStake = vStakers[to].delegatedMe.add(vStakers[to].stakeAmount);
-        emit CreatedDelegation(from, to, msg.value, effectiveStake);
+        emit CreatedDelegation(from, to, msg.value);
     }
 
-    function calcTotalReward(address staker, uint256 epoch) view internal returns (uint256) {
+    function calcTotalReward(uint256 stakerID, uint256 epoch) view internal returns (uint256) {
         uint256 totalValidatingPower = epochSnapshots[epoch].totalValidatingPower;
-        uint256 validatingPower = epochSnapshots[epoch].validators[staker].validatingPower;
+        uint256 validatingPower = epochSnapshots[epoch].validators[stakerID].validatingPower;
         require(totalValidatingPower != 0, "total validating power can't be zero");
 
         uint256 reward = 0;
@@ -169,21 +169,21 @@ contract Stakers {
         return reward;
     }
 
-    function calcValidatorReward(address staker, uint256 epoch) view internal returns (uint256) {
-        uint256 fullReward = calcTotalReward(staker, epoch);
+    function calcValidatorReward(uint256 stakerID, uint256 epoch) view internal returns (uint256) {
+        uint256 fullReward = calcTotalReward(stakerID, epoch);
 
-        uint256 stake = epochSnapshots[epoch].validators[staker].stakeAmount;
-        uint256 delegatedTotal = epochSnapshots[epoch].validators[staker].delegatedMe;
+        uint256 stake = epochSnapshots[epoch].validators[stakerID].stakeAmount;
+        uint256 delegatedTotal = epochSnapshots[epoch].validators[stakerID].delegatedMe;
         uint256 totalStake = stake.add(delegatedTotal);
         uint256 weightedTotalStake = stake.add((delegatedTotal.mul(validatorCommission)).div(percentUnit));
         return (fullReward.mul(weightedTotalStake)).div(totalStake);
     }
 
-    function calcDelegatorReward(address staker, uint256 epoch, uint256 delegatedAmount) view internal returns (uint256) {
-        uint256 fullReward = calcTotalReward(staker, epoch);
+    function calcDelegatorReward(uint256 stakerID, uint256 epoch, uint256 delegatedAmount) view internal returns (uint256) {
+        uint256 fullReward = calcTotalReward(stakerID, epoch);
 
-        uint256 stake = epochSnapshots[epoch].validators[staker].stakeAmount;
-        uint256 delegatedTotal = epochSnapshots[epoch].validators[staker].delegatedMe;
+        uint256 stake = epochSnapshots[epoch].validators[stakerID].stakeAmount;
+        uint256 delegatedTotal = epochSnapshots[epoch].validators[stakerID].delegatedMe;
         uint256 totalStake = stake.add(delegatedTotal);
         uint256 weightedTotalStake = (delegatedAmount.mul(percentUnit.sub(validatorCommission))).div(percentUnit);
         return (fullReward.mul(weightedTotalStake)).div(totalStake);
@@ -196,99 +196,93 @@ contract Stakers {
         return a;
     }
 
-    event ClaimedDelegationReward(address indexed from, address indexed staker, uint256 reward, uint256 fromEpoch, uint256 untilEpoch);
+    event ClaimedDelegationReward(address indexed from, uint256 indexed stakerID, uint256 reward, uint256 fromEpoch, uint256 untilEpoch);
 
     function claimDelegationReward(uint256 _fromEpoch, uint256 _untilEpoch) external {
         address payable from = msg.sender;
 
-        require(delegations[from].amount != 0, "delegation doesn't exists");
+        require(delegations[from].amount != 0, "delegation doesn't exist");
         require(delegations[from].deactivatedTime == 0, "delegation shouldn't be deactivated yet");
 
         uint256 paidUntilEpoch = delegations[from].paidUntilEpoch;
         uint256 delegatedAmount = delegations[from].amount;
-        uint256 stakerIdx = delegations[from].toStakerIdx;
-        address stakerAddress = delegations[from].toStakerAddress;
+        uint256 stakerID = delegations[from].toStakerID;
         uint256 fromEpoch = withDefault(_fromEpoch, paidUntilEpoch + 1);
         uint256 untilEpoch = withDefault(_untilEpoch, currentSealedEpoch);
 
+        require(paidUntilEpoch < fromEpoch, "epoch is already paid");
         require(fromEpoch <= untilEpoch, "invalid fromEpoch");
         require(untilEpoch <= currentSealedEpoch, "invalid untilEpoch");
-        require(paidUntilEpoch < fromEpoch, "epoch is already paid");
 
         uint256 reward = 0;
         for (uint256 e = fromEpoch; e <= untilEpoch; e++) {
-            if (stakerIdx != epochSnapshots[e].validators[stakerAddress].stakerIdx) {
-                // it's different staker, although the same address
-                continue;
-            }
-            reward += calcDelegatorReward(stakerAddress, e, delegatedAmount); // SS safeMath
+            reward += calcDelegatorReward(stakerID, e, delegatedAmount); // SS safeMath
         }
         delegations[from].paidUntilEpoch = untilEpoch;
 
         // It's important that we transfer after updating paidUntilEpoch (protection against Re-Entrancy)
         msg.sender.transfer(reward);
 
-        emit ClaimedDelegationReward(from, stakerAddress, reward, fromEpoch, untilEpoch);
+        emit ClaimedDelegationReward(from, stakerID, reward, fromEpoch, untilEpoch);
     }
 
-    event ClaimedValidatorReward(address indexed staker, uint256 reward, uint256 fromEpoch, uint256 untilEpoch);
+    event ClaimedValidatorReward(uint256 indexed stakerID, uint256 reward, uint256 fromEpoch, uint256 untilEpoch);
 
     // may be already deactivated, but still allowed to withdraw old rewards
     function claimValidatorReward(uint256 _fromEpoch, uint256 _untilEpoch) external {
         address payable staker = msg.sender;
-        require(vStakers[staker].stakeAmount != 0, "staker doesn't exists");
+        uint256 stakerID = vStakerIDs[staker];
+        require(vStakers[stakerID].stakeAmount != 0, "staker doesn't exist");
 
-        uint256 paidUntilEpoch = vStakers[staker].paidUntilEpoch;
-        uint256 stakerIdx = vStakers[staker].stakerIdx;
+        uint256 paidUntilEpoch = vStakers[stakerID].paidUntilEpoch;
 
         uint256 fromEpoch = withDefault(_fromEpoch, paidUntilEpoch + 1);
         uint256 untilEpoch = withDefault(_untilEpoch, currentSealedEpoch);
 
+        require(paidUntilEpoch < fromEpoch, "epoch is already paid");
         require(fromEpoch <= untilEpoch, "invalid fromEpoch");
         require(untilEpoch <= currentSealedEpoch, "invalid untilEpoch");
-        require(paidUntilEpoch < fromEpoch, "epoch is already paid");
 
         uint256 reward = 0;
         for (uint256 e = fromEpoch; e <= untilEpoch; e++) {
-            if (stakerIdx != epochSnapshots[e].validators[staker].stakerIdx) {
-                // it's different staker, although the same address
-                continue;
-            }
-
-            reward += calcValidatorReward(staker, e);
+            reward += calcValidatorReward(stakerID, e);
         }
-        vStakers[staker].paidUntilEpoch = untilEpoch;
+        vStakers[stakerID].paidUntilEpoch = untilEpoch;
 
         // It's important that we transfer after updating paidUntilEpoch (protection against Re-Entrancy)
         staker.transfer(reward);
 
-        emit ClaimedValidatorReward(staker, reward, fromEpoch, untilEpoch);
+        emit ClaimedValidatorReward(stakerID, reward, fromEpoch, untilEpoch);
     }
 
-    event PreparedToWithdrawVStake(address indexed staker);
+    event PreparedToWithdrawVStake(uint256 indexed stakerID);
 
     // deactivate stake, to be able to withdraw later
     function prepareToWithdrawVStake() external {
         address staker = msg.sender;
-        require(vStakers[staker].stakeAmount != 0, "staker doesn't exists");
-        require(vStakers[staker].deactivatedTime == 0, "staker shouldn't be deactivated yet");
+        uint256 stakerID = vStakerIDs[staker];
+        require(vStakers[stakerID].stakeAmount != 0, "staker doesn't exist");
+        require(vStakers[stakerID].deactivatedTime == 0, "staker shouldn't be deactivated yet");
 
-        vStakers[staker].deactivatedEpoch = currentEpoch();
-        vStakers[staker].deactivatedTime = block.timestamp;
+        vStakers[stakerID].deactivatedEpoch = currentEpoch();
+        vStakers[stakerID].deactivatedTime = block.timestamp;
 
-        emit PreparedToWithdrawVStake(staker);
+        emit PreparedToWithdrawVStake(stakerID);
     }
 
-    event WithdrawnVStake(address indexed staker, bool isCheater);
+    event WithdrawnVStake(uint256 indexed stakerID, bool isCheater);
 
     function withdrawVStake() external {
         address payable staker = msg.sender;
-        require(vStakers[staker].deactivatedTime != 0, "staker wasn't deactivated");
-        require(block.timestamp >= vStakers[staker].deactivatedTime + vStakeLockPeriodTime, "not enough time passed");
-        require(currentEpoch() >= vStakers[staker].deactivatedEpoch + vStakeLockPeriodEpochs, "not enough epochs passed");
-        uint256 stake = vStakers[staker].stakeAmount;
-        bool isCheater = vStakers[staker].isCheater;
-        delete vStakers[staker];
+        uint256 stakerID = vStakerIDs[staker];
+        require(vStakers[stakerID].deactivatedTime != 0, "staker wasn't deactivated");
+        require(block.timestamp >= vStakers[stakerID].deactivatedTime + vStakeLockPeriodTime, "not enough time passed");
+        require(currentEpoch() >= vStakers[stakerID].deactivatedEpoch + vStakeLockPeriodEpochs, "not enough epochs passed");
+
+        uint256 stake = vStakers[stakerID].stakeAmount;
+        bool isCheater = vStakers[stakerID].isCheater;
+        delete vStakers[stakerID];
+        delete vStakerIDs[staker];
 
         vStakersNum--;
         vStakeTotalAmount = vStakeTotalAmount.sub(stake);
@@ -297,7 +291,7 @@ contract Stakers {
             staker.transfer(stake);
         }
 
-        emit WithdrawnVStake(staker, isCheater);
+        emit WithdrawnVStake(stakerID, isCheater);
     }
 
     event PreparedToWithdrawDelegation(address indexed from);
@@ -305,34 +299,30 @@ contract Stakers {
     // deactivate delegation, to be able to withdraw later
     function prepareToWithdrawDelegation() external {
         address from = msg.sender;
-        require(delegations[from].amount != 0, "delegation doesn't exists");
+        require(delegations[from].amount != 0, "delegation doesn't exist");
         require(delegations[from].deactivatedTime == 0, "delegation shouldn't be deactivated yet");
 
         delegations[from].deactivatedEpoch = currentEpoch();
         delegations[from].deactivatedTime = block.timestamp;
-        address staker = delegations[from].toStakerAddress;
+        uint256 stakerID = delegations[from].toStakerID;
         uint256 delegatedAmount = delegations[from].amount;
-        if (!isStakerErased(from, staker)) {
-            vStakers[staker].delegatedMe = vStakers[staker].delegatedMe.sub(delegatedAmount);
+        if (vStakers[stakerID].stakeAmount != 0) {
+            // if staker haven't withdrawn
+            vStakers[stakerID].delegatedMe = vStakers[stakerID].delegatedMe.sub(delegatedAmount);
         }
 
         emit PreparedToWithdrawDelegation(from);
     }
 
-    // return true if staker was overwritten with another staker (with the same address), or was withdrawn
-    function isStakerErased(address deligator, address staker) view public returns(bool) {
-        return vStakers[staker].stakerIdx != delegations[deligator].toStakerIdx;
-    }
-
-    event WithdrawnDelegation(address indexed staker, bool isCheater);
+    event WithdrawnDelegation(uint256 indexed stakerID, bool isCheater);
 
     function withdrawDelegation() external {
         address payable from = msg.sender;
         require(delegations[from].deactivatedTime != 0, "delegation wasn't deactivated");
         require(block.timestamp >= delegations[from].deactivatedTime + deleagtionLockPeriodTime, "not enough time passed");
         require(currentEpoch() >= delegations[from].deactivatedEpoch + deleagtionLockPeriodEpochs, "not enough epochs passed");
-        address staker = delegations[from].toStakerAddress;
-        bool isCheater = vStakers[staker].isCheater;
+        uint256 stakerID = delegations[from].toStakerID;
+        bool isCheater = vStakers[stakerID].isCheater;
         uint256 delegatedAmount = delegations[from].amount;
         delete delegations[from];
 
@@ -343,29 +333,30 @@ contract Stakers {
             from.transfer(delegatedAmount);
         }
 
-        emit WithdrawnDelegation(staker, isCheater);
+        emit WithdrawnDelegation(stakerID, isCheater);
     }
 }
 
 contract TestStakers is Stakers {
-    address[] public validatorAddresses;
+    uint256[] public stakerIDsArr;
 
     constructor (uint256 firstEpoch) public {
         currentSealedEpoch = firstEpoch;
     }
 
-    function _markValidationStakeAsCheater(address validatorAddress, bool status) external {
-        if (vStakers[validatorAddress].stakerIdx != 0x0) {
-            vStakers[validatorAddress].isCheater = status;
+    function _markValidationStakeAsCheater(uint256 stakerID, bool status) external {
+        if (vStakers[stakerID].stakeAmount != 0) {
+            vStakers[stakerID].isCheater = status;
         }
     }
 
     function _createVStake() external payable {
-        validatorAddresses.push(msg.sender); // SS Check existing?
+        stakerIDsArr.push(vStakersLastID + 1); // SS Check existing?
         super.implCreateVStake();
     }
 
     function _makeEpochSnapshots(uint256 optionalDuration) external returns(uint256) {
+        currentSealedEpoch++;
         EpochSnapshot storage newSnapshot = epochSnapshots[currentSealedEpoch];
         uint256 epochPay = 0;
 
@@ -377,16 +368,15 @@ contract TestStakers is Stakers {
         }
         epochPay = epochPay.add(newSnapshot.duration);
 
-        for (uint256 i = 0; i < validatorAddresses.length; i++) {
-            uint256 deactivatedTime =  vStakers[validatorAddresses[i]].deactivatedTime;
+        for (uint256 i = 0; i < stakerIDsArr.length; i++) {
+            uint256 deactivatedTime =  vStakers[stakerIDsArr[i]].deactivatedTime;
             if (deactivatedTime == 0 || block.timestamp < deactivatedTime) {
                 uint256 power = i.mul(2).add(1).mul(0.5 ether);
                 newSnapshot.totalValidatingPower = newSnapshot.totalValidatingPower.add(power);
-                newSnapshot.validators[validatorAddresses[i]] = ValidatorMerit(
+                newSnapshot.validators[stakerIDsArr[i]] = ValidatorMerit(
                     power,
-                    vStakers[validatorAddresses[i]].stakeAmount,
-                    vStakers[validatorAddresses[i]].delegatedMe,
-                    vStakers[validatorAddresses[i]].stakerIdx
+                    vStakers[stakerIDsArr[i]].stakeAmount,
+                    vStakers[stakerIDsArr[i]].delegatedMe
                 );
             }
         }
@@ -394,20 +384,18 @@ contract TestStakers is Stakers {
         newSnapshot.epochFee = 2 ether;
         epochPay = epochPay.add(newSnapshot.epochFee);
 
-        currentSealedEpoch++;
-
         return epochPay;
     }
 
-    function _calcTotalReward(address staker, uint256 epoch) view external returns (uint256) {
-        return super.calcTotalReward(staker, epoch);
+    function _calcTotalReward(uint256 stakerID, uint256 epoch) view external returns (uint256) {
+        return super.calcTotalReward(stakerID, epoch);
     }
 
-    function _calcValidatorReward(address staker, uint256 epoch) view external returns (uint256) {
-        return super.calcValidatorReward(staker, epoch);
+    function _calcValidatorReward(uint256 stakerID, uint256 epoch) view external returns (uint256) {
+        return super.calcValidatorReward(stakerID, epoch);
     }
 
-    function _calcDelegatorReward(address staker, uint256 epoch, uint256 delegatedAmount) view external returns (uint256) {
-        return super.calcDelegatorReward(staker, epoch, delegatedAmount);
+    function _calcDelegatorReward(uint256 stakerID, uint256 epoch, uint256 delegatedAmount) view external returns (uint256) {
+        return super.calcDelegatorReward(stakerID, epoch, delegatedAmount);
     }
 }
