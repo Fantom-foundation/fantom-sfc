@@ -1,11 +1,12 @@
 pragma solidity >=0.5.0 <=0.5.3;
 
-import "@openzeppelin/contracts/math/SafeMath.sol";
+import "./SafeMath.sol";
 
 contract Stakers {
     using SafeMath for uint256;
 
     uint256 public constant minValidationStake = 1 ether;
+    uint256 public constant minValidationStakeIncrease = 1 ether;
     uint256 public constant minDelegation = 1 ether;
 
     uint256 public constant percentUnit = 1000000;
@@ -77,16 +78,28 @@ contract Stakers {
     Methods
     */
 
+    function getEpochValidator(uint256 e, address v) external view returns (uint256, uint256, uint256, uint256) {
+        return (epochSnapshots[e].validators[v].validatingPower,
+                epochSnapshots[e].validators[v].stakeAmount,
+                epochSnapshots[e].validators[v].delegatedMe,
+                epochSnapshots[e].validators[v].stakerIdx);
+    }
+
     function currentEpoch() public view returns (uint256) {
         return currentSealedEpoch + 1;
     }
 
-    event CreatedVStake(address indexed staker, uint256 amount);
+    event CreatedVStake(address indexed staker, uint256 stakerIdx, uint256 amount);
 
-    function createVStake() public payable {
+    function createVStake() external payable {
+        implCreateVStake();
+    }
+
+    function implCreateVStake() internal {
         address staker = msg.sender;
 
         require(vStakers[staker].stakeAmount == 0, "staker already exists");
+        require(delegations[staker].amount == 0, "already delegating");
         require(msg.value >= minValidationStake, "insufficient amount for staking");
 
         vStakers[staker].stakeAmount = msg.value;
@@ -96,7 +109,7 @@ contract Stakers {
 
         vStakersNum++;
         vStakeTotalAmount = vStakeTotalAmount.add(msg.value);
-        emit CreatedVStake(staker, msg.value);
+        emit CreatedVStake(staker, vStakers[staker].stakerIdx, msg.value);
     }
 
     event IncreasedVStake(address indexed staker, uint256 newAmount, uint256 diff);
@@ -104,7 +117,11 @@ contract Stakers {
     function increaseVStake() external payable {
         address staker = msg.sender;
 
+        require(msg.value >= minValidationStakeIncrease, "insufficient amount for increasing stake");
         require(vStakers[staker].stakeAmount != 0, "staker wasn't created");
+        require(vStakers[staker].deactivatedTime == 0, "staker shouldn't be deactivated yet");
+        require(vStakers[staker].isCheater == false, "staker shouldn't be cheater");
+        
         uint256 newAmount = vStakers[staker].stakeAmount.add(msg.value);
         vStakers[staker].stakeAmount = newAmount;
         vStakeTotalAmount = vStakeTotalAmount.add(msg.value);
@@ -117,9 +134,12 @@ contract Stakers {
         address from = msg.sender;
 
         require(vStakers[to].stakeAmount != 0, "staker wasn't created");
+        require(vStakers[to].isCheater == false, "staker shouldn't be cheater");
         require(msg.value >= minDelegation, "insufficient amount for delegation");
-        require(delegations[from].createdTime == 0, "delegate already exists");
-        require((vStakers[to].stakeAmount.mul(maxDelegatedMeRatio)).div(percentUnit) >= vStakers[to].delegatedMe.add(msg.value), "delegated limit is exceeded");
+        require(delegations[from].amount == 0, "delegation already exists");
+        require(vStakers[from].stakeAmount == 0, "already staking");
+        require((vStakers[to].stakeAmount.mul(maxDelegatedMeRatio)).div(percentUnit) >= vStakers[to].delegatedMe.add(msg.value), "staker's limit is exceeded");
+
         Delegation memory newDelegation;
         newDelegation.createdEpoch = currentEpoch();
         newDelegation.createdTime = block.timestamp;
@@ -264,8 +284,8 @@ contract Stakers {
     function withdrawVStake() external {
         address payable staker = msg.sender;
         require(vStakers[staker].deactivatedTime != 0, "staker wasn't deactivated");
-        require(block.timestamp >= vStakers[staker].deactivatedTime.add(vStakeLockPeriodTime), "not enough time passed");
-        require(currentEpoch() >= vStakers[staker].deactivatedEpoch.add(vStakeLockPeriodEpochs), "not enough epochs passed");
+        require(block.timestamp >= vStakers[staker].deactivatedTime + vStakeLockPeriodTime, "not enough time passed");
+        require(currentEpoch() >= vStakers[staker].deactivatedEpoch + vStakeLockPeriodEpochs, "not enough epochs passed");
         uint256 stake = vStakers[staker].stakeAmount;
         bool isCheater = vStakers[staker].isCheater;
         delete vStakers[staker];
@@ -300,7 +320,7 @@ contract Stakers {
     }
 
     // return true if staker was overwritten with another staker (with the same address), or was withdrawn
-    function isStakerErased(address deligator, address staker) view internal returns(bool) {
+    function isStakerErased(address deligator, address staker) view public returns(bool) {
         return vStakers[staker].stakerIdx != delegations[deligator].toStakerIdx;
     }
 
@@ -309,8 +329,8 @@ contract Stakers {
     function withdrawDelegation() external {
         address payable from = msg.sender;
         require(delegations[from].deactivatedTime != 0, "delegation wasn't deactivated");
-        require(block.timestamp >= delegations[from].deactivatedTime.add(deleagtionLockPeriodTime), "not enough time passed");
-        require(currentEpoch() >= delegations[from].deactivatedEpoch.add(deleagtionLockPeriodEpochs), "not enough epochs passed");
+        require(block.timestamp >= delegations[from].deactivatedTime + deleagtionLockPeriodTime, "not enough time passed");
+        require(currentEpoch() >= delegations[from].deactivatedEpoch + deleagtionLockPeriodEpochs, "not enough epochs passed");
         address staker = delegations[from].toStakerAddress;
         bool isCheater = vStakers[staker].isCheater;
         uint256 delegatedAmount = delegations[from].amount;
@@ -342,7 +362,7 @@ contract TestStakers is Stakers {
 
     function _createVStake() external payable {
         validatorAddresses.push(msg.sender); // SS Check existing?
-        super.createVStake();
+        super.implCreateVStake();
     }
 
     function _makeEpochSnapshots(uint256 optionalDuration) external returns(uint256) {
