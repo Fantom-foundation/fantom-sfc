@@ -13,6 +13,8 @@ contract Stakers {
     uint256 public constant maxDelegatedMeRatio = 15 * percentUnit; // 1500%
     uint256 public constant validatorCommission = (15 * percentUnit) / 100; // 15%
 
+    uint256 public constant contractCommission = (30 * percentUnit) / 100; // 30%
+
     uint256 public constant vStakeLockPeriodTime = 60 * 60 * 24 * 7; // 7 days
     uint256 public constant vStakeLockPeriodEpochs = 3;
     uint256 public constant deleagtionLockPeriodTime = 60 * 60 * 24 * 7; // 7 days
@@ -161,12 +163,13 @@ contract Stakers {
         uint256 validatingPower = epochSnapshots[epoch].validators[stakerID].validatingPower;
         require(totalValidatingPower != 0, "total validating power can't be zero");
 
-        uint256 reward = 0;
         // base reward
-        reward = reward.add(epochSnapshots[epoch].duration.mul(validatingPower).div(totalValidatingPower));
-        // fee reward
-        reward = reward.add(epochSnapshots[epoch].epochFee.mul(validatingPower).div(totalValidatingPower));
-        return reward;
+        uint256 reward = epochSnapshots[epoch].duration.mul(validatingPower).div(totalValidatingPower);
+        // fee reward except contractCommission
+        uint256 feeReward = epochSnapshots[epoch].epochFee.mul(validatingPower).div(totalValidatingPower);
+        feeReward = feeReward.mul(percentUnit - contractCommission).div(percentUnit);
+
+        return reward.add(feeReward);
     }
 
     function calcValidatorReward(uint256 stakerID, uint256 epoch) view internal returns (uint256) {
