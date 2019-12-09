@@ -5,9 +5,9 @@ import "./SafeMath.sol";
 contract Stakers {
     using SafeMath for uint256;
 
-    uint256 public constant minValidationStake = 1e18;
-    uint256 public constant minValidationStakeIncrease = 1e18;
-    uint256 public constant minDelegation = 1e18;
+    uint256 public constant minValidationStake = 3175000 * 1e18; // 3175000 FTM
+    uint256 public constant minValidationStakeIncrease = minValidationStake / 100;
+    uint256 public constant minDelegation = 1000 * 1e18;
 
     uint256 public constant percentUnit = 1000000;
     uint256 public constant maxDelegatedMeRatio = 15 * percentUnit; // 1500%
@@ -19,6 +19,8 @@ contract Stakers {
     uint256 public constant vStakeLockPeriodEpochs = 3;
     uint256 public constant deleagtionLockPeriodTime = 60 * 60 * 24 * 7; // 7 days
     uint256 public constant deleagtionLockPeriodEpochs = 3;
+
+    uint256 public constant blockRewardPerSecond = 8.241994292233796296 * 1e18; // 712108.306849 FTM per day
 
     struct Delegation {
         uint256 createdEpoch;
@@ -164,7 +166,7 @@ contract Stakers {
         require(totalValidatingPower != 0, "total validating power can't be zero");
 
         // base reward
-        uint256 reward = epochSnapshots[epoch].duration.mul(validatingPower).div(totalValidatingPower);
+        uint256 reward = epochSnapshots[epoch].duration.mul(blockRewardPerSecond).mul(validatingPower).div(totalValidatingPower);
         // fee reward except contractCommission
         uint256 feeReward = epochSnapshots[epoch].epochFee.mul(validatingPower).div(totalValidatingPower);
         feeReward = feeReward.mul(percentUnit - contractCommission).div(percentUnit);
