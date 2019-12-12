@@ -272,6 +272,28 @@ contract Stakers is StakersConstants {
         emit ClaimedDelegationReward(from, stakerID, reward, fromEpoch, untilEpoch);
     }
 
+
+    // Returns the pending rewards for a given stakerID
+    function checkPendingRewards (uint256 indexed stakerID, uint256 _untilEpoch, bool isValidator) public {
+      uint256 paidUntilEpoch = stakers[stakerID].paidUntilEpoch;
+      uint256 pendingRewards = 0;
+      for (uint256 e = paidlUntilEpoch; e <= untilEpoch; e++) {
+            pendingRewards += calcValidatorReward(stakerID, e);
+      }
+      return pendingRewards
+    }
+
+
+    // Returns the pending rewards for a given delegator
+    function checkDelegatorPendingRewards (uint256 indexed stakerID, address delegator){
+      uint256 paidUntilEpoch = stakers[stakerID].paidUntilEpoch;
+      uint256 pendingRewards = 0;
+      for (uint256 e = paidlUntilEpoch; e <= untilEpoch; e++) {
+        pendingRewards += calcDelegationReward(stakerID, e, delegations[msg.sender].amount);
+      }
+      return pendingRewards
+    }
+
     event ClaimedValidatorReward(uint256 indexed stakerID, uint256 reward, uint256 fromEpoch, uint256 untilEpoch);
 
     // may be already deactivated, but still allowed to withdraw old rewards
