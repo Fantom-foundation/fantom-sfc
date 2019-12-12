@@ -277,7 +277,7 @@ contract Stakers is StakersConstants {
     function checkPendingRewards (uint256 indexed stakerID, uint256 _untilEpoch, bool isValidator) public {
       uint256 paidUntilEpoch = stakers[stakerID].paidUntilEpoch;
       uint256 pendingRewards = 0;
-      for (uint256 e = paidlUntilEpoch; e <= untilEpoch; e++) {
+      for (uint256 e = paidUntilEpoch; e <= untilEpoch; e++) {
             pendingRewards += calcValidatorReward(stakerID, e);
       }
       return pendingRewards
@@ -288,7 +288,7 @@ contract Stakers is StakersConstants {
     function checkDelegatorPendingRewards (uint256 indexed stakerID, address delegator){
       uint256 paidUntilEpoch = stakers[stakerID].paidUntilEpoch;
       uint256 pendingRewards = 0;
-      for (uint256 e = paidlUntilEpoch; e <= untilEpoch; e++) {
+      for (uint256 e = paidUntilEpoch; e <= untilEpoch; e++) {
         pendingRewards += calcDelegationReward(stakerID, e, delegations[msg.sender].amount);
       }
       return pendingRewards
