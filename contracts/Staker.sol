@@ -82,9 +82,10 @@ contract Stakers is StakersConstants {
     }
 
     struct ValidatorMerit {
-        uint256 validatingPower;
         uint256 stakeAmount;
         uint256 delegatedMe;
+        uint256 baseRewardWeight;
+        uint256 txRewardWeight;
     }
 
     struct EpochSnapshot {
@@ -93,7 +94,8 @@ contract Stakers is StakersConstants {
         uint256 endTime;
         uint256 duration;
         uint256 epochFee;
-        uint256 totalValidatingPower;
+        uint256 totalBaseRewardWeight;
+        uint256 totalTxRewardWeight;
     }
 
     uint256 public currentSealedEpoch; // written by consensus outside
@@ -113,10 +115,11 @@ contract Stakers is StakersConstants {
     Methods
     */
 
-    function getEpochValidator(uint256 e, uint256 v) external view returns (uint256, uint256, uint256) {
-        return (epochSnapshots[e].validators[v].validatingPower,
-                epochSnapshots[e].validators[v].stakeAmount,
-                epochSnapshots[e].validators[v].delegatedMe);
+    function getEpochValidator(uint256 e, uint256 v) external view returns (uint256, uint256, uint256, uint256) {
+        return (epochSnapshots[e].validators[v].stakeAmount,
+                epochSnapshots[e].validators[v].delegatedMe,
+                epochSnapshots[e].validators[v].baseRewardWeight,
+                epochSnapshots[e].validators[v].txRewardWeight);
     }
 
     function currentEpoch() public view returns (uint256) {
@@ -192,17 +195,24 @@ contract Stakers is StakersConstants {
     }
 
     function calcTotalReward(uint256 stakerID, uint256 epoch) view public returns (uint256) {
-        uint256 totalValidatingPower = epochSnapshots[epoch].totalValidatingPower;
-        uint256 validatingPower = epochSnapshots[epoch].validators[stakerID].validatingPower;
-        require(totalValidatingPower != 0, "total validating power can't be zero");
+        uint256 totalBaseRewardWeight = epochSnapshots[epoch].totalBaseRewardWeight;
+        uint256 baseRewardWeight = epochSnapshots[epoch].validators[stakerID].baseRewardWeight;
+        uint256 totalTxRewardWeight = epochSnapshots[epoch].totalTxRewardWeight;
+        uint256 txRewardWeight = epochSnapshots[epoch].validators[stakerID].txRewardWeight;
 
         // base reward
-        uint256 reward = epochSnapshots[epoch].duration.mul(blockRewardPerSecond()).mul(validatingPower).div(totalValidatingPower);
+        uint256 baseReward = 0;
+        if (baseRewardWeight != 0) {
+            baseReward = epochSnapshots[epoch].duration.mul(blockRewardPerSecond()).mul(baseRewardWeight).div(totalBaseRewardWeight);
+        }
         // fee reward except contractCommission
-        uint256 feeReward = epochSnapshots[epoch].epochFee.mul(validatingPower).div(totalValidatingPower);
-        feeReward = feeReward.mul(percentUnit - contractCommission()).div(percentUnit);
+        uint256 txReward = 0;
+        if (txRewardWeight != 0) {
+            txReward = epochSnapshots[epoch].epochFee.mul(txRewardWeight).div(totalTxRewardWeight);
+            txReward = txReward.mul(percentUnit - contractCommission()).div(percentUnit);
+        }
 
-        return reward.add(feeReward);
+        return baseReward.add(txReward);
     }
 
     function calcValidatorReward(uint256 stakerID, uint256 epoch) view public returns (uint256) {
@@ -330,7 +340,7 @@ contract Stakers is StakersConstants {
         emit WithdrawnStake(stakerID, isCheater);
     }
 
-    event PreparedToWithdrawDelegation(address indexed from);
+    event PreparedToWithdrawDelegation(address indexed from, uint256 indexed stakerID);
 
     // deactivate delegation, to be able to withdraw later
     function prepareToWithdrawDelegation() external {
@@ -347,10 +357,10 @@ contract Stakers is StakersConstants {
             stakers[stakerID].delegatedMe = stakers[stakerID].delegatedMe.sub(delegatedAmount);
         }
 
-        emit PreparedToWithdrawDelegation(from);
+        emit PreparedToWithdrawDelegation(from, stakerID);
     }
 
-    event WithdrawnDelegation(uint256 indexed stakerID, bool isCheater);
+    event WithdrawnDelegation(address indexed from, uint256 indexed stakerID, bool isCheater);
 
     function withdrawDelegation() external {
         address payable from = msg.sender;
@@ -369,7 +379,7 @@ contract Stakers is StakersConstants {
             from.transfer(delegatedAmount);
         }
 
-        emit WithdrawnDelegation(stakerID, isCheater);
+        emit WithdrawnDelegation(from, stakerID, isCheater);
     }
 }
 
@@ -426,25 +436,28 @@ contract UnitTestStakers is Stakers {
         if (optionalDuration != 0 || currentSealedEpoch == 0) {
             newSnapshot.duration = optionalDuration;
         } else {
-            newSnapshot.duration = block.timestamp.sub(epochSnapshots[currentSealedEpoch.sub(1)].endTime);
+            newSnapshot.duration = block.timestamp - epochSnapshots[currentSealedEpoch - 1].endTime;
         }
-        epochPay = epochPay.add(newSnapshot.duration);
+        epochPay += newSnapshot.duration * blockRewardPerSecond();
 
         for (uint256 i = 0; i < stakerIDsArr.length; i++) {
-            uint256 deactivatedTime =  stakers[stakerIDsArr[i]].deactivatedTime;
+            uint256 deactivatedTime = stakers[stakerIDsArr[i]].deactivatedTime;
             if (deactivatedTime == 0 || block.timestamp < deactivatedTime) {
-                uint256 power = stakers[stakerIDsArr[i]].stakeAmount + stakers[stakerIDsArr[i]].delegatedMe;
-                newSnapshot.totalValidatingPower = newSnapshot.totalValidatingPower.add(power);
+                uint256 basePower = stakers[stakerIDsArr[i]].stakeAmount + stakers[stakerIDsArr[i]].delegatedMe;
+                uint256 txPower = 1000 * i + basePower;
+                newSnapshot.totalBaseRewardWeight += basePower;
+                newSnapshot.totalTxRewardWeight += txPower;
                 newSnapshot.validators[stakerIDsArr[i]] = ValidatorMerit(
-                    power,
                     stakers[stakerIDsArr[i]].stakeAmount,
-                    stakers[stakerIDsArr[i]].delegatedMe
+                    stakers[stakerIDsArr[i]].delegatedMe,
+                    basePower,
+                    txPower
                 );
             }
         }
 
-        newSnapshot.epochFee = 2 ether;
-        epochPay = epochPay.add(newSnapshot.epochFee);
+        newSnapshot.epochFee = 2 * 1e18;
+        epochPay += newSnapshot.epochFee;
 
         return epochPay;
     }
