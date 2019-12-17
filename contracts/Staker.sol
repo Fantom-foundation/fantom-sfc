@@ -3,7 +3,10 @@ pragma solidity >=0.5.0 <=0.5.3;
 import "./SafeMath.sol";
 
 contract StakersConstants {
-    uint256 public constant percentUnit = 1000000;
+    uint256 internal constant FORK_BIT = 1;
+    uint256 internal constant OFFLINE_BIT = 1 << 8;
+    uint256 internal constant CHEATER_MASK = FORK_BIT;
+    uint256 internal constant PERCENT_UNIT = 1000000;
 
     function blockRewardPerSecond() public pure returns (uint256) {
         return 8.241994292233796296 * 1e18; // 712108.306849 FTM per day
@@ -22,15 +25,15 @@ contract StakersConstants {
     }
 
     function maxDelegatedRatio() public pure returns (uint256) {
-        return 15 * percentUnit; // 1500%
+        return 15 * PERCENT_UNIT; // 1500%
     }
 
     function validatorCommission() public pure returns (uint256) {
-        return (15 * percentUnit) / 100; // 15%
+        return (15 * PERCENT_UNIT) / 100; // 15%
     }
 
     function contractCommission() public pure returns (uint256) {
-        return (30 * percentUnit) / 100; // 30%
+        return (30 * PERCENT_UNIT) / 100; // 30%
     }
 
     function stakeLockPeriodTime() public pure returns (uint256) {
@@ -66,7 +69,7 @@ contract Stakers is StakersConstants {
     }
 
     struct ValidationStake {
-        bool isCheater; // written by consensus outside
+        uint256 status; // written by consensus outside
 
         uint256 createdEpoch;
         uint256 createdTime;
@@ -101,7 +104,7 @@ contract Stakers is StakersConstants {
     uint256 public currentSealedEpoch; // written by consensus outside
     mapping(uint256 => EpochSnapshot) public epochSnapshots; // written by consensus outside
     mapping(uint256 => ValidationStake) public stakers; // stakerID -> stake
-    mapping(address => uint256) public stakerIDs; // staker address -> stakerID
+    mapping(address => uint256) internal stakerIDs; // staker address -> stakerID
 
     uint256 public stakersLastID;
     uint256 public stakersNum;
@@ -112,10 +115,10 @@ contract Stakers is StakersConstants {
     mapping(address => Delegation) public delegations; // delegationID -> delegation
 
     /*
-    Methods
+    Getters
     */
 
-    function getEpochValidator(uint256 e, uint256 v) external view returns (uint256, uint256, uint256, uint256) {
+    function epochValidator(uint256 e, uint256 v) external view returns (uint256, uint256, uint256, uint256) {
         return (epochSnapshots[e].validators[v].stakeAmount,
                 epochSnapshots[e].validators[v].delegatedMe,
                 epochSnapshots[e].validators[v].baseRewardWeight,
@@ -125,6 +128,14 @@ contract Stakers is StakersConstants {
     function currentEpoch() public view returns (uint256) {
         return currentSealedEpoch + 1;
     }
+
+    function getStakerID(address addr) external view returns (uint256) {
+        return stakerIDs[addr];
+    }
+
+    /*
+    Methods
+    */
 
     event CreatedStake(uint256 indexed stakerID, address indexed stakerAddress, uint256 amount);
 
@@ -164,7 +175,7 @@ contract Stakers is StakersConstants {
         require(msg.value >= minStakeIncrease(), "insufficient amount");
         require(stakers[stakerID].stakeAmount != 0, "staker doesn't exist");
         require(stakers[stakerID].deactivatedTime == 0, "staker is deactivated");
-        require(stakers[stakerID].isCheater == false, "staker shouldn't be cheater");
+        require(stakers[stakerID].status & CHEATER_MASK == 0, "staker shouldn't be cheater");
 
         uint256 newAmount = stakers[stakerID].stakeAmount.add(msg.value);
         stakers[stakerID].stakeAmount = newAmount;
@@ -180,11 +191,11 @@ contract Stakers is StakersConstants {
         address from = msg.sender;
 
         require(stakers[to].stakeAmount != 0, "staker doesn't exist");
-        require(stakers[to].isCheater == false, "staker shouldn't be cheater");
+        require(stakers[to].status & CHEATER_MASK == 0, "staker shouldn't be cheater");
         require(msg.value >= minDelegation(), "insufficient amount for delegation");
         require(delegations[from].amount == 0, "delegation already exists");
         require(stakerIDs[from] == 0, "already staking");
-        require((stakers[to].stakeAmount.mul(maxDelegatedRatio())).div(percentUnit) >= stakers[to].delegatedMe.add(msg.value), "staker's limit is exceeded");
+        require((stakers[to].stakeAmount.mul(maxDelegatedRatio())).div(PERCENT_UNIT) >= stakers[to].delegatedMe.add(msg.value), "staker's limit is exceeded");
 
         Delegation memory newDelegation;
         newDelegation.createdEpoch = currentEpoch();
@@ -212,11 +223,12 @@ contract Stakers is StakersConstants {
         if (baseRewardWeight != 0) {
             baseReward = epochSnapshots[epoch].duration.mul(blockRewardPerSecond()).mul(baseRewardWeight).div(totalBaseRewardWeight);
         }
-        // fee reward except contractCommission
+        // fee reward
         uint256 txReward = 0;
         if (txRewardWeight != 0) {
             txReward = epochSnapshots[epoch].epochFee.mul(txRewardWeight).div(totalTxRewardWeight);
-            txReward = txReward.mul(percentUnit - contractCommission()).div(percentUnit);
+            // fee reward except contractCommission
+            txReward = txReward.mul(PERCENT_UNIT - contractCommission()).div(PERCENT_UNIT);
         }
 
         return baseReward.add(txReward);
@@ -359,7 +371,7 @@ contract Stakers is StakersConstants {
         emit PreparedToWithdrawStake(stakerID);
     }
 
-    event WithdrawnStake(uint256 indexed stakerID, bool isCheater);
+    event WithdrawnStake(uint256 indexed stakerID, uint256 penalty);
 
     function withdrawStake() external {
         address payable staker = msg.sender;
@@ -369,7 +381,8 @@ contract Stakers is StakersConstants {
         require(currentEpoch() >= stakers[stakerID].deactivatedEpoch + stakeLockPeriodEpochs(), "not enough epochs passed");
 
         uint256 stake = stakers[stakerID].stakeAmount;
-        bool isCheater = stakers[stakerID].isCheater;
+        uint256 penalty = 0;
+        bool isCheater = stakers[stakerID].status & CHEATER_MASK != 0;
         delete stakers[stakerID];
         delete stakerIDs[staker];
 
@@ -378,9 +391,11 @@ contract Stakers is StakersConstants {
         // It's important that we transfer after erasing (protection against Re-Entrancy)
         if (isCheater == false) {
             staker.transfer(stake);
+        } else {
+            penalty = stake;
         }
 
-        emit WithdrawnStake(stakerID, isCheater);
+        emit WithdrawnStake(stakerID, penalty);
     }
 
     event PreparedToWithdrawDelegation(address indexed from, uint256 indexed stakerID);
@@ -403,7 +418,7 @@ contract Stakers is StakersConstants {
         emit PreparedToWithdrawDelegation(from, stakerID);
     }
 
-    event WithdrawnDelegation(address indexed from, uint256 indexed stakerID, bool isCheater);
+    event WithdrawnDelegation(address indexed from, uint256 indexed stakerID, uint256 penalty);
 
     function withdrawDelegation() external {
         address payable from = msg.sender;
@@ -411,7 +426,8 @@ contract Stakers is StakersConstants {
         require(block.timestamp >= delegations[from].deactivatedTime + deleagtionLockPeriodTime(), "not enough time passed");
         require(currentEpoch() >= delegations[from].deactivatedEpoch + deleagtionLockPeriodEpochs(), "not enough epochs passed");
         uint256 stakerID = delegations[from].toStakerID;
-        bool isCheater = stakers[stakerID].isCheater;
+        uint256 penalty = 0;
+        bool isCheater = stakers[stakerID].status & CHEATER_MASK != 0;
         uint256 delegatedAmount = delegations[from].amount;
         delete delegations[from];
 
@@ -420,9 +436,11 @@ contract Stakers is StakersConstants {
         // It's important that we transfer after erasing (protection against Re-Entrancy)
         if (isCheater == false) {
             from.transfer(delegatedAmount);
+        } else {
+            penalty = delegatedAmount;
         }
 
-        emit WithdrawnDelegation(from, stakerID, isCheater);
+        emit WithdrawnDelegation(from, stakerID, penalty);
     }
 }
 
@@ -459,9 +477,13 @@ contract UnitTestStakers is Stakers {
         currentSealedEpoch = firstEpoch;
     }
 
-    function _markValidationStakeAsCheater(uint256 stakerID, bool status) external {
+    function _markValidationStakeAsCheater(uint256 stakerID, bool cheater) external {
         if (stakers[stakerID].stakeAmount != 0) {
-            stakers[stakerID].isCheater = status;
+            if (cheater) {
+                stakers[stakerID].status = FORK_BIT;
+            } else {
+                stakers[stakerID].status = 0;
+            }
         }
     }
 
