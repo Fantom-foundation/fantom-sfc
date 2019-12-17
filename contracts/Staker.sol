@@ -4,14 +4,104 @@ import "./SafeMath.sol";
 
 contract StakersConstants {
     uint256 public constant percentUnit = 1000000;
+    // The owner is the address that deploys the sfc
+    address public owner;
 
-    function blockRewardPerSecond() public pure returns (uint256) {
-        return 8.241994292233796296 * 1e18; // 712108.306849 FTM per day
+    // Constants that can only be changed by owner
+    uint256 blockRewardPerSecond = 8.241994292233796296 * 1e18; // 712108.306849 FTM per day
+    uint256 minStake = 3175000 * 1e18; // 3,175,000 FTM
+    uint256 maxDelegatedRatio = 15 * percentUnit; // A validator node can hold up to 15 times FTM that it is currently staking
+    uint256 validatorCommission = (15 * percentUnit) / 100; // Fixed 15% commission fee paid from delegators to validators
+    uint256 contractCommission = (30 * percentUnit) / 100; // Fixed 30% commission that SFC takes of fees
+    uint256 stakeLockPeriodTime = 60 * 60 * 24 * 7; // Can withdraw stake after only 7 days
+    uint256 stakeLockPeriodEpochs = 3; // Can withdraw stake after only 3 epochs and the stakeLockPeriodTime
+    uint256 delegationLockPeriodTime = 60 * 60 * 24 * 7;  // Can withdraw Delegated stake after only 7 days
+    uint256 delegationLockPeriodEpochs = 3; // Can withdraw delegated stake after only 3 epochs and the stakeLockPeriodTime
+
+    modifier onlyOwner {require(msg.sender == owner); _;}
+
+
+    event ChangeBlockRewardPerSecond(uint256 _newBlockRewardPerSecond);
+
+    // Change block rewards issued per second
+    function changeBlockRewardPerSecond(uint256 _newBlockRewardPerSecond) public onlyOwner {
+      blockRewardPerSecond = _newBlockRewardPerSecond;
+      emit ChangeBlockRewardPerSecond(_newBlockRewardPerSecond);
     }
 
-    function minStake() public pure returns (uint256) {
-        return 3175000 * 1e18; // 3175000 FTM
+    event ChangeMinStake(uint256 _newMinStake);
+
+    // Change the minimum stake required of a validator
+    function changeMinStake(uint256 _newMinStake) public onlyOwner {
+      minStake = _newMinStake;
+      emit ChangeMinStake(_newMinStake);
     }
+
+    event ChangeMaxDelegatedRatio(uint256 _newMaxDelegatedRatio);
+
+    // Change the maximum delegation ratio of a validator node
+    function changeMaxDelegatedRatio(uint256 _newMaxDelegatedRatio) public onlyOwner {
+      maxDelegatedRatio = _newMaxDelegatedRatio;
+      emit ChangeMaxDelegatedRatio(_newMaxDelegatedRatio);
+    }
+
+    event ChangeValidatorCommission(uint256 _newValidatorCommission);
+
+    // Change the commission validators receive from validating nodes
+    function changeValidatorCommission(uint256 _newValidatorCommission) public onlyOwner {
+      validatorCommission = _newValidatorCommission;
+      emit ChangeValidatorCommission(_newValidatorCommission);
+    }
+
+    event ChangeContractCommission(uint256 _newContractCommission);
+
+    // Change the commission the sfc receives
+    function changeContractCommission(uint256 _newContractCommission) public onlyOwner {
+      contractCommission = _newContractCommission;
+      emit ChangeContractCommission(_newContractCommission);
+    }
+
+    event ChangeStakeLockPeriodTime(uint256 _newStakeLockPeriodTime);
+
+    // Change the minimum time until validator can withdraw stake
+    function changeStakeLockPeriodTime(uint256 _newStakeLockPeriodTime) public onlyOwner {
+      stakeLockPeriodTime = _newStakeLockPeriodTime;
+      emit ChangeStakeLockPeriodTime(_newStakeLockPeriodTime);
+    }
+
+    event ChangeStakeLockPeriodEpochs(uint256 _newStakeLockPeriodEpochs);
+
+    // Change the minimum number of epochs that musth elasped until validator can withdraw stake
+    function changeStakeLockPeriodEpochs(uint256 _newStakeLockPeriodEpochs) public onlyOwner {
+      stakeLockPeriodEpochs = _newStakeLockPeriodEpochs;
+      emit ChangeStakeLockPeriodEpochs(_newStakeLockPeriodEpochs);
+    }
+
+    event ChangeDelegationLockPeriodTime(uint256 _newDelegationLockPeriodTime);
+
+    // Change the minimum time until delegator can withdraw stake
+    function changeDelegationLockPeriodTime(uint256 _newDelegationLockPeriodTime) public onlyOwner {
+      delegationLockPeriodTime = _newDelegationLockPeriodTime;
+      emit ChangeDelegationLockPeriodTime(_newDelegationLockPeriodTime);
+    }
+
+    event ChangeDelegationLockPeriodEpochs(uint256 _newDelegationLockPeriodEpochs);
+
+    // Change the minimum number of epochs that must elaspe until validator can withdraw stake
+    function changeDelegationLockPeriodEpochs(uint256 _newDelegationLockPeriodEpochs) public onlyOwner {
+      delegationLockPeriodEpochs = _newDelegationLockPeriodEpochs;
+      emit ChangeDelegationLockPeriodEpochs(_newDelegationLockPeriodEpochs);
+    }
+
+    event OwnershipTransferred(address indexed _to);
+
+    // Transfers the owner of the sfc from current address to another
+    function transferOwnership(address payable _newOwner) public onlyOwner {
+      require(_newOwner != address(0x0));
+      owner = _newOwner;
+      emit OwnershipTransferred(_newOwner);
+    }
+
 
     function minStakeIncrease() public pure returns (uint256) {
         return 1 * 1e18;
@@ -19,34 +109,6 @@ contract StakersConstants {
 
     function minDelegation() public pure returns (uint256) {
         return 1 * 1e18;
-    }
-
-    function maxDelegatedRatio() public pure returns (uint256) {
-        return 15 * percentUnit; // 1500%
-    }
-
-    function validatorCommission() public pure returns (uint256) {
-        return (15 * percentUnit) / 100; // 15%
-    }
-
-    function contractCommission() public pure returns (uint256) {
-        return (30 * percentUnit) / 100; // 30%
-    }
-
-    function stakeLockPeriodTime() public pure returns (uint256) {
-        return 60 * 60 * 24 * 7; // 7 days
-    }
-
-    function stakeLockPeriodEpochs() public pure returns (uint256) {
-        return 3;
-    }
-
-    function deleagtionLockPeriodTime() public pure returns (uint256) {
-        return 60 * 60 * 24 * 7; // 7 days
-    }
-
-    function deleagtionLockPeriodEpochs() public pure returns (uint256) {
-        return 3;
     }
 }
 
@@ -134,7 +196,7 @@ contract Stakers is StakersConstants {
 
         require(stakerIDs[staker] == 0, "staker already exists");
         require(delegations[staker].amount == 0, "already delegating");
-        require(msg.value >= minStake(), "insufficient amount");
+        require(msg.value >= minStake, "insufficient amount");
 
         uint256 stakerID = ++stakersLastID;
         stakerIDs[staker] = stakerID;
@@ -175,7 +237,7 @@ contract Stakers is StakersConstants {
         require(msg.value >= minDelegation(), "insufficient amount for delegation");
         require(delegations[from].amount == 0, "delegation already exists");
         require(stakerIDs[from] == 0, "already staking");
-        require((stakers[to].stakeAmount.mul(maxDelegatedRatio())).div(percentUnit) >= stakers[to].delegatedMe.add(msg.value), "staker's limit is exceeded");
+        require((stakers[to].stakeAmount.mul(maxDelegatedRatio)).div(percentUnit) >= stakers[to].delegatedMe.add(msg.value), "staker's limit is exceeded");
 
         Delegation memory newDelegation;
         newDelegation.createdEpoch = currentEpoch();
@@ -197,10 +259,10 @@ contract Stakers is StakersConstants {
         require(totalValidatingPower != 0, "total validating power can't be zero");
 
         // base reward
-        uint256 reward = epochSnapshots[epoch].duration.mul(blockRewardPerSecond()).mul(validatingPower).div(totalValidatingPower);
+        uint256 reward = epochSnapshots[epoch].duration.mul(blockRewardPerSecond).mul(validatingPower).div(totalValidatingPower);
         // fee reward except contractCommission
         uint256 feeReward = epochSnapshots[epoch].epochFee.mul(validatingPower).div(totalValidatingPower);
-        feeReward = feeReward.mul(percentUnit - contractCommission()).div(percentUnit);
+        feeReward = feeReward.mul(percentUnit - contractCommission).div(percentUnit);
 
         return reward.add(feeReward);
     }
@@ -211,7 +273,7 @@ contract Stakers is StakersConstants {
         uint256 stake = epochSnapshots[epoch].validators[stakerID].stakeAmount;
         uint256 delegatedTotal = epochSnapshots[epoch].validators[stakerID].delegatedMe;
         uint256 totalStake = stake.add(delegatedTotal);
-        uint256 weightedTotalStake = stake.add((delegatedTotal.mul(validatorCommission())).div(percentUnit));
+        uint256 weightedTotalStake = stake.add((delegatedTotal.mul(validatorCommission)).div(percentUnit));
         return (fullReward.mul(weightedTotalStake)).div(totalStake);
     }
 
@@ -221,7 +283,7 @@ contract Stakers is StakersConstants {
         uint256 stake = epochSnapshots[epoch].validators[stakerID].stakeAmount;
         uint256 delegatedTotal = epochSnapshots[epoch].validators[stakerID].delegatedMe;
         uint256 totalStake = stake.add(delegatedTotal);
-        uint256 weightedTotalStake = (delegatedAmount.mul(percentUnit.sub(validatorCommission()))).div(percentUnit);
+        uint256 weightedTotalStake = (delegatedAmount.mul(percentUnit.sub(validatorCommission))).div(percentUnit);
         return (fullReward.mul(weightedTotalStake)).div(totalStake);
     }
 
@@ -335,8 +397,8 @@ contract Stakers is StakersConstants {
         address payable staker = msg.sender;
         uint256 stakerID = stakerIDs[staker];
         require(stakers[stakerID].deactivatedTime != 0, "staker wasn't deactivated");
-        require(block.timestamp >= stakers[stakerID].deactivatedTime + stakeLockPeriodTime(), "not enough time passed");
-        require(currentEpoch() >= stakers[stakerID].deactivatedEpoch + stakeLockPeriodEpochs(), "not enough epochs passed");
+        require(block.timestamp >= stakers[stakerID].deactivatedTime + stakeLockPeriodTime, "not enough time passed");
+        require(currentEpoch() >= stakers[stakerID].deactivatedEpoch + stakeLockPeriodEpochs, "not enough epochs passed");
 
         uint256 stake = stakers[stakerID].stakeAmount;
         bool isCheater = stakers[stakerID].isCheater;
@@ -378,8 +440,8 @@ contract Stakers is StakersConstants {
     function withdrawDelegation() external {
         address payable from = msg.sender;
         require(delegations[from].deactivatedTime != 0, "delegation wasn't deactivated");
-        require(block.timestamp >= delegations[from].deactivatedTime + deleagtionLockPeriodTime(), "not enough time passed");
-        require(currentEpoch() >= delegations[from].deactivatedEpoch + deleagtionLockPeriodEpochs(), "not enough epochs passed");
+        require(block.timestamp >= delegations[from].deactivatedTime + delegationLockPeriodTime, "not enough time passed");
+        require(currentEpoch() >= delegations[from].deactivatedEpoch + delegationLockPeriodEpochs, "not enough epochs passed");
         uint256 stakerID = delegations[from].toStakerID;
         bool isCheater = stakers[stakerID].isCheater;
         uint256 delegatedAmount = delegations[from].amount;
@@ -397,25 +459,15 @@ contract Stakers is StakersConstants {
 }
 
 contract TestStakers is Stakers {
-    function stakeLockPeriodTime() public pure returns (uint256) {
-        return 1 * 60;
-    }
-
-    function deleagtionLockPeriodTime() public pure returns (uint256) {
-        return 1 * 60;
-    }
+  uint256 stakeLockPeriodTime = 1 * 60;
+  uint256 delegationLockPeriodTime = 1 * 60;
 }
 
 contract UnitTestStakers is Stakers {
     uint256[] public stakerIDsArr;
+    uint256 blockRewardPerSecond = 0.0000000001 * 1e18;
+    uint256 minStake = 1 * 1e18;
 
-    function blockRewardPerSecond() public pure returns (uint256) {
-        return 0.0000000001 * 1e18;
-    }
-
-    function minStake() public pure returns (uint256) {
-        return 1 * 1e18;
-    }
 
     function minStakeIncrease() public pure returns (uint256) {
         return 1 * 1e18;
@@ -426,6 +478,7 @@ contract UnitTestStakers is Stakers {
     }
 
     constructor (uint256 firstEpoch) public {
+        owner = msg.sender;
         currentSealedEpoch = firstEpoch;
     }
 
