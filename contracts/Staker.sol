@@ -8,7 +8,7 @@ contract StakersConstants {
     uint256 internal constant CHEATER_MASK = FORK_BIT;
     uint256 internal constant PERCENT_UNIT = 1000000;
 
-    function blockRewardPerSecond() public pure returns (uint256) {
+    function baseRewardPerSecond() public pure returns (uint256) {
         return 8.241994292233796296 * 1e18; // 712108.306849 FTM per day
     }
 
@@ -221,7 +221,7 @@ contract Stakers is StakersConstants {
         // base reward
         uint256 baseReward = 0;
         if (baseRewardWeight != 0) {
-            baseReward = epochSnapshots[epoch].duration.mul(blockRewardPerSecond()).mul(baseRewardWeight).div(totalBaseRewardWeight);
+            baseReward = epochSnapshots[epoch].duration.mul(baseRewardPerSecond()).mul(baseRewardWeight).div(totalBaseRewardWeight);
         }
         // fee reward
         uint256 txReward = 0;
@@ -457,7 +457,7 @@ contract TestStakers is Stakers {
 contract UnitTestStakers is Stakers {
     uint256[] public stakerIDsArr;
 
-    function blockRewardPerSecond() public pure returns (uint256) {
+    function baseRewardPerSecond() public pure returns (uint256) {
         return 0.0000000001 * 1e18;
     }
 
@@ -503,7 +503,7 @@ contract UnitTestStakers is Stakers {
         } else {
             newSnapshot.duration = block.timestamp - epochSnapshots[currentSealedEpoch - 1].endTime;
         }
-        epochPay += newSnapshot.duration * blockRewardPerSecond();
+        epochPay += newSnapshot.duration * baseRewardPerSecond();
 
         for (uint256 i = 0; i < stakerIDsArr.length; i++) {
             uint256 deactivatedTime = stakers[stakerIDsArr[i]].deactivatedTime;
