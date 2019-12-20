@@ -3,6 +3,8 @@ pragma solidity >=0.5.0 <=0.5.3;
 import "./SafeMath.sol";
 
 contract StakersConstants {
+
+
     uint256 public constant percentUnit = 1000000;
     // The owner is the address that deploys the sfc
     address public owner;
@@ -226,6 +228,26 @@ contract Stakers is StakersConstants {
         stakeTotalAmount = stakeTotalAmount.add(msg.value);
         emit IncreasedStake(stakerID, newAmount, msg.value);
     }
+
+    event IncreasedDelegatedStake(address indexed from, uint256 indexed toStakerID, uint256 newAmount, uint256 diff);
+
+    function increaseDelegatedStake() external payable {
+        address from = msg.sender;
+        // Get validator ID that delegator is staking to;
+        uint256 stakerID = delegations[from].toStakerID;
+        require(delegations[from].amount != 0, "delegation doesn't exist");
+        require(msg.value >= minDelegation(), "insufficient amount");
+        require((stakers[stakerID].stakeAmount.mul(maxDelegatedRatio)).div(percentUnit) >= stakers[stakerID].delegatedMe.add(msg.value), "staker's limit is exceeded");
+        // Add additional delegated amount to existing delegated amount;
+        uint256 newAmount = delegations[from].amount.add(msg.value);
+        delegations[from].amount = newAmount;
+        // Add to total amount delegated in network
+        delegationsTotalAmount = delegationsTotalAmount.add(msg.value);
+        // Add to total amount delegated to staker
+        stakers[stakerID].delegatedMe = stakers[stakerID].delegatedMe.add(msg.value);
+        emit IncreasedDelegatedStake(from, stakerID, newAmount, msg.value);
+    }
+
 
     event CreatedDelegation(address indexed from, uint256 indexed toStakerID, uint256 amount);
 
