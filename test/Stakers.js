@@ -18,13 +18,12 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
     it('checking Staker parameters', async () => {
         expect(await this.stakers.minStake.call()).to.be.bignumber.equal(ether('1.0'));
         expect(await this.stakers.minDelegation.call()).to.be.bignumber.equal(ether('1.0'));
-        expect(await this.stakers.blockRewardPerSecond.call()).to.be.bignumber.equal(ether('0.0000000001'));
         expect(await this.stakers.maxDelegatedRatio.call()).to.be.bignumber.equal(new BN('15000000'));
         expect(await this.stakers.validatorCommission.call()).to.be.bignumber.equal(new BN('150000'));
         expect(await this.stakers.stakeLockPeriodTime.call()).to.be.bignumber.equal(new BN('86400').mul(new BN('7')));
         expect(await this.stakers.stakeLockPeriodEpochs.call()).to.be.bignumber.equal(new BN('3'));
-        expect(await this.stakers.deleagtionLockPeriodTime.call()).to.be.bignumber.equal(new BN('86400').mul(new BN('7')));
-        expect(await this.stakers.deleagtionLockPeriodEpochs.call()).to.be.bignumber.equal(new BN('3'));
+        expect(await this.stakers.delegationLockPeriodTime.call()).to.be.bignumber.equal(new BN('86400').mul(new BN('7')));
+        expect(await this.stakers.delegationLockPeriodEpochs.call()).to.be.bignumber.equal(new BN('3'));
     });
 
     it('checking createStake function', async () => {
