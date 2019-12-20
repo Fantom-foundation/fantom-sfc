@@ -8,10 +8,6 @@ contract StakersConstants {
     uint256 internal constant CHEATER_MASK = FORK_BIT;
     uint256 internal constant PERCENT_UNIT = 1000000;
 
-    function baseRewardPerSecond() public pure returns (uint256) {
-        return 8.241994292233796296 * 1e18; // 712108.306849 FTM per day
-    }
-
     function minStake() public pure returns (uint256) {
         return 3175000 * 1e18; // 3175000 FTM
     }
@@ -44,13 +40,16 @@ contract StakersConstants {
         return 3;
     }
 
-    function deleagtionLockPeriodTime() public pure returns (uint256) {
+    function delegationLockPeriodTime() public pure returns (uint256) {
         return 60 * 60 * 24 * 7; // 7 days
     }
 
-    function deleagtionLockPeriodEpochs() public pure returns (uint256) {
+    function delegationLockPeriodEpochs() public pure returns (uint256) {
         return 3;
     }
+
+    event UpdatedBaseRewardPerSec(uint256 value);
+    event UpdatedGasPowerAllocationRate(uint256 short, uint256 long);
 }
 
 contract Stakers is StakersConstants {
@@ -99,6 +98,7 @@ contract Stakers is StakersConstants {
         uint256 epochFee;
         uint256 totalBaseRewardWeight;
         uint256 totalTxRewardWeight;
+        uint256 baseRewardPerSecond;
     }
 
     uint256 public currentSealedEpoch; // written by consensus outside
@@ -221,7 +221,7 @@ contract Stakers is StakersConstants {
         // base reward
         uint256 baseReward = 0;
         if (baseRewardWeight != 0) {
-            baseReward = epochSnapshots[epoch].duration.mul(baseRewardPerSecond()).mul(baseRewardWeight).div(totalBaseRewardWeight);
+            baseReward = epochSnapshots[epoch].duration.mul(epochSnapshots[epoch].baseRewardPerSecond).mul(baseRewardWeight).div(totalBaseRewardWeight);
         }
         // fee reward
         uint256 txReward = 0;
@@ -423,8 +423,8 @@ contract Stakers is StakersConstants {
     function withdrawDelegation() external {
         address payable from = msg.sender;
         require(delegations[from].deactivatedTime != 0, "delegation wasn't deactivated");
-        require(block.timestamp >= delegations[from].deactivatedTime + deleagtionLockPeriodTime(), "not enough time passed");
-        require(currentEpoch() >= delegations[from].deactivatedEpoch + deleagtionLockPeriodEpochs(), "not enough epochs passed");
+        require(block.timestamp >= delegations[from].deactivatedTime + delegationLockPeriodTime(), "not enough time passed");
+        require(currentEpoch() >= delegations[from].deactivatedEpoch + delegationLockPeriodEpochs(), "not enough epochs passed");
         uint256 stakerID = delegations[from].toStakerID;
         uint256 penalty = 0;
         bool isCheater = stakers[stakerID].status & CHEATER_MASK != 0;
@@ -449,15 +449,23 @@ contract TestStakers is Stakers {
         return 1 * 60;
     }
 
-    function deleagtionLockPeriodTime() public pure returns (uint256) {
+    function delegationLockPeriodTime() public pure returns (uint256) {
         return 1 * 60;
+    }
+
+    function _updateGasPowerAllocationRate(uint256 short, uint256 long) external {
+        emit UpdatedGasPowerAllocationRate(short, long);
+    }
+
+    function _updateBaseRewardPerSec(uint256 value) external {
+        emit UpdatedBaseRewardPerSec(value);
     }
 }
 
 contract UnitTestStakers is Stakers {
     uint256[] public stakerIDsArr;
 
-    function baseRewardPerSecond() public pure returns (uint256) {
+    function _baseRewardPerSecond() public pure returns (uint256) {
         return 0.0000000001 * 1e18;
     }
 
@@ -503,7 +511,7 @@ contract UnitTestStakers is Stakers {
         } else {
             newSnapshot.duration = block.timestamp - epochSnapshots[currentSealedEpoch - 1].endTime;
         }
-        epochPay += newSnapshot.duration * baseRewardPerSecond();
+        epochPay += newSnapshot.duration * _baseRewardPerSecond();
 
         for (uint256 i = 0; i < stakerIDsArr.length; i++) {
             uint256 deactivatedTime = stakers[stakerIDsArr[i]].deactivatedTime;
@@ -512,6 +520,7 @@ contract UnitTestStakers is Stakers {
                 uint256 txPower = 1000 * i + basePower;
                 newSnapshot.totalBaseRewardWeight += basePower;
                 newSnapshot.totalTxRewardWeight += txPower;
+                newSnapshot.baseRewardPerSecond = _baseRewardPerSecond();
                 newSnapshot.validators[stakerIDsArr[i]] = ValidatorMerit(
                     stakers[stakerIDsArr[i]].stakeAmount,
                     stakers[stakerIDsArr[i]].delegatedMe,
