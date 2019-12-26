@@ -100,6 +100,7 @@ contract Stakers is StakersConstants {
         uint256 totalBaseRewardWeight;
         uint256 totalTxRewardWeight;
         uint256 baseRewardPerSecond;
+        uint256 totalStake;
     }
 
     uint256 public currentSealedEpoch; // written by consensus outside
