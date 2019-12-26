@@ -196,6 +196,7 @@ contract Stakers is StakersConstants {
 
         require(stakers[to].stakeAmount != 0, "staker doesn't exist");
         require(stakers[to].status == OK_STATUS, "staker should be active");
+        require(stakers[to].deactivatedTime == 0, "staker is deactivated");
         require(msg.value >= minDelegation(), "insufficient amount for delegation");
         require(delegations[from].amount == 0, "delegation already exists");
         require(stakerIDs[from] == 0, "already staking");
