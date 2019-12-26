@@ -3,6 +3,8 @@ pragma solidity ^0.5;
 import "./SafeMath.sol";
 
 contract StakersConstants {
+    using SafeMath for uint256;
+
     uint256 internal constant OK_STATUS = 0;
     uint256 internal constant FORK_BIT = 1;
     uint256 internal constant OFFLINE_BIT = 1 << 8;
@@ -45,6 +47,22 @@ contract StakersConstants {
         return 60 * 60 * 24 * 7; // 7 days
     }
 
+    function unbondingStartDate() public pure returns (uint256) {
+      return 1577546004;
+    }
+
+    function unbondingTargetMax() public pure returns (uint256) {
+      return 100;
+    }
+
+    function bondedTargetRewardUnlock() public pure returns (uint256) {
+        return unbondingTargetMax().sub(unbondingStartDate().sub(block.timestamp).div(unbondingDecreasePeriod()));
+    }
+
+    function unbondingDecreasePeriod() public pure returns (uint256) {
+      return 60 * 60 * 24 * 7; // 7 days
+    }
+
     function delegationLockPeriodEpochs() public pure returns (uint256) {
         return 3;
     }
@@ -55,6 +73,28 @@ contract StakersConstants {
 
 contract Stakers is StakersConstants {
     using SafeMath for uint256;
+
+    address public owner;
+
+    modifier onlyOwner {require(msg.sender == owner); _;}
+
+
+    event OwnershipTransferred(address indexed _to);
+
+    // Transfers the owner of the sfc from current address to another
+    function transferOwnership(address payable _newOwner) public onlyOwner {
+      require(_newOwner != address(0x0));
+      owner = _newOwner;
+      emit OwnershipTransferred(_newOwner);
+    }
+
+    event ChangeBondedRatio(uint256 _bondedRatio);
+
+    // Change bonded ratio
+    function changeBondedRatio(uint256 _bondedRatio) public onlyOwner {
+      bondedRatio = _bondedRatio;
+      emit ChangeBondedRatio(_bondedRatio);
+    }
 
     struct Delegation {
         uint256 createdEpoch;
@@ -104,6 +144,7 @@ contract Stakers is StakersConstants {
     }
 
     uint256 public currentSealedEpoch; // written by consensus outside
+    uint256 public bondedRatio; // written by consensus outside
     mapping(uint256 => EpochSnapshot) public epochSnapshots; // written by consensus outside
     mapping(uint256 => ValidationStake) public stakers; // stakerID -> stake
     mapping(address => uint256) internal stakerIDs; // staker address -> stakerID
@@ -319,6 +360,7 @@ contract Stakers is StakersConstants {
         uint256 untilEpoch;
         (pendingRewards, fromEpoch, untilEpoch) = calcDelegationRewards(delegator, _fromEpoch, maxEpochs);
 
+        require(bondedRatio > bondedTargetRewardUnlock(), "below minimum bonded ratio");
         require(delegations[delegator].paidUntilEpoch < fromEpoch, "epoch is already paid");
         require(fromEpoch <= currentSealedEpoch, "future epoch");
         require(untilEpoch >= fromEpoch, "no epochs claimed");
@@ -349,6 +391,7 @@ contract Stakers is StakersConstants {
         uint256 untilEpoch;
         (pendingRewards, fromEpoch, untilEpoch) = calcValidatorRewards(stakerID, _fromEpoch, maxEpochs);
 
+        require(bondedRatio > bondedTargetRewardUnlock(), "below minimum bonded ratio");
         require(stakers[stakerID].paidUntilEpoch < fromEpoch, "epoch is already paid");
         require(fromEpoch <= currentSealedEpoch, "future epoch");
         require(untilEpoch >= fromEpoch, "no epochs claimed");
