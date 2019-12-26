@@ -55,10 +55,6 @@ contract StakersConstants {
       return 100;
     }
 
-    function bondedTargetRewardUnlock() public pure returns (uint256) {
-        return unbondingTargetMax().sub(unbondingStartDate().sub(block.timestamp).div(unbondingDecreasePeriod()));
-    }
-
     function unbondingDecreasePeriod() public pure returns (uint256) {
       return 60 * 60 * 24 * 7; // 7 days
     }
@@ -162,6 +158,12 @@ contract Stakers is StakersConstants {
     /*
     Getters
     */
+
+
+
+    function bondedTargetRewardUnlock() public view returns (uint256) {
+        return unbondingTargetMax().sub(unbondingStartDate().sub(block.timestamp).div(unbondingDecreasePeriod()));
+    }
 
     function epochValidator(uint256 e, uint256 v) external view returns (uint256 stakeAmount, uint256 delegatedMe, uint256 baseRewardWeight, uint256 txRewardWeight) {
         return (epochSnapshots[e].validators[v].stakeAmount,
