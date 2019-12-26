@@ -3,6 +3,7 @@ pragma solidity 0.5.11;
 import "./SafeMath.sol";
 
 contract StakersConstants {
+    uint256 internal constant OK_STATUS = 0;
     uint256 internal constant FORK_BIT = 1;
     uint256 internal constant OFFLINE_BIT = 1 << 8;
     uint256 internal constant CHEATER_MASK = FORK_BIT;
@@ -175,7 +176,7 @@ contract Stakers is StakersConstants {
         require(msg.value >= minStakeIncrease(), "insufficient amount");
         require(stakers[stakerID].stakeAmount != 0, "staker doesn't exist");
         require(stakers[stakerID].deactivatedTime == 0, "staker is deactivated");
-        require(stakers[stakerID].status & CHEATER_MASK == 0, "staker shouldn't be cheater");
+        require(stakers[stakerID].status == OK_STATUS, "staker should be active");
 
         uint256 newAmount = stakers[stakerID].stakeAmount.add(msg.value);
         stakers[stakerID].stakeAmount = newAmount;
@@ -191,7 +192,7 @@ contract Stakers is StakersConstants {
         address from = msg.sender;
 
         require(stakers[to].stakeAmount != 0, "staker doesn't exist");
-        require(stakers[to].status & CHEATER_MASK == 0, "staker shouldn't be cheater");
+        require(stakers[to].status == OK_STATUS, "staker should be active");
         require(msg.value >= minDelegation(), "insufficient amount for delegation");
         require(delegations[from].amount == 0, "delegation already exists");
         require(stakerIDs[from] == 0, "already staking");
