@@ -112,6 +112,8 @@ contract Stakers is StakersConstants {
     uint256 public stakeTotalAmount;
     uint256 public delegationsNum;
     uint256 public delegationsTotalAmount;
+    uint256 public slashedDelegationsTotalAmount;
+    uint256 public slashedStakeTotalAmount;
 
     mapping(address => Delegation) public delegations; // delegationID -> delegation
 
@@ -119,7 +121,7 @@ contract Stakers is StakersConstants {
     Getters
     */
 
-    function epochValidator(uint256 e, uint256 v) external view returns (uint256, uint256, uint256, uint256) {
+    function epochValidator(uint256 e, uint256 v) external view returns (uint256 stakeAmount, uint256 delegatedMe, uint256 baseRewardWeight, uint256 txRewardWeight) {
         return (epochSnapshots[e].validators[v].stakeAmount,
                 epochSnapshots[e].validators[v].delegatedMe,
                 epochSnapshots[e].validators[v].baseRewardWeight,
@@ -396,6 +398,8 @@ contract Stakers is StakersConstants {
             penalty = stake;
         }
 
+        slashedStakeTotalAmount = slashedStakeTotalAmount.add(penalty);
+
         emit WithdrawnStake(stakerID, penalty);
     }
 
@@ -440,6 +444,8 @@ contract Stakers is StakersConstants {
         } else {
             penalty = delegatedAmount;
         }
+
+        slashedDelegationsTotalAmount = slashedDelegationsTotalAmount.add(penalty);
 
         emit WithdrawnDelegation(from, stakerID, penalty);
     }
