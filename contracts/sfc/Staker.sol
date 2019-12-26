@@ -1,8 +1,9 @@
-pragma solidity 0.5.11;
+pragma solidity ^0.5;
 
 import "./SafeMath.sol";
 
 contract StakersConstants {
+    uint256 internal constant OK_STATUS = 0;
     uint256 internal constant FORK_BIT = 1;
     uint256 internal constant OFFLINE_BIT = 1 << 8;
     uint256 internal constant CHEATER_MASK = FORK_BIT;
@@ -99,6 +100,7 @@ contract Stakers is StakersConstants {
         uint256 totalBaseRewardWeight;
         uint256 totalTxRewardWeight;
         uint256 baseRewardPerSecond;
+        uint256 totalStake;
     }
 
     uint256 public currentSealedEpoch; // written by consensus outside
@@ -111,6 +113,8 @@ contract Stakers is StakersConstants {
     uint256 public stakeTotalAmount;
     uint256 public delegationsNum;
     uint256 public delegationsTotalAmount;
+    uint256 public slashedDelegationsTotalAmount;
+    uint256 public slashedStakeTotalAmount;
 
     mapping(address => Delegation) public delegations; // delegationID -> delegation
 
@@ -118,7 +122,7 @@ contract Stakers is StakersConstants {
     Getters
     */
 
-    function epochValidator(uint256 e, uint256 v) external view returns (uint256, uint256, uint256, uint256) {
+    function epochValidator(uint256 e, uint256 v) external view returns (uint256 stakeAmount, uint256 delegatedMe, uint256 baseRewardWeight, uint256 txRewardWeight) {
         return (epochSnapshots[e].validators[v].stakeAmount,
                 epochSnapshots[e].validators[v].delegatedMe,
                 epochSnapshots[e].validators[v].baseRewardWeight,
@@ -175,7 +179,7 @@ contract Stakers is StakersConstants {
         require(msg.value >= minStakeIncrease(), "insufficient amount");
         require(stakers[stakerID].stakeAmount != 0, "staker doesn't exist");
         require(stakers[stakerID].deactivatedTime == 0, "staker is deactivated");
-        require(stakers[stakerID].status & CHEATER_MASK == 0, "staker shouldn't be cheater");
+        require(stakers[stakerID].status == OK_STATUS, "staker should be active");
 
         uint256 newAmount = stakers[stakerID].stakeAmount.add(msg.value);
         stakers[stakerID].stakeAmount = newAmount;
@@ -191,7 +195,7 @@ contract Stakers is StakersConstants {
         address from = msg.sender;
 
         require(stakers[to].stakeAmount != 0, "staker doesn't exist");
-        require(stakers[to].status & CHEATER_MASK == 0, "staker shouldn't be cheater");
+        require(stakers[to].status == OK_STATUS, "staker should be active");
         require(msg.value >= minDelegation(), "insufficient amount for delegation");
         require(delegations[from].amount == 0, "delegation already exists");
         require(stakerIDs[from] == 0, "already staking");
@@ -395,6 +399,8 @@ contract Stakers is StakersConstants {
             penalty = stake;
         }
 
+        slashedStakeTotalAmount = slashedStakeTotalAmount.add(penalty);
+
         emit WithdrawnStake(stakerID, penalty);
     }
 
@@ -439,6 +445,8 @@ contract Stakers is StakersConstants {
         } else {
             penalty = delegatedAmount;
         }
+
+        slashedDelegationsTotalAmount = slashedDelegationsTotalAmount.add(penalty);
 
         emit WithdrawnDelegation(from, stakerID, penalty);
     }
