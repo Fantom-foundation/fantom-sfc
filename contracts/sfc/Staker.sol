@@ -119,7 +119,6 @@ contract Stakers is Ownable, StakersConstants {
         uint256 totalBaseRewardWeight;
         uint256 totalTxRewardWeight;
         uint256 baseRewardPerSecond;
-        uint256 totalStake;
         uint256 stakeTotalAmount;
         uint256 delegationsTotalAmount;
         uint256 totalSupply;
@@ -204,7 +203,10 @@ contract Stakers is Ownable, StakersConstants {
     }
 
     function rewardsAllowed() public view returns (bool) {
-        return block.timestamp.sub(capReachedDate) >= unbondingUnlockPeriod();
+        if (capReachedDate == 0) {
+            return false;
+        }
+        return block.timestamp >= unbondingUnlockPeriod() + capReachedDate;
     }
 
     // Calculate bonded ratio target
@@ -406,14 +408,13 @@ contract Stakers is Ownable, StakersConstants {
 
         require(delegations[delegator].amount != 0, "delegation doesn't exist");
         require(delegations[delegator].deactivatedTime == 0, "delegation is deactivated");
-        require(checkBonded(), "not passed enough time since stake is bonded");
+        require(checkBonded(), "before minimum unlock period");
 
         uint256 pendingRewards;
         uint256 fromEpoch;
         uint256 untilEpoch;
         (pendingRewards, fromEpoch, untilEpoch) = calcDelegationRewards(delegator, _fromEpoch, maxEpochs);
 
-        require(block.timestamp > capReachedDate + unbondingUnlockPeriod(), "before minimum unlock period");
         require(delegations[delegator].paidUntilEpoch < fromEpoch, "epoch is already paid");
         require(fromEpoch <= currentSealedEpoch, "future epoch");
         require(untilEpoch >= fromEpoch, "no epochs claimed");
@@ -438,14 +439,13 @@ contract Stakers is Ownable, StakersConstants {
         uint256 stakerID = stakerIDs[staker];
 
         require(stakerID != 0, "staker doesn't exist");
-        require(checkBonded(), "not passed enough time since stake is bonded");
+        require(checkBonded(), "before minimum unlock period");
 
         uint256 pendingRewards;
         uint256 fromEpoch;
         uint256 untilEpoch;
         (pendingRewards, fromEpoch, untilEpoch) = calcValidatorRewards(stakerID, _fromEpoch, maxEpochs);
 
-        require(block.timestamp > capReachedDate + unbondingUnlockPeriod(), "before minimum unlock period");
         require(stakers[stakerID].paidUntilEpoch < fromEpoch, "epoch is already paid");
         require(fromEpoch <= currentSealedEpoch, "future epoch");
         require(untilEpoch >= fromEpoch, "no epochs claimed");
