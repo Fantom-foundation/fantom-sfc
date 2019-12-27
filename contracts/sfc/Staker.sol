@@ -483,6 +483,14 @@ contract Stakers is Ownable, StakersConstants {
 
         emit WithdrawnDelegation(from, stakerID, penalty);
     }
+
+    function updateGasPowerAllocationRate(uint256 short, uint256 long) onlyOwner external {
+        emit UpdatedGasPowerAllocationRate(short, long);
+    }
+
+    function updateBaseRewardPerSec(uint256 value) onlyOwner external {
+        emit UpdatedBaseRewardPerSec(value);
+    }
 }
 
 contract TestStakers is Stakers {
@@ -492,14 +500,6 @@ contract TestStakers is Stakers {
 
     function delegationLockPeriodTime() public pure returns (uint256) {
         return 1 * 60;
-    }
-
-    function _updateGasPowerAllocationRate(uint256 short, uint256 long) external {
-        emit UpdatedGasPowerAllocationRate(short, long);
-    }
-
-    function _updateBaseRewardPerSec(uint256 value) external {
-        emit UpdatedBaseRewardPerSec(value);
     }
 }
 
