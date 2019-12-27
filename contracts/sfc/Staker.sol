@@ -103,6 +103,37 @@ contract Stakers is StakersConstants {
         uint256 totalStake;
     }
 
+    uint256 private reserved0;
+    uint256 private reserved1;
+    uint256 private reserved2;
+    uint256 private reserved3;
+    uint256 private reserved4;
+    uint256 private reserved5;
+    uint256 private reserved6;
+    uint256 private reserved7;
+    uint256 private reserved8;
+    uint256 private reserved9;
+    uint256 private reserved10;
+    uint256 private reserved11;
+    uint256 private reserved12;
+    uint256 private reserved13;
+    uint256 private reserved14;
+    uint256 private reserved15;
+    uint256 private reserved16;
+    uint256 private reserved17;
+    uint256 private reserved18;
+    uint256 private reserved19;
+    uint256 private reserved20;
+    uint256 private reserved21;
+    uint256 private reserved22;
+    uint256 private reserved23;
+    uint256 private reserved24;
+    uint256 private reserved25;
+    uint256 private reserved26;
+    uint256 private reserved27;
+    uint256 private reserved28;
+    uint256 private reserved29;
+
     uint256 public currentSealedEpoch; // written by consensus outside
     mapping(uint256 => EpochSnapshot) public epochSnapshots; // written by consensus outside
     mapping(uint256 => ValidationStake) public stakers; // stakerID -> stake
