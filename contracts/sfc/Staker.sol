@@ -64,6 +64,10 @@ contract StakersConstants {
         return 3;
     }
 
+    function maxStakerMetadataSize() public pure returns (uint256) {
+        return 256;
+    }
+
     event UpdatedBaseRewardPerSec(uint256 value);
     event UpdatedGasPowerAllocationRate(uint256 short, uint256 long);
 }
@@ -168,6 +172,8 @@ contract Stakers is Ownable, StakersConstants {
 
     uint256 public capReachedDate;
 
+    mapping(uint256 => bytes) public stakerMetadata;
+
     /*
     Getters
     */
@@ -219,11 +225,7 @@ contract Stakers is Ownable, StakersConstants {
 
     // Create new staker
     // Stake amount is msg.value
-    function createStake() external payable {
-        implCreateStake();
-    }
-
-    function implCreateStake() internal {
+    function createStake(bytes memory metadata) public payable {
         address staker = msg.sender;
 
         require(stakerIDs[staker] == 0, "staker already exists");
@@ -241,6 +243,22 @@ contract Stakers is Ownable, StakersConstants {
         stakersNum++;
         stakeTotalAmount = stakeTotalAmount.add(msg.value);
         emit CreatedStake(stakerID, staker, msg.value);
+
+        if (metadata.length != 0) {
+            updateStakerMetadata(metadata);
+        }
+    }
+
+    event UpdatedStakerMetadata(uint256 indexed stakerID);
+
+    function updateStakerMetadata(bytes memory metadata) public {
+        address staker = msg.sender;
+        uint256 stakerID = stakerIDs[staker];
+        require(stakerID != 0, "staker doesn't exist");
+        require(metadata.length <= maxStakerMetadataSize(), "too big metadata");
+        stakerMetadata[stakerID] = metadata;
+
+        emit UpdatedStakerMetadata(stakerID);
     }
 
     event IncreasedStake(uint256 indexed stakerID, uint256 newAmount, uint256 diff);
@@ -467,6 +485,7 @@ contract Stakers is Ownable, StakersConstants {
         uint256 penalty = 0;
         bool isCheater = stakers[stakerID].status & CHEATER_MASK != 0;
         delete stakers[stakerID];
+        delete stakerMetadata[stakerID];
         delete stakerIDs[staker];
 
         stakersNum--;
@@ -612,7 +631,7 @@ contract UnitTestStakers is Stakers {
 
     function _createStake() external payable {
         stakerIDsArr.push(stakersLastID + 1); // SS Check existing?
-        super.implCreateStake();
+        super.createStake("");
     }
 
     function _makeEpochSnapshots(uint256 optionalDuration) external returns(uint256) {
