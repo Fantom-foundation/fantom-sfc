@@ -570,18 +570,25 @@ contract Stakers is Ownable, StakersConstants {
         emit ChangedCapReachedDate(_capReachedDate);
     }
 
-    function maintainCapReachedDate() internal {
+    function _updateCapReachedDate() internal returns(bool) {
         uint256 current = bondedRatio();
         uint256 target = bondedTargetRewardUnlock();
         if (current >= target && capReachedDate == 0) {
             changeCapReachedDate(block.timestamp);
+            return true;
         } else if (current < target && capReachedDate != 0) {
             changeCapReachedDate(0);
+            return true;
         }
+        return false;
+    }
+
+    function updateCapReachedDate() public {
+        require(_updateCapReachedDate(), "not updated");
     }
 
     function checkBonded() internal returns (bool) {
-        maintainCapReachedDate();
+        _updateCapReachedDate();
         return rewardsAllowed();
     }
 }
