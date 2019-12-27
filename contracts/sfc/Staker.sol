@@ -1,6 +1,7 @@
 pragma solidity ^0.5;
 
 import "./SafeMath.sol";
+import "../ownership/Ownable.sol";
 
 contract StakersConstants {
     uint256 internal constant OK_STATUS = 0;
@@ -53,7 +54,7 @@ contract StakersConstants {
     event UpdatedGasPowerAllocationRate(uint256 short, uint256 long);
 }
 
-contract Stakers is StakersConstants {
+contract Stakers is Ownable, StakersConstants {
     using SafeMath for uint256;
 
     struct Delegation {
