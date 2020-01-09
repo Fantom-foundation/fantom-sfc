@@ -14,7 +14,7 @@ The essential:
 # Compile
 
 1. Install solc 0.5.12
-2. `solc -o $PWD/build --optimize --optimize-runs=2000 --abi --bin-runtime --overwrite $PWD/contracts/sfc/Staker.sol` # compilation. don't forget --bin-runtime flag, if contract is pre-deployed!
+2. `solc -o $PWD/build --optimize --optimize-runs=2000 --abi --bin-runtime --allow-paths $PWD/contracts --overwrite $PWD/contracts/sfc/Staker.sol` # compilation. don't forget --bin-runtime flag, if contract is pre-deployed!
 3. `cat build/TestStakers.bin-runtime` # paste this into GetTestContractBinV1 in go-lachesis repo
 4. `cat build/TestStakers.abi` # use this ABI to call contract methods
 
