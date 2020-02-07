@@ -10,7 +10,7 @@ contract StakersConstants {
     uint256 internal constant FORK_BIT = 1;
     uint256 internal constant OFFLINE_BIT = 1 << 8;
     uint256 internal constant CHEATER_MASK = FORK_BIT;
-    uint256 internal constant PERCENT_UNIT = 1000000;
+    uint256 internal constant RATIO_UNIT = 1e6;
 
     function minStake() public pure returns (uint256) {
         return 3175000 * 1e18; // 3175000 FTM
@@ -25,15 +25,15 @@ contract StakersConstants {
     }
 
     function maxDelegatedRatio() public pure returns (uint256) {
-        return 15 * PERCENT_UNIT; // 1500%
+        return 15 * RATIO_UNIT; // 1500%
     }
 
     function validatorCommission() public pure returns (uint256) {
-        return (15 * PERCENT_UNIT) / 100; // 15%
+        return (15 * RATIO_UNIT) / 100; // 15%
     }
 
     function contractCommission() public pure returns (uint256) {
-        return (30 * PERCENT_UNIT) / 100; // 30%
+        return (30 * RATIO_UNIT) / 100; // 30%
     }
 
     function stakeLockPeriodTime() public pure returns (uint256) {
@@ -199,7 +199,7 @@ contract Stakers is Ownable, StakersConstants {
             return 0;
         }
         uint256 totalStaked = epochSnapshots[currentSealedEpoch].stakeTotalAmount.add(epochSnapshots[currentSealedEpoch].delegationsTotalAmount);
-        return totalStaked.mul(PERCENT_UNIT).div(totalSupply);
+        return totalStaked.mul(RATIO_UNIT).div(totalSupply);
     }
 
     function rewardsAllowed() public view returns (bool) {
@@ -212,11 +212,11 @@ contract Stakers is Ownable, StakersConstants {
     // Calculate bonded ratio target
     function bondedTargetRewardUnlock() public view returns (uint256) {
         uint256 passedTime = block.timestamp.sub(unbondingStartDate());
-        uint256 passedPercents = PERCENT_UNIT.mul(passedTime).div(unbondingPeriod()); // total duration from 0% to 100% is unbondingPeriod
-        if (passedPercents > PERCENT_UNIT) {
+        uint256 passedPercents = RATIO_UNIT.mul(passedTime).div(unbondingPeriod()); // total duration from 0% to 100% is unbondingPeriod
+        if (passedPercents > RATIO_UNIT) {
             return 0;
         }
-        return PERCENT_UNIT - passedPercents;
+        return RATIO_UNIT - passedPercents;
     }
 
     /*
@@ -294,7 +294,7 @@ contract Stakers is Ownable, StakersConstants {
         require(msg.value >= minDelegation(), "insufficient amount for delegation");
         require(delegations[from].amount == 0, "delegation already exists");
         require(stakerIDs[from] == 0, "already staking");
-        require((stakers[to].stakeAmount.mul(maxDelegatedRatio())).div(PERCENT_UNIT) >= stakers[to].delegatedMe.add(msg.value), "staker's limit is exceeded");
+        require((stakers[to].stakeAmount.mul(maxDelegatedRatio())).div(RATIO_UNIT) >= stakers[to].delegatedMe.add(msg.value), "staker's limit is exceeded");
 
         Delegation memory newDelegation;
         newDelegation.createdEpoch = currentEpoch();
@@ -327,7 +327,7 @@ contract Stakers is Ownable, StakersConstants {
         if (txRewardWeight != 0) {
             txReward = epochSnapshots[epoch].epochFee.mul(txRewardWeight).div(totalTxRewardWeight);
             // fee reward except contractCommission
-            txReward = txReward.mul(PERCENT_UNIT - contractCommission()).div(PERCENT_UNIT);
+            txReward = txReward.mul(RATIO_UNIT - contractCommission()).div(RATIO_UNIT);
         }
 
         return baseReward.add(txReward);
@@ -342,7 +342,7 @@ contract Stakers is Ownable, StakersConstants {
         if (totalStake == 0) {
             return 0; // avoid division by zero
         }
-        uint256 weightedTotalStake = stake.add((delegatedTotal.mul(validatorCommission())).div(PERCENT_UNIT));
+        uint256 weightedTotalStake = stake.add((delegatedTotal.mul(validatorCommission())).div(RATIO_UNIT));
         return (fullReward.mul(weightedTotalStake)).div(totalStake);
     }
 
@@ -355,7 +355,7 @@ contract Stakers is Ownable, StakersConstants {
         if (totalStake == 0) {
             return 0; // avoid division by zero
         }
-        uint256 weightedTotalStake = (delegatedAmount.mul(PERCENT_UNIT.sub(validatorCommission()))).div(PERCENT_UNIT);
+        uint256 weightedTotalStake = (delegatedAmount.mul(RATIO_UNIT.sub(validatorCommission()))).div(RATIO_UNIT);
         return (fullReward.mul(weightedTotalStake)).div(totalStake);
     }
 
