@@ -52,8 +52,12 @@ contract StakersConstants {
       return 1577419000;
     }
 
-    function unbondingPeriod() public pure returns (uint256) {
-      return 60 * 60 * 24 * 700; // 700 days
+    function bondedTargetPeriod() public pure returns (uint256) {
+      return 60 * 60 * 24 * 700; // 100 weeks
+    }
+
+    function bondedTargetStart() public pure returns (uint256) {
+        return (80 * RATIO_UNIT) / 100; // 80%
     }
 
     function unbondingUnlockPeriod() public pure returns (uint256) {
@@ -169,7 +173,7 @@ contract Stakers is Ownable, StakersConstants {
 
     mapping(address => Delegation) public delegations; // delegationID -> delegation
 
-    uint256 public capReachedDate;
+    uint256 private deleted0;
 
     mapping(uint256 => bytes) public stakerMetadata;
 
@@ -202,21 +206,22 @@ contract Stakers is Ownable, StakersConstants {
         return totalStaked.mul(RATIO_UNIT).div(totalSupply);
     }
 
-    function rewardsAllowed() public view returns (bool) {
-        if (capReachedDate == 0) {
-            return false;
-        }
-        return block.timestamp >= unbondingUnlockPeriod() + capReachedDate;
-    }
-
     // Calculate bonded ratio target
     function bondedTargetRewardUnlock() public view returns (uint256) {
         uint256 passedTime = block.timestamp.sub(unbondingStartDate());
-        uint256 passedPercents = RATIO_UNIT.mul(passedTime).div(unbondingPeriod()); // total duration from 0% to 100% is unbondingPeriod
-        if (passedPercents > RATIO_UNIT) {
+        uint256 passedPercents = RATIO_UNIT.mul(passedTime).div(bondedTargetPeriod()); // total duration from 0% to 100% is bondedTargetPeriod
+        if (passedPercents >= bondedTargetStart()) {
             return 0;
         }
-        return RATIO_UNIT - passedPercents;
+        return bondedTargetStart() - passedPercents;
+    }
+
+    // rewardsAllowed returns true if rewards are unlocked.
+    // Rewards are unlocked when either 6 months passed or until TARGET% of the supply is staked,
+    // where TARGET starts with 80% and decreases 1% every week
+    function rewardsAllowed() public view returns (bool) {
+        return block.timestamp >= unbondingStartDate() + unbondingUnlockPeriod() ||
+               bondedRatio() >= bondedTargetRewardUnlock();
     }
 
     /*
@@ -416,7 +421,7 @@ contract Stakers is Ownable, StakersConstants {
 
         require(delegations[delegator].amount != 0, "delegation doesn't exist");
         require(delegations[delegator].deactivatedTime == 0, "delegation is deactivated");
-        require(checkBonded(), "before minimum unlock period");
+        require(rewardsAllowed(), "before minimum unlock period");
 
         (uint256 pendingRewards, uint256 fromEpoch, uint256 untilEpoch) = calcDelegationRewards(delegator, _fromEpoch, maxEpochs);
 
@@ -446,7 +451,7 @@ contract Stakers is Ownable, StakersConstants {
         uint256 stakerID = stakerIDs[staker];
 
         require(stakerID != 0, "staker doesn't exist");
-        require(checkBonded(), "before minimum unlock period");
+        require(rewardsAllowed(), "before minimum unlock period");
 
         (uint256 pendingRewards, uint256 fromEpoch, uint256 untilEpoch) = calcValidatorRewards(stakerID, _fromEpoch, maxEpochs);
 
@@ -563,41 +568,6 @@ contract Stakers is Ownable, StakersConstants {
 
     function updateBaseRewardPerSec(uint256 value) onlyOwner external {
         emit UpdatedBaseRewardPerSec(value);
-    }
-
-    // Bonded target logic
-
-    event ChangedCapReachedDate(uint256 _capReachedDate);
-
-    // Change cap reached date
-    function changeCapReachedDate(uint256 _capReachedDate) internal {
-        if (capReachedDate == _capReachedDate) {
-            return;
-        }
-        capReachedDate = _capReachedDate;
-        emit ChangedCapReachedDate(_capReachedDate);
-    }
-
-    function _updateCapReachedDate() internal returns(bool) {
-        uint256 current = bondedRatio();
-        uint256 target = bondedTargetRewardUnlock();
-        if (current >= target && capReachedDate == 0) {
-            changeCapReachedDate(block.timestamp);
-            return true;
-        } else if (current < target && capReachedDate != 0) {
-            changeCapReachedDate(0);
-            return true;
-        }
-        return false;
-    }
-
-    function updateCapReachedDate() public {
-        require(_updateCapReachedDate(), "not updated");
-    }
-
-    function checkBonded() internal returns (bool) {
-        _updateCapReachedDate();
-        return rewardsAllowed();
     }
 
     event UpdatedDelegation(address indexed delegator, uint256 indexed oldStakerID, uint256 indexed newStakerID, uint256 amount);
