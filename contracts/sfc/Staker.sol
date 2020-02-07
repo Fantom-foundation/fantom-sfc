@@ -374,6 +374,10 @@ contract Stakers is Ownable, StakersConstants {
         uint256 fromEpoch = withDefault(_fromEpoch, delegations[delegator].paidUntilEpoch + 1);
         assert(delegations[delegator].deactivatedTime == 0);
 
+        if (delegations[delegator].paidUntilEpoch >= fromEpoch) {
+            return (0, fromEpoch, 0);
+        }
+
         uint256 pendingRewards = 0;
         uint256 lastPaid = 0;
         for (uint256 e = fromEpoch; e <= currentSealedEpoch && e < fromEpoch + maxEpochs; e++) {
@@ -388,6 +392,10 @@ contract Stakers is Ownable, StakersConstants {
     // maxEpochs is maximum number of epoch to calc rewards for. Set it to your chunk size.
     function calcValidatorRewards(uint256 stakerID, uint256 _fromEpoch, uint256 maxEpochs) public view returns (uint256, uint256, uint256) {
         uint256 fromEpoch = withDefault(_fromEpoch, stakers[stakerID].paidUntilEpoch + 1);
+
+        if (stakers[stakerID].paidUntilEpoch >= fromEpoch) {
+            return (0, fromEpoch, 0);
+        }
 
         uint256 pendingRewards = 0;
         uint256 lastPaid = 0;
