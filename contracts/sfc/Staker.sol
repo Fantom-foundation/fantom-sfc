@@ -177,6 +177,12 @@ contract Stakers is Ownable, StakersConstants {
 
     mapping(uint256 => bytes) public stakerMetadata;
 
+    struct StashedRewards {
+        uint256 amount;
+    }
+
+    mapping(address => StashedRewards) public rewardsStash; // addr -> StashedRewards
+
     /*
     Getters
     */
@@ -411,6 +417,18 @@ contract Stakers is Ownable, StakersConstants {
         return (pendingRewards, fromEpoch, lastEpoch);
     }
 
+    // _claimRewards transfers rewards directly if rewards are allowed, or stashes them until rewards are unlocked
+    function _claimRewards(address payable addr, uint256 amount) internal {
+        if (amount == 0) {
+            return;
+        }
+        if (rewardsAllowed()) {
+            addr.transfer(amount);
+        } else {
+            rewardsStash[addr].amount += amount;
+        }
+    }
+
     event ClaimedDelegationReward(address indexed from, uint256 indexed stakerID, uint256 reward, uint256 fromEpoch, uint256 untilEpoch);
 
     // Claim the pending rewards for a given delegator (sender)
@@ -421,8 +439,6 @@ contract Stakers is Ownable, StakersConstants {
 
         require(delegations[delegator].amount != 0, "delegation doesn't exist");
         require(delegations[delegator].deactivatedTime == 0, "delegation is deactivated");
-        require(rewardsAllowed(), "before minimum unlock period");
-
         (uint256 pendingRewards, uint256 fromEpoch, uint256 untilEpoch) = calcDelegationRewards(delegator, _fromEpoch, maxEpochs);
 
         require(delegations[delegator].paidUntilEpoch < fromEpoch, "epoch is already paid");
@@ -430,10 +446,7 @@ contract Stakers is Ownable, StakersConstants {
         require(untilEpoch >= fromEpoch, "no epochs claimed");
 
         delegations[delegator].paidUntilEpoch = untilEpoch;
-        // It's important that we transfer after updating paidUntilEpoch (protection against Re-Entrancy)
-        if (pendingRewards != 0) {
-            delegator.transfer(pendingRewards);
-        }
+        _claimRewards(delegator, pendingRewards);
 
         uint256 stakerID = delegations[delegator].toStakerID;
         emit ClaimedDelegationReward(delegator, stakerID, pendingRewards, fromEpoch, untilEpoch);
@@ -451,7 +464,6 @@ contract Stakers is Ownable, StakersConstants {
         uint256 stakerID = stakerIDs[staker];
 
         require(stakerID != 0, "staker doesn't exist");
-        require(rewardsAllowed(), "before minimum unlock period");
 
         (uint256 pendingRewards, uint256 fromEpoch, uint256 untilEpoch) = calcValidatorRewards(stakerID, _fromEpoch, maxEpochs);
 
@@ -460,12 +472,27 @@ contract Stakers is Ownable, StakersConstants {
         require(untilEpoch >= fromEpoch, "no epochs claimed");
 
         stakers[stakerID].paidUntilEpoch = untilEpoch;
-        // It's important that we transfer after updating paidUntilEpoch (protection against Re-Entrancy)
-        if (pendingRewards != 0) {
-            staker.transfer(pendingRewards);
-        }
+        _claimRewards(staker, pendingRewards);
 
         emit ClaimedValidatorReward(stakerID, pendingRewards, fromEpoch, untilEpoch);
+    }
+
+    event UnstashedRewards(address indexed auth, address indexed receiver, uint256 rewards);
+
+    // Transfer the claimed rewards to account
+    function unstashRewards() external {
+        address auth = msg.sender;
+        address payable receiver = msg.sender;
+        uint256 rewards = rewardsStash[auth].amount;
+        require(rewards != 0, "no rewards");
+        require(rewardsAllowed(), "before minimum unlock period");
+
+        delete rewardsStash[auth];
+
+        // It's important that we transfer after erasing (protection against Re-Entrancy)
+        receiver.transfer(rewards);
+
+        emit UnstashedRewards(auth, receiver, rewards);
     }
 
     event PreparedToWithdrawStake(uint256 indexed stakerID); // previous name for DeactivatedStake
