@@ -457,6 +457,7 @@ contract Stakers is Ownable, StakersConstants {
         emit ClaimedValidatorReward(stakerID, pendingRewards, fromEpoch, untilEpoch);
     }
 
+    event PreparedToWithdrawStake(uint256 indexed stakerID);
     event DeactivatedStake(uint256 indexed stakerID);
 
     // deactivate stake, to be able to withdraw later
@@ -470,6 +471,7 @@ contract Stakers is Ownable, StakersConstants {
         stakers[stakerID].deactivatedTime = block.timestamp;
 
         emit DeactivatedStake(stakerID);
+        emit PreparedToWithdrawStake(stakerID);
     }
 
     event WithdrawnStake(uint256 indexed stakerID, uint256 penalty);
@@ -502,6 +504,7 @@ contract Stakers is Ownable, StakersConstants {
         emit WithdrawnStake(stakerID, penalty);
     }
 
+    event PreparedToWithdrawDelegation(address indexed from, uint256 indexed stakerID);
     event DeactivatedDelegation(address indexed from, uint256 indexed stakerID);
 
     // deactivate delegation, to be able to withdraw later
@@ -520,6 +523,7 @@ contract Stakers is Ownable, StakersConstants {
         }
 
         emit DeactivatedDelegation(from, stakerID);
+        emit PreparedToWithdrawDelegation(from, stakerID);
     }
 
     event WithdrawnDelegation(address indexed from, uint256 indexed stakerID, uint256 penalty);
