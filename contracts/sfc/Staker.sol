@@ -457,7 +457,8 @@ contract Stakers is Ownable, StakersConstants {
         emit ClaimedValidatorReward(stakerID, pendingRewards, fromEpoch, untilEpoch);
     }
 
-    event PreparedToWithdrawStake(uint256 indexed stakerID);
+    event PreparedToWithdrawStake(uint256 indexed stakerID); // previous name for DeactivatedStake
+    event DeactivatedStake(uint256 indexed stakerID);
 
     // deactivate stake, to be able to withdraw later
     function prepareToWithdrawStake() external {
@@ -469,7 +470,7 @@ contract Stakers is Ownable, StakersConstants {
         stakers[stakerID].deactivatedEpoch = currentEpoch();
         stakers[stakerID].deactivatedTime = block.timestamp;
 
-        emit PreparedToWithdrawStake(stakerID);
+        emit DeactivatedStake(stakerID);
     }
 
     event WithdrawnStake(uint256 indexed stakerID, uint256 penalty);
@@ -502,7 +503,8 @@ contract Stakers is Ownable, StakersConstants {
         emit WithdrawnStake(stakerID, penalty);
     }
 
-    event PreparedToWithdrawDelegation(address indexed from, uint256 indexed stakerID);
+    event PreparedToWithdrawDelegation(address indexed from, uint256 indexed stakerID); // previous name for DeactivatedDelegation
+    event DeactivatedDelegation(address indexed from, uint256 indexed stakerID);
 
     // deactivate delegation, to be able to withdraw later
     function prepareToWithdrawDelegation() external {
@@ -519,7 +521,7 @@ contract Stakers is Ownable, StakersConstants {
             stakers[stakerID].delegatedMe = stakers[stakerID].delegatedMe.sub(delegatedAmount);
         }
 
-        emit PreparedToWithdrawDelegation(from, stakerID);
+        emit DeactivatedDelegation(from, stakerID);
     }
 
     event WithdrawnDelegation(address indexed from, uint256 indexed stakerID, uint256 penalty);
@@ -590,6 +592,24 @@ contract Stakers is Ownable, StakersConstants {
     function checkBonded() internal returns (bool) {
         _updateCapReachedDate();
         return rewardsAllowed();
+    }
+
+    event UpdatedDelegation(address indexed delegator, uint256 indexed oldStakerID, uint256 indexed newStakerID, uint256 amount);
+
+    // syncDelegator updates the delegator data on node, if it differs for some reason
+    function _syncDelegator(address delegator) public {
+        require(delegations[delegator].amount != 0, "delegation doesn't exist");
+        // emit special log for node
+        emit UpdatedDelegation(delegator, delegations[delegator].toStakerID, delegations[delegator].toStakerID, delegations[delegator].amount);
+    }
+
+    event UpdatedStake(uint256 indexed stakerID, uint256 amount, uint256 delegatedMe);
+
+    // syncStaker updates the staker data on node, if it differs for some reason
+    function _syncStaker(uint256 stakerID) public {
+        require(stakers[stakerID].stakeAmount != 0, "staker doesn't exist");
+        // emit special log for node
+        emit UpdatedStake(stakerID, stakers[stakerID].stakeAmount, stakers[stakerID].delegatedMe);
     }
 }
 
