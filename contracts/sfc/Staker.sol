@@ -457,7 +457,7 @@ contract Stakers is Ownable, StakersConstants {
         return baseReward.add(txReward);
     }
 
-    function _calcValidatorReward(uint256 stakerID, uint256 epoch) view public returns (uint256) {
+    function _calcValidatorReward(uint256 stakerID, uint256 epoch, uint256 commission) view public returns (uint256) {
         uint256 fullReward = _calcTotalReward(stakerID, epoch);
 
         uint256 stake = epochSnapshots[epoch].validators[stakerID].stakeAmount;
@@ -466,11 +466,11 @@ contract Stakers is Ownable, StakersConstants {
         if (totalStake == 0) {
             return 0; // avoid division by zero
         }
-        uint256 weightedTotalStake = stake.add((delegatedTotal.mul(validatorCommission())).div(RATIO_UNIT));
+        uint256 weightedTotalStake = stake.add((delegatedTotal.mul(commission)).div(RATIO_UNIT));
         return (fullReward.mul(weightedTotalStake)).div(totalStake);
     }
 
-    function _calcDelegationReward(uint256 stakerID, uint256 epoch, uint256 delegatedAmount) view public returns (uint256) {
+    function _calcDelegationReward(uint256 stakerID, uint256 epoch, uint256 delegationAmount, uint256 commission) view public returns (uint256) {
         uint256 fullReward = _calcTotalReward(stakerID, epoch);
 
         uint256 stake = epochSnapshots[epoch].validators[stakerID].stakeAmount;
@@ -479,7 +479,7 @@ contract Stakers is Ownable, StakersConstants {
         if (totalStake == 0) {
             return 0; // avoid division by zero
         }
-        uint256 weightedTotalStake = (delegatedAmount.mul(RATIO_UNIT.sub(validatorCommission()))).div(RATIO_UNIT);
+        uint256 weightedTotalStake = (delegationAmount.mul(RATIO_UNIT.sub(commission))).div(RATIO_UNIT);
         return (fullReward.mul(weightedTotalStake)).div(totalStake);
     }
 
@@ -505,7 +505,7 @@ contract Stakers is Ownable, StakersConstants {
         uint256 pendingRewards = 0;
         uint256 lastEpoch = 0;
         for (uint256 e = fromEpoch; e <= currentSealedEpoch && e < fromEpoch + maxEpochs; e++) {
-            pendingRewards += _calcDelegationReward(stakerID, e, delegations[delegator].amount);
+            pendingRewards += _calcDelegationReward(stakerID, e, delegations[delegator].amount, validatorCommission());
             lastEpoch = e;
         }
         return (pendingRewards, fromEpoch, lastEpoch);
@@ -524,7 +524,7 @@ contract Stakers is Ownable, StakersConstants {
         uint256 pendingRewards = 0;
         uint256 lastEpoch = 0;
         for (uint256 e = fromEpoch; e <= currentSealedEpoch && e < fromEpoch + maxEpochs; e++) {
-            pendingRewards += _calcValidatorReward(stakerID, e);
+            pendingRewards += _calcValidatorReward(stakerID, e, validatorCommission());
             lastEpoch = e;
         }
         return (pendingRewards, fromEpoch, lastEpoch);
@@ -700,11 +700,11 @@ contract Stakers is Ownable, StakersConstants {
         delegations[from].deactivatedEpoch = currentEpoch();
         delegations[from].deactivatedTime = block.timestamp;
         uint256 stakerID = delegations[from].toStakerID;
-        uint256 delegatedAmount = delegations[from].amount;
+        uint256 delegationAmount = delegations[from].amount;
 
         if (stakers[stakerID].stakeAmount != 0) {
             // if staker haven't withdrawn
-            stakers[stakerID].delegatedMe = stakers[stakerID].delegatedMe.sub(delegatedAmount);
+            stakers[stakerID].delegatedMe = stakers[stakerID].delegatedMe.sub(delegationAmount);
         }
 
         emit DeactivatedDelegation(from, stakerID);
@@ -754,16 +754,16 @@ contract Stakers is Ownable, StakersConstants {
         uint256 stakerID = delegations[delegator].toStakerID;
         uint256 penalty = 0;
         bool isCheater = stakers[stakerID].status & CHEATER_MASK != 0;
-        uint256 delegatedAmount = delegations[delegator].amount;
+        uint256 delegationAmount = delegations[delegator].amount;
         delete delegations[delegator];
 
         delegationsNum--;
-        delegationsTotalAmount = delegationsTotalAmount.sub(delegatedAmount);
+        delegationsTotalAmount = delegationsTotalAmount.sub(delegationAmount);
         // It's important that we transfer after erasing (protection against Re-Entrancy)
         if (isCheater == false) {
-            delegator.transfer(delegatedAmount);
+            delegator.transfer(delegationAmount);
         } else {
-            penalty = delegatedAmount;
+            penalty = delegationAmount;
         }
 
         slashedDelegationsTotalAmount = slashedDelegationsTotalAmount.add(penalty);
