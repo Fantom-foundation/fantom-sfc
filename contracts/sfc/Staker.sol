@@ -355,7 +355,7 @@ contract Stakers is Ownable, StakersConstants {
 
     event IncreasedStake(uint256 indexed stakerID, uint256 newAmount, uint256 diff);
 
-    // Increase msg.sender's stake by msg.value
+    // Increase msg.sender's validator stake by msg.value
     function increaseStake() external payable {
         uint256 stakerID = _sfcAddressToStakerID(msg.sender);
 
@@ -545,20 +545,20 @@ contract Stakers is Ownable, StakersConstants {
     event ClaimedDelegationReward(address indexed from, uint256 indexed stakerID, uint256 reward, uint256 fromEpoch, uint256 untilEpoch);
 
     // Claim the pending rewards for a given delegator (sender)
-    // _fromEpoch is starting epoch which rewards are calculated (including). If 0, then it's lowest not claimed epoch
     // maxEpochs is maximum number of epoch to calc rewards for. Set it to your chunk size.
-    function claimDelegationRewards(uint256 _fromEpoch, uint256 maxEpochs) external {
+    function claimDelegationRewards(uint256 maxEpochs) external {
         address payable delegator = msg.sender;
 
         require(delegations[delegator].amount != 0, "delegation doesn't exist");
         require(delegations[delegator].deactivatedTime == 0, "delegation is deactivated");
-        (uint256 pendingRewards, uint256 fromEpoch, uint256 untilEpoch) = calcDelegationRewards(delegator, _fromEpoch, maxEpochs);
+        (uint256 pendingRewards, uint256 fromEpoch, uint256 untilEpoch) = calcDelegationRewards(delegator, 0, maxEpochs);
 
         require(delegations[delegator].paidUntilEpoch < fromEpoch, "epoch is already paid");
         require(fromEpoch <= currentSealedEpoch, "future epoch");
         require(untilEpoch >= fromEpoch, "no epochs claimed");
 
         delegations[delegator].paidUntilEpoch = untilEpoch;
+        // It's important that we transfer after updating paidUntilEpoch (protection against Re-Entrancy)
         _claimRewards(delegator, pendingRewards);
 
         uint256 stakerID = delegations[delegator].toStakerID;
@@ -568,23 +568,23 @@ contract Stakers is Ownable, StakersConstants {
     event ClaimedValidatorReward(uint256 indexed stakerID, uint256 reward, uint256 fromEpoch, uint256 untilEpoch);
 
     // Claim the pending rewards for a given stakerID (sender)
-    // _fromEpoch is starting epoch which rewards are calculated (including). If 0, then it's lowest not claimed epoch
     // maxEpochs is maximum number of epoch to calc rewards for. Set it to your chunk size.
     //
     // may be already deactivated, but still allowed to withdraw old rewards
-    function claimValidatorRewards(uint256 _fromEpoch, uint256 maxEpochs) external {
+    function claimValidatorRewards(uint256 maxEpochs) external {
         address payable stakerSfcAddr = msg.sender;
         uint256 stakerID = _sfcAddressToStakerID(stakerSfcAddr);
 
         require(stakerID != 0, "staker doesn't exist");
 
-        (uint256 pendingRewards, uint256 fromEpoch, uint256 untilEpoch) = calcValidatorRewards(stakerID, _fromEpoch, maxEpochs);
+        (uint256 pendingRewards, uint256 fromEpoch, uint256 untilEpoch) = calcValidatorRewards(stakerID, 0, maxEpochs);
 
         require(stakers[stakerID].paidUntilEpoch < fromEpoch, "epoch is already paid");
         require(fromEpoch <= currentSealedEpoch, "future epoch");
         require(untilEpoch >= fromEpoch, "no epochs claimed");
 
         stakers[stakerID].paidUntilEpoch = untilEpoch;
+        // It's important that we transfer after updating paidUntilEpoch (protection against Re-Entrancy)
         _claimRewards(stakerSfcAddr, pendingRewards);
 
         emit ClaimedValidatorReward(stakerID, pendingRewards, fromEpoch, untilEpoch);

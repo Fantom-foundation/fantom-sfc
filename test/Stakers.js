@@ -204,21 +204,20 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
         await this.stakers._makeEpochSnapshots(5);
         await this.stakers._makeEpochSnapshots(5);
 
-        await expectRevert(this.stakers.claimDelegationRewards(new BN('0'), new BN('1'), {from: firstStaker}), "delegation doesn't exist");
-        await expectRevert(this.stakers.claimDelegationRewards(new BN('4'), new BN('100'), {from: firstDepositor}), 'future epoch');
-        await expectRevert(this.stakers.claimDelegationRewards(new BN('0'), new BN('0'), {from: firstDepositor}), 'no epochs claimed');
+        await expectRevert(this.stakers.claimDelegationRewards(new BN('1'), {from: firstStaker}), "delegation doesn't exist");
+        await expectRevert(this.stakers.claimDelegationRewards(new BN('0'), {from: firstDepositor}), 'no epochs claimed');
 
         expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('16.0'));
         const balanceBefore = await balance.current(firstDepositor);
 
         // reward for epoch 1
-        await this.stakers.claimDelegationRewards(new BN('0'), new BN('1'), {from: firstDepositor});
+        await this.stakers.claimDelegationRewards(new BN('1'), {from: firstDepositor});
         expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('15.008333332979166667')); // 16 - 0.991666667020833333
         // reward for epochs 2, 3
-        await this.stakers.claimDelegationRewards(new BN('0'), new BN('2'), {from: firstDepositor});
+        await this.stakers.claimDelegationRewards(new BN('2'), {from: firstDepositor});
         expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('14.264583332713541667')); // 16 - 1.735416667286458333
 
-        await expectRevert(this.stakers.claimDelegationRewards(new BN('0'), new BN('1'), {from: firstDepositor}), 'future epoch');
+        await expectRevert(this.stakers.claimDelegationRewards(new BN('1'), {from: firstDepositor}), 'future epoch');
 
         let base = ether('1.735416667286458333');
         let fee = ether('0.005');
@@ -227,7 +226,7 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
         expect(balanceAfter.sub(balanceBefore)).to.be.bignumber.most(base);
 
         await this.stakers.prepareToWithdrawDelegation({from: firstDepositor});
-        await expectRevert(this.stakers.claimDelegationRewards(new BN('0'), new BN('100'), {from: firstDepositor}), "delegation is deactivated");
+        await expectRevert(this.stakers.claimDelegationRewards(new BN('100'), {from: firstDepositor}), "delegation is deactivated");
     });
 
     it('checking bonded ratio', async () => {
@@ -239,22 +238,21 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
     });
 
     it('checking claimValidatorRewards function', async () => {
-        await expectRevert(this.stakers.claimValidatorRewards(new BN('0'), new BN('1'), {from: firstStaker}), 'staker doesn\'t exist');
+        await expectRevert(this.stakers.claimValidatorRewards(new BN('1'), {from: firstStaker}), 'staker doesn\'t exist');
         await this.stakers._createStake({from: firstStaker, value: ether('1.0')});
         let firstStakerID = await this.stakers.getStakerID(firstStaker);
         await this.stakers.createDelegation(firstStakerID, {from: firstDepositor, value: ether('5.0')});
         await this.stakers._makeEpochSnapshots(5);
         await this.stakers.createDelegation(firstStakerID, {from: secondDepositor, value: ether('10.0')});
         await this.stakers._makeEpochSnapshots(5);
-        await expectRevert(this.stakers.claimValidatorRewards(new BN('3'), new BN('4'), {from: firstStaker}), 'future epoch');
         expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('16.0'));
 
         const balanceBefore = await balance.current(firstStaker);
 
-        await this.stakers.claimValidatorRewards(new BN('0'), new BN('4'), {from: firstStaker});
+        await this.stakers.claimValidatorRewards(new BN('4'), {from: firstStaker});
         expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('15.307291666419270834')); // 16 - 0.692708333580729166
 
-        await expectRevert(this.stakers.claimValidatorRewards(new BN('0'), new BN('4'), {from: firstStaker}), 'future epoch');
+        await expectRevert(this.stakers.claimValidatorRewards(new BN('4'), {from: firstStaker}), 'future epoch');
 
         let base = ether('0.692708333580729166');
         let fee = ether('0.005');
