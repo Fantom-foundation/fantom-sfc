@@ -108,7 +108,8 @@ contract Stakers is Ownable, StakersConstants {
 
         uint256 delegatedMe;
 
-        address stakerAddress;
+        address dagAddress;
+        address sfcAddress;
     }
 
     struct ValidatorMerit {
@@ -165,7 +166,7 @@ contract Stakers is Ownable, StakersConstants {
     uint256 public currentSealedEpoch; // written by consensus outside
     mapping(uint256 => EpochSnapshot) public epochSnapshots; // written by consensus outside
     mapping(uint256 => ValidationStake) public stakers; // stakerID -> stake
-    mapping(address => uint256) internal stakerIDs; // staker address -> stakerID
+    mapping(address => uint256) internal stakerIDs; // staker sfcAddress/dagAddress -> stakerID
 
     uint256 public stakersLastID;
     uint256 public stakersNum;
@@ -214,6 +215,7 @@ contract Stakers is Ownable, StakersConstants {
         return currentSealedEpoch + 1;
     }
 
+    // getStakerID by either dagAddress or sfcAddress
     function getStakerID(address addr) external view returns (uint256) {
         return stakerIDs[addr];
     }
@@ -250,39 +252,100 @@ contract Stakers is Ownable, StakersConstants {
     Methods
     */
 
-    event CreatedStake(uint256 indexed stakerID, address indexed stakerAddress, uint256 amount);
+    event CreatedStake(uint256 indexed stakerID, address indexed dagSfcAddress, uint256 amount);
 
     // Create new staker
     // Stake amount is msg.value
+    // dagAdrress is msg.sender
+    // sfcAdrress is msg.sender
     function createStake(bytes memory metadata) public payable {
-        address staker = msg.sender;
+        _createStake(msg.sender, msg.sender, msg.value, metadata);
+    }
 
-        require(stakerIDs[staker] == 0, "staker already exists");
-        require(delegations[staker].amount == 0, "already delegating");
-        require(msg.value >= minStake(), "insufficient amount");
+    // Create new staker
+    // Stake amount is msg.value
+    function createStakeWithAddresses(address dagAdrress, address sfcAddress, bytes memory metadata) public payable {
+        require(dagAdrress != address(0), "invalid address");
+        require(sfcAddress != address(0), "invalid address");
+        _createStake(dagAdrress, sfcAddress, msg.value, metadata);
+    }
+
+    // Create new staker
+    // Stake amount is msg.value
+    function _createStake(address dagAdrress, address sfcAddress, uint256 amount, bytes memory metadata) internal {
+        require(stakerIDs[dagAdrress] == 0, "staker already exists");
+        require(stakerIDs[sfcAddress] == 0, "staker already exists");
+        require(delegations[dagAdrress].amount == 0, "already delegating");
+        require(delegations[sfcAddress].amount == 0, "already delegating");
+        require(amount >= minStake(), "insufficient amount");
 
         uint256 stakerID = ++stakersLastID;
-        stakerIDs[staker] = stakerID;
-        stakers[stakerID].stakeAmount = msg.value;
+        stakerIDs[dagAdrress] = stakerID;
+        stakerIDs[sfcAddress] = stakerID;
+        stakers[stakerID].stakeAmount = amount;
         stakers[stakerID].createdEpoch = currentEpoch();
         stakers[stakerID].createdTime = block.timestamp;
-        stakers[stakerID].stakerAddress = staker;
+        stakers[stakerID].dagAddress = dagAdrress;
+        stakers[stakerID].sfcAddress = sfcAddress;
         stakers[stakerID].paidUntilEpoch = currentSealedEpoch;
 
         stakersNum++;
-        stakeTotalAmount = stakeTotalAmount.add(msg.value);
-        emit CreatedStake(stakerID, staker, msg.value);
+        stakeTotalAmount = stakeTotalAmount.add(amount);
+        emit CreatedStake(stakerID, dagAdrress, amount);
 
         if (metadata.length != 0) {
             updateStakerMetadata(metadata);
         }
+
+        if (dagAdrress != sfcAddress) {
+            emit UpdatedStakerSfcAddress(stakerID, dagAdrress, sfcAddress);
+        }
+    }
+
+    function _sfcAddressToStakerID(address sfcAddress) public view returns(uint256) {
+        uint256 stakerID = stakerIDs[sfcAddress];
+        if (stakerID == 0) {
+            return 0;
+        }
+        if (stakers[stakerID].sfcAddress != sfcAddress) {
+            return 0;
+        }
+        return stakerID;
+    }
+
+    event UpdatedStakerSfcAddress(uint256 indexed stakerID, address indexed oldSfcAddress, address indexed newSfcAddress);
+
+    function updateStakerSfcAddress(address newSfcAddress) external {
+        address oldSfcAddress = msg.sender;
+
+        require(delegations[newSfcAddress].amount == 0, "already delegating");
+        require(oldSfcAddress != newSfcAddress, "the same address");
+
+        uint256 stakerID = _sfcAddressToStakerID(oldSfcAddress);
+        require(stakerID != 0, "staker doesn't exist");
+        require(stakerIDs[newSfcAddress] == 0 || stakerIDs[newSfcAddress] == stakerID, "address already used");
+
+        // update address
+        stakers[stakerID].sfcAddress = newSfcAddress;
+        delete stakerIDs[oldSfcAddress];
+
+        // update addresses index
+        stakerIDs[newSfcAddress] = stakerID;
+        stakerIDs[stakers[stakerID].dagAddress] = stakerID; // it's possible dagAddress == oldSfcAddress
+
+        // redirect rewards stash
+        if (rewardsStash[oldSfcAddress].amount != 0) {
+            rewardsStash[newSfcAddress] = rewardsStash[oldSfcAddress];
+            delete rewardsStash[oldSfcAddress];
+        }
+
+        emit UpdatedStakerSfcAddress(stakerID, oldSfcAddress, newSfcAddress);
     }
 
     event UpdatedStakerMetadata(uint256 indexed stakerID);
 
     function updateStakerMetadata(bytes memory metadata) public {
-        address staker = msg.sender;
-        uint256 stakerID = stakerIDs[staker];
+        uint256 stakerID = _sfcAddressToStakerID(msg.sender);
         require(stakerID != 0, "staker doesn't exist");
         require(metadata.length <= maxStakerMetadataSize(), "too big metadata");
         stakerMetadata[stakerID] = metadata;
@@ -294,8 +357,7 @@ contract Stakers is Ownable, StakersConstants {
 
     // Increase msg.sender's stake by msg.value
     function increaseStake() external payable {
-        address staker = msg.sender;
-        uint256 stakerID = stakerIDs[staker];
+        uint256 stakerID = _sfcAddressToStakerID(msg.sender);
 
         require(msg.value >= minStakeIncrease(), "insufficient amount");
         require(stakers[stakerID].stakeAmount != 0, "staker doesn't exist");
@@ -309,7 +371,7 @@ contract Stakers is Ownable, StakersConstants {
     }
 
     // maxDelegatedLimit is maximum amount of delegations to staker
-    function maxDelegatedLimit(uint256 selfStake) internal view returns (uint256) {
+    function maxDelegatedLimit(uint256 selfStake) internal pure returns (uint256) {
         return selfStake.mul(maxDelegatedRatio()).div(RATIO_UNIT);
     }
 
@@ -511,8 +573,8 @@ contract Stakers is Ownable, StakersConstants {
     //
     // may be already deactivated, but still allowed to withdraw old rewards
     function claimValidatorRewards(uint256 _fromEpoch, uint256 maxEpochs) external {
-        address payable staker = msg.sender;
-        uint256 stakerID = stakerIDs[staker];
+        address payable stakerSfcAddr = msg.sender;
+        uint256 stakerID = _sfcAddressToStakerID(stakerSfcAddr);
 
         require(stakerID != 0, "staker doesn't exist");
 
@@ -523,7 +585,7 @@ contract Stakers is Ownable, StakersConstants {
         require(untilEpoch >= fromEpoch, "no epochs claimed");
 
         stakers[stakerID].paidUntilEpoch = untilEpoch;
-        _claimRewards(staker, pendingRewards);
+        _claimRewards(stakerSfcAddr, pendingRewards);
 
         emit ClaimedValidatorReward(stakerID, pendingRewards, fromEpoch, untilEpoch);
     }
@@ -551,8 +613,8 @@ contract Stakers is Ownable, StakersConstants {
 
     // deactivate stake, to be able to withdraw later
     function prepareToWithdrawStake() external {
-        address staker = msg.sender;
-        uint256 stakerID = stakerIDs[staker];
+        address stakerSfcAddr = msg.sender;
+        uint256 stakerID = _sfcAddressToStakerID(stakerSfcAddr);
         require(stakers[stakerID].stakeAmount != 0, "staker doesn't exist");
         require(stakers[stakerID].deactivatedTime == 0, "staker is deactivated");
 
@@ -565,8 +627,8 @@ contract Stakers is Ownable, StakersConstants {
     event CreatedWithdrawRequest(address indexed auth, address indexed receiver, uint256 indexed stakerID, uint256 wrID, uint256 amount);
 
     function prepareToWithdrawStakePartial(uint256 wrID, uint256 amount) external {
-        address payable staker = msg.sender;
-        uint256 stakerID = stakerIDs[staker];
+        address payable stakerSfcAddr = msg.sender;
+        uint256 stakerID = _sfcAddressToStakerID(stakerSfcAddr);
         require(stakers[stakerID].stakeAmount != 0, "staker doesn't exist");
         require(stakers[stakerID].deactivatedTime == 0, "staker is deactivated");
         require(amount != 0, "zero amount");
@@ -577,15 +639,15 @@ contract Stakers is Ownable, StakersConstants {
         uint256 newAmount = totalAmount - amount;
         require(maxDelegatedLimit(newAmount) >= stakers[stakerID].delegatedMe, "too much delegations");
 
-        require(withdrawalRequests[staker][wrID].amount == 0, "wrID already exists");
+        require(withdrawalRequests[stakerSfcAddr][wrID].amount == 0, "wrID already exists");
 
         stakers[stakerID].stakeAmount -= amount;
-        withdrawalRequests[staker][wrID].stakerID = stakerID;
-        withdrawalRequests[staker][wrID].amount = amount;
-        withdrawalRequests[staker][wrID].epoch = currentEpoch();
-        withdrawalRequests[staker][wrID].time = block.timestamp;
+        withdrawalRequests[stakerSfcAddr][wrID].stakerID = stakerID;
+        withdrawalRequests[stakerSfcAddr][wrID].amount = amount;
+        withdrawalRequests[stakerSfcAddr][wrID].epoch = currentEpoch();
+        withdrawalRequests[stakerSfcAddr][wrID].time = block.timestamp;
 
-        emit CreatedWithdrawRequest(staker, staker, stakerID, wrID, amount);
+        emit CreatedWithdrawRequest(stakerSfcAddr, stakerSfcAddr, stakerID, wrID, amount);
 
         _syncStaker(stakerID);
     }
@@ -593,19 +655,21 @@ contract Stakers is Ownable, StakersConstants {
     event WithdrawnStake(uint256 indexed stakerID, uint256 penalty);
 
     function withdrawStake() external {
-        address payable staker = msg.sender;
-        uint256 stakerID = stakerIDs[staker];
+        address payable stakerSfcAddr = msg.sender;
+        uint256 stakerID = _sfcAddressToStakerID(stakerSfcAddr);
         require(stakers[stakerID].deactivatedTime != 0, "staker wasn't deactivated");
         require(block.timestamp >= stakers[stakerID].deactivatedTime + stakeLockPeriodTime(), "not enough time passed");
         require(currentEpoch() >= stakers[stakerID].deactivatedEpoch + stakeLockPeriodEpochs(), "not enough epochs passed");
 
+        address stakerDagAddr = stakers[stakerID].dagAddress;
         uint256 stake = stakers[stakerID].stakeAmount;
         uint256 penalty = 0;
         uint256 status = stakers[stakerID].status;
         bool isCheater = status & CHEATER_MASK != 0;
         delete stakers[stakerID];
         delete stakerMetadata[stakerID];
-        delete stakerIDs[staker];
+        delete stakerIDs[stakerSfcAddr];
+        delete stakerIDs[stakerDagAddr];
 
         if (status != 0) {
             stakers[stakerID].status = status; // write status back into storage
@@ -614,7 +678,7 @@ contract Stakers is Ownable, StakersConstants {
         stakeTotalAmount = stakeTotalAmount.sub(stake);
         // It's important that we transfer after erasing (protection against Re-Entrancy)
         if (isCheater == false) {
-            staker.transfer(stake);
+            stakerSfcAddr.transfer(stake);
         } else {
             penalty = stake;
         }
@@ -775,6 +839,13 @@ contract Stakers is Ownable, StakersConstants {
         require(stakers[stakerID].stakeAmount != 0, "staker doesn't exist");
         // emit special log for node
         emit UpdatedStake(stakerID, stakers[stakerID].stakeAmount, stakers[stakerID].delegatedMe);
+    }
+
+    // _upgradeStakerStorage after stakerAddress is divided into sfcAddress and dagAddress
+    function _upgradeStakerStorage(uint256 stakerID) external {
+        require(stakers[stakerID].sfcAddress == address(0), "not updated");
+        require(stakers[stakerID].stakeAmount != 0, "staker doesn't exist");
+        stakers[stakerID].sfcAddress = stakers[stakerID].dagAddress;
     }
 }
 
