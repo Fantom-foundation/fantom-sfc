@@ -108,8 +108,8 @@ contract Stakers is Ownable, StakersConstants {
 
         uint256 delegatedMe;
 
-        address dagAddress;
-        address sfcAddress;
+        address dagAddress; // address to authenticate validator's consensus messages (DAG events)
+        address sfcAddress; // address to authenticate validator inside SFC contract
     }
 
     struct ValidatorMerit {
@@ -315,6 +315,7 @@ contract Stakers is Ownable, StakersConstants {
 
     event UpdatedStakerSfcAddress(uint256 indexed stakerID, address indexed oldSfcAddress, address indexed newSfcAddress);
 
+    // update validator's SFC authentication/rewards/collateral address
     function updateStakerSfcAddress(address newSfcAddress) external {
         address oldSfcAddress = msg.sender;
 
