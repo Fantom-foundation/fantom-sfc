@@ -48,11 +48,13 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
 
         expect((await this.stakers.stakers.call(firstStakerID)).stakeAmount).to.be.bignumber.equal(ether('2.0'));
         expect((await this.stakers.stakers.call(firstStakerID)).createdEpoch).to.be.bignumber.equal(new BN('1'));
-        expect((await this.stakers.stakers.call(firstStakerID)).stakerAddress).to.equal(firstStaker);
+        expect((await this.stakers.stakers.call(firstStakerID)).sfcAddress).to.equal(firstStaker);
+        expect((await this.stakers.stakers.call(firstStakerID)).dagAddress).to.equal(firstStaker);
 
         expect((await this.stakers.stakers.call(secondStakerID)).stakeAmount).to.be.bignumber.equal(ether('1.01'));
         expect((await this.stakers.stakers.call(secondStakerID)).createdEpoch).to.be.bignumber.equal(new BN('1'));
-        expect((await this.stakers.stakers.call(secondStakerID)).stakerAddress).to.equal(secondStaker);
+        expect((await this.stakers.stakers.call(secondStakerID)).sfcAddress).to.equal(secondStaker);
+        expect((await this.stakers.stakers.call(secondStakerID)).dagAddress).to.equal(secondStaker);
     });
 
     it('checking increaseStake function', async () => {
