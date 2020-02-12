@@ -53,11 +53,11 @@ contract StakersConstants {
     }
 
     function unbondingStartDate() public pure returns (uint256) {
-      return 1577419000;
+        return 1577419000;
     }
 
     function bondedTargetPeriod() public pure returns (uint256) {
-      return 60 * 60 * 24 * 700; // 100 weeks
+        return 60 * 60 * 24 * 700; // 100 weeks
     }
 
     function bondedTargetStart() public pure returns (uint256) {
@@ -65,7 +65,7 @@ contract StakersConstants {
     }
 
     function unbondingUnlockPeriod() public pure returns (uint256) {
-      return 60 * 60 * 24 * 30 * 6; // 6 months
+        return 60 * 60 * 24 * 30 * 6; // 6 months
     }
 
     function delegationLockPeriodEpochs() public pure returns (uint256) {
@@ -435,7 +435,7 @@ contract Stakers is Ownable, StakersConstants {
         _syncStaker(to);
     }
 
-    function _calcTotalReward(uint256 stakerID, uint256 epoch) view public returns (uint256) {
+    function _calcRawValidatorEpochReward(uint256 stakerID, uint256 epoch) view public returns (uint256) {
         uint256 totalBaseRewardWeight = epochSnapshots[epoch].totalBaseRewardWeight;
         uint256 baseRewardWeight = epochSnapshots[epoch].validators[stakerID].baseRewardWeight;
         uint256 totalTxRewardWeight = epochSnapshots[epoch].totalTxRewardWeight;
@@ -457,8 +457,8 @@ contract Stakers is Ownable, StakersConstants {
         return baseReward.add(txReward);
     }
 
-    function _calcValidatorReward(uint256 stakerID, uint256 epoch, uint256 commission) view public returns (uint256) {
-        uint256 fullReward = _calcTotalReward(stakerID, epoch);
+    function _calcValidatorEpochReward(uint256 stakerID, uint256 epoch, uint256 commission) view public returns (uint256) {
+        uint256 rawReward = _calcRawValidatorEpochReward(stakerID, epoch);
 
         uint256 stake = epochSnapshots[epoch].validators[stakerID].stakeAmount;
         uint256 delegatedTotal = epochSnapshots[epoch].validators[stakerID].delegatedMe;
@@ -467,11 +467,11 @@ contract Stakers is Ownable, StakersConstants {
             return 0; // avoid division by zero
         }
         uint256 weightedTotalStake = stake.add((delegatedTotal.mul(commission)).div(RATIO_UNIT));
-        return (fullReward.mul(weightedTotalStake)).div(totalStake);
+        return (rawReward.mul(weightedTotalStake)).div(totalStake);
     }
 
-    function _calcDelegationReward(uint256 stakerID, uint256 epoch, uint256 delegationAmount, uint256 commission) view public returns (uint256) {
-        uint256 fullReward = _calcTotalReward(stakerID, epoch);
+    function _calcDelegationEpochReward(uint256 stakerID, uint256 epoch, uint256 delegationAmount, uint256 commission) view public returns (uint256) {
+        uint256 rawReward = _calcRawValidatorEpochReward(stakerID, epoch);
 
         uint256 stake = epochSnapshots[epoch].validators[stakerID].stakeAmount;
         uint256 delegatedTotal = epochSnapshots[epoch].validators[stakerID].delegatedMe;
@@ -480,7 +480,7 @@ contract Stakers is Ownable, StakersConstants {
             return 0; // avoid division by zero
         }
         uint256 weightedTotalStake = (delegationAmount.mul(RATIO_UNIT.sub(commission))).div(RATIO_UNIT);
-        return (fullReward.mul(weightedTotalStake)).div(totalStake);
+        return (rawReward.mul(weightedTotalStake)).div(totalStake);
     }
 
     function withDefault(uint256 a, uint256 defaultA) pure private returns(uint256) {
@@ -505,7 +505,7 @@ contract Stakers is Ownable, StakersConstants {
         uint256 pendingRewards = 0;
         uint256 lastEpoch = 0;
         for (uint256 e = fromEpoch; e <= currentSealedEpoch && e < fromEpoch + maxEpochs; e++) {
-            pendingRewards += _calcDelegationReward(stakerID, e, delegations[delegator].amount, validatorCommission());
+            pendingRewards += _calcDelegationEpochReward(stakerID, e, delegations[delegator].amount, validatorCommission());
             lastEpoch = e;
         }
         return (pendingRewards, fromEpoch, lastEpoch);
@@ -524,7 +524,7 @@ contract Stakers is Ownable, StakersConstants {
         uint256 pendingRewards = 0;
         uint256 lastEpoch = 0;
         for (uint256 e = fromEpoch; e <= currentSealedEpoch && e < fromEpoch + maxEpochs; e++) {
-            pendingRewards += _calcValidatorReward(stakerID, e, validatorCommission());
+            pendingRewards += _calcValidatorEpochReward(stakerID, e, validatorCommission());
             lastEpoch = e;
         }
         return (pendingRewards, fromEpoch, lastEpoch);
