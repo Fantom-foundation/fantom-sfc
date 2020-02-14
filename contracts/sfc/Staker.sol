@@ -694,21 +694,21 @@ contract Stakers is Ownable, StakersConstants {
 
     // deactivate delegation, to be able to withdraw later
     function prepareToWithdrawDelegation() external {
-        address from = msg.sender;
-        require(delegations[from].amount != 0, "delegation doesn't exist");
-        require(delegations[from].deactivatedTime == 0, "delegation is deactivated");
+        address delegator = msg.sender;
+        require(delegations[delegator].amount != 0, "delegation doesn't exist");
+        require(delegations[delegator].deactivatedTime == 0, "delegation is deactivated");
 
-        delegations[from].deactivatedEpoch = currentEpoch();
-        delegations[from].deactivatedTime = block.timestamp;
-        uint256 stakerID = delegations[from].toStakerID;
-        uint256 delegationAmount = delegations[from].amount;
+        delegations[delegator].deactivatedEpoch = currentEpoch();
+        delegations[delegator].deactivatedTime = block.timestamp;
+        uint256 stakerID = delegations[delegator].toStakerID;
+        uint256 delegationAmount = delegations[delegator].amount;
 
         if (stakers[stakerID].stakeAmount != 0) {
             // if staker haven't withdrawn
             stakers[stakerID].delegatedMe = stakers[stakerID].delegatedMe.sub(delegationAmount);
         }
 
-        emit DeactivatedDelegation(from, stakerID);
+        emit DeactivatedDelegation(delegator, stakerID);
     }
 
     function prepareToWithdrawDelegationPartial(uint256 wrID, uint256 amount) external {
