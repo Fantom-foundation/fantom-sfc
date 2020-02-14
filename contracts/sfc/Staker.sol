@@ -775,9 +775,12 @@ contract Stakers is Ownable, StakersConstants {
     function withdrawDelegation() external {
         address payable delegator = msg.sender;
         require(delegations[delegator].deactivatedTime != 0, "delegation wasn't deactivated");
-        require(block.timestamp >= delegations[delegator].deactivatedTime + delegationLockPeriodTime(), "not enough time passed");
-        require(currentEpoch() >= delegations[delegator].deactivatedEpoch + delegationLockPeriodEpochs(), "not enough epochs passed");
         uint256 stakerID = delegations[delegator].toStakerID;
+        if (stakers[stakerID].stakeAmount != 0) {
+            // if validator hasn't withdrawn already, then don't allow to withdraw delegation right away
+            require(block.timestamp >= delegations[delegator].deactivatedTime + delegationLockPeriodTime(), "not enough time passed");
+            require(currentEpoch() >= delegations[delegator].deactivatedEpoch + delegationLockPeriodEpochs(), "not enough epochs passed");
+        }
         uint256 penalty = 0;
         bool isCheater = stakers[stakerID].status & CHEATER_MASK != 0;
         uint256 delegationAmount = delegations[delegator].amount;
