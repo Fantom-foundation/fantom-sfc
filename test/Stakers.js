@@ -5,7 +5,7 @@ const {
     time,
     balance,
 } = require('openzeppelin-test-helpers');
-const { expect } = require('chai');
+const {expect} = require('chai');
 
 const UnitTestStakers = artifacts.require('UnitTestStakers');
 
@@ -27,11 +27,11 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
     });
 
     it('checking createStake function', async () => {
-        const stakerMetadata = "0x0001"
+        const stakerMetadata = "0x0001";
         expect(await this.stakers.stakersNum.call()).to.be.bignumber.equal(new BN('0'));
         await this.stakers._createStake({from: firstStaker, value: ether('2.0')});
         await this.stakers.createStake(stakerMetadata, {from: secondStaker, value: ether('1.01')});
-        await expectRevert(this.stakers._createStake({from: thirdStaker, value: ether('0.99') }), 'insufficient amount');
+        await expectRevert(this.stakers._createStake({from: thirdStaker, value: ether('0.99')}), 'insufficient amount');
         await expectRevert(this.stakers._createStake({from: firstStaker}), 'staker already exists');
 
         expect(await this.stakers.stakersNum.call()).to.be.bignumber.equal(new BN('2'));
@@ -42,7 +42,7 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
         let secondStakerID = await this.stakers.getStakerID(secondStaker);
         expect(firstStakerID).to.be.bignumber.equal(new BN('1'));
         expect(secondStakerID).to.be.bignumber.equal(new BN('2'));
-        
+
         expect(await this.stakers.stakerMetadata.call(firstStakerID)).to.be.null;
         expect(await this.stakers.stakerMetadata.call(secondStakerID)).to.be.equal(stakerMetadata);
 
@@ -60,9 +60,12 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
         await this.stakers.increaseStake({from: firstStaker, value: ether('1.0')});
         await this.stakers.increaseStake({from: firstStaker, value: ether('1.0')});
         await this.stakers.increaseStake({from: firstStaker, value: ether('1.0')});
-        await expectRevert(this.stakers.increaseStake({from: secondStaker, value: ether('1.0') }), "staker doesn't exist");
+        await expectRevert(this.stakers.increaseStake({
+            from: secondStaker,
+            value: ether('1.0')
+        }), "staker doesn't exist");
 
-        let firstStakerID = await this.stakers.getStakerID(firstStaker)
+        let firstStakerID = await this.stakers.getStakerID(firstStaker);
 
         expect(await this.stakers.stakeTotalAmount.call()).to.be.bignumber.equal(ether('5.0'));
         expect((await this.stakers.stakers.call(firstStakerID)).stakeAmount).to.be.bignumber.equal(ether('5.0'));
@@ -78,10 +81,22 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
         let zeroStakerID = new BN('2');
 
         await this.stakers.createDelegation(firstStakerID, {from: firstDepositor, value: ether('1.0')});
-        await expectRevert(this.stakers.createDelegation(secondStakerID, {from: secondDepositor, value: ether('1.0')}), "staker doesn't exist");
-        await expectRevert(this.stakers.createDelegation(zeroStakerID, {from: secondDepositor, value: ether('1.0')}), "staker doesn't exist");
-        await expectRevert(this.stakers.createDelegation(firstStakerID, {from: secondDepositor, value: ether('0.99')}), 'insufficient amount');
-        await expectRevert(this.stakers.createDelegation(firstStakerID, {from: secondDepositor, value: ether('29.01')}), "staker's limit is exceeded");
+        await expectRevert(this.stakers.createDelegation(secondStakerID, {
+            from: secondDepositor,
+            value: ether('1.0')
+        }), "staker doesn't exist");
+        await expectRevert(this.stakers.createDelegation(zeroStakerID, {
+            from: secondDepositor,
+            value: ether('1.0')
+        }), "staker doesn't exist");
+        await expectRevert(this.stakers.createDelegation(firstStakerID, {
+            from: secondDepositor,
+            value: ether('0.99')
+        }), 'insufficient amount');
+        await expectRevert(this.stakers.createDelegation(firstStakerID, {
+            from: secondDepositor,
+            value: ether('29.01')
+        }), "staker's limit is exceeded");
         await this.stakers.createDelegation(firstStakerID, {from: secondDepositor, value: ether('29.0')});
 
         const now = await time.latest();
@@ -119,25 +134,25 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
         expect(await this.stakers._calcTotalReward(secondStakerID, new BN('1'))).to.be.bignumber.equal(ether('0.166666666666666735'));
     });
 
-    it ('check epoch snapshot logic', async () => {
-        const firstEpochDuration = 1000000000
-        const secondEpochDuration = 0
+    it('checking epoch snapshot logic', async () => {
+        const firstEpochDuration = 1000000000;
+        const secondEpochDuration = 0;
 
-        let epoch = await this.stakers.currentSealedEpoch.call()
-        expect(epoch).to.be.bignumber.equal(new BN('0'))
+        let epoch = await this.stakers.currentSealedEpoch.call();
+        expect(epoch).to.be.bignumber.equal(new BN('0'));
 
         await this.stakers._makeEpochSnapshots(firstEpochDuration);
-        epoch = await this.stakers.currentSealedEpoch.call()
-        expect(epoch).to.be.bignumber.equal(new BN('1'))        
-        let snapshot = await this.stakers.epochSnapshots.call(epoch)
-        expect(snapshot.duration).to.be.bignumber.equal(new BN(firstEpochDuration.toString()))
+        epoch = await this.stakers.currentSealedEpoch.call();
+        expect(epoch).to.be.bignumber.equal(new BN('1'));
+        let snapshot = await this.stakers.epochSnapshots.call(epoch);
+        expect(snapshot.duration).to.be.bignumber.equal(new BN(firstEpochDuration.toString()));
 
         await this.stakers._makeEpochSnapshots(secondEpochDuration);
-        epoch = await this.stakers.currentSealedEpoch.call()
-        expect(epoch).to.be.bignumber.equal(new BN('2'))
-        snapshot = await this.stakers.epochSnapshots.call(epoch)
-        expect(snapshot.duration).to.be.bignumber.equal(new BN(secondEpochDuration.toString()))
-    })
+        epoch = await this.stakers.currentSealedEpoch.call();
+        expect(epoch).to.be.bignumber.equal(new BN('2'));
+        snapshot = await this.stakers.epochSnapshots.call(epoch);
+        expect(snapshot.duration).to.be.bignumber.equal(new BN(secondEpochDuration.toString()));
+    });
 
     it('checking calcValidatorReward function', async () => {
         await this.stakers._createStake({from: firstStaker, value: ether('1.0')});
@@ -212,12 +227,12 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
     });
 
     it('checking bonded ratio', async () => {
-        let br = await this.stakers.bondedRatio()
-        expect(br).to.be.bignumber.equal(new BN('0'))
+        let br = await this.stakers.bondedRatio();
+        expect(br).to.be.bignumber.equal(new BN('0'));
         await this.stakers._createStake({from: firstStaker, value: ether('1.0')});
         await this.stakers._makeEpochSnapshots(10000);
         // since there is no way to increase snapshot's total_supply, a temprorary mock should be considered
-    })
+    });
 
     it('checking claimValidatorRewards function', async () => {
         await expectRevert(this.stakers.claimValidatorRewards(new BN('0'), new BN('1'), {from: firstStaker}), 'staker doesn\'t exist');
@@ -299,11 +314,11 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
         expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('3'));
 
         await this.stakers._markValidationStakeAsCheater(thirdStakerID, true);
-        let staker = await this.stakers.stakers.call(thirdStakerID)
+        let staker = await this.stakers.stakers.call(thirdStakerID);
         expect(staker.status).to.be.bignumber.equal(new BN('1'));
 
         await this.stakers._markValidationStakeAsCheater(thirdStakerID, false);
-        staker = await this.stakers.stakers.call(thirdStakerID)
+        staker = await this.stakers.stakers.call(thirdStakerID);
         expect(staker.status).to.be.bignumber.equal(new BN('0'));
     });
 
