@@ -6,6 +6,7 @@ const {
     balance,
 } = require('openzeppelin-test-helpers');
 const {expect} = require('chai');
+const subs = require('./Subs')
 
 const UnitTestStakers = artifacts.require('UnitTestStakers');
 
@@ -413,4 +414,41 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
         expect(await this.stakers.slashedStakeTotalAmount.call()).to.be.bignumber.equal(ether('1.0'));
         expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('3.0'));
     });
+
+    it('test getters', async () => {
+        const lockTime = 60 * 60 * 24 * 7;
+        const unlockPeriod = 60 * 60 * 24 * 30 * 6;
+        const tg = new subs.TestingGetters(15, 100, 30, lockTime, lockTime, lockTime * 100, unlockPeriod, 3, 1577419000, 80, 3, 256);
+        let ratioUnit = new BN(1000000);
+        let maxDelegatedRatio = await this.stakers.maxDelegatedRatio();
+        let validatorCommission = await this.stakers.validatorCommission();
+        let contractCommission = await this.stakers.contractCommission();
+        let stakeLockPeriodTime = await this.stakers.stakeLockPeriodTime();
+        let delegationLockPeriodTime = await this.stakers.delegationLockPeriodTime();
+        let stakeLockPeriodEpochs = await this.stakers.stakeLockPeriodEpochs();
+        let unbondingStartDate = await this.stakers.unbondingStartDate();
+        let bondedTargetPeriod = await this.stakers.bondedTargetPeriod();
+        let unbondingUnlockPeriod = await this.stakers.unbondingUnlockPeriod();
+        let delegationLockPeriodEpochs = await this.stakers.delegationLockPeriodEpochs();
+        let maxStakerMetadataSize = await this.stakers.maxStakerMetadataSize();
+        
+        expect(maxDelegatedRatio).to.be.bignumber.equal(tg.expectedMaxDelegationRatio(ratioUnit));
+        expect(validatorCommission).to.be.bignumber.equal(tg.expectedValidatorComission(ratioUnit));
+        expect(contractCommission).to.be.bignumber.equal(tg.expectedContractComission(ratioUnit));
+        expect(stakeLockPeriodTime).to.be.bignumber.equal(tg.lockPeriodTime);
+        expect(delegationLockPeriodTime).to.be.bignumber.equal(tg.delegationLockPeriodTime);
+        expect(stakeLockPeriodEpochs).to.be.bignumber.equal(tg.stakeLockPeriodEpochs);
+        expect(unbondingStartDate).to.be.bignumber.equal(tg.unbondingStartDate);
+        expect(bondedTargetPeriod).to.be.bignumber.equal(tg.bondedTargetPeriod);
+        expect(unbondingUnlockPeriod).to.be.bignumber.equal(tg.unlockPeriod);
+        expect(delegationLockPeriodEpochs).to.be.bignumber.equal(tg.delegationLockPeriodEpochs);
+        expect(maxStakerMetadataSize).to.be.bignumber.equal(tg.maxStakerMetadataSize);
+    })
+
+    it('bondedTargetRewardUnlock test', async () => {
+        let unbondingStartDate = await this.stakers.unbondingStartDate();
+        console.log("unbondingStartDate", unbondingStartDate)
+        const bondedTargetRewardUnlock = await this.stakers.bondedTargetRewardUnlock();
+        console.log("bondedTargetRewardUnlock", bondedTargetRewardUnlock.toString())
+    })
 });
