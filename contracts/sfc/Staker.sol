@@ -20,11 +20,19 @@ contract StakersConstants {
         return 1 * 1e18;
     }
 
+    function minStakeDecrease() public pure returns (uint256) {
+        return 1 * 1e18;
+    }
+
     function minDelegation() public pure returns (uint256) {
         return 1 * 1e18;
     }
 
     function minDelegationIncrease() public pure returns (uint256) {
+        return 1 * 1e18;
+    }
+
+    function minDelegationDecrease() public pure returns (uint256) {
         return 1 * 1e18;
     }
 
@@ -319,12 +327,12 @@ contract Stakers is Ownable, StakersConstants {
     function updateStakerSfcAddress(address newSfcAddress) external {
         address oldSfcAddress = msg.sender;
 
-        require(stakerIDs[newSfcAddress] == 0, "staker already exists");
         require(delegations[newSfcAddress].amount == 0, "already delegating");
         require(oldSfcAddress != newSfcAddress, "the same address");
 
         uint256 stakerID = _sfcAddressToStakerID(oldSfcAddress);
-        require(stakerID == 0, "staker doesn't exist");
+        require(stakerID != 0, "staker doesn't exist");
+        require(stakerIDs[newSfcAddress] == 0 || stakerIDs[newSfcAddress] == stakerID, "address already used");
 
         // update address
         stakers[stakerID].sfcAddress = newSfcAddress;
@@ -335,8 +343,10 @@ contract Stakers is Ownable, StakersConstants {
         stakerIDs[stakers[stakerID].dagAddress] = stakerID; // it's possible dagAddress == oldSfcAddress
 
         // redirect rewards stash
-        rewardsStash[newSfcAddress] = rewardsStash[oldSfcAddress];
-        delete rewardsStash[oldSfcAddress];
+        if (rewardsStash[oldSfcAddress].amount != 0) {
+            rewardsStash[newSfcAddress] = rewardsStash[oldSfcAddress];
+            delete rewardsStash[oldSfcAddress];
+        }
 
         emit UpdatedStakerSfcAddress(stakerID, oldSfcAddress, newSfcAddress);
     }
@@ -537,7 +547,7 @@ contract Stakers is Ownable, StakersConstants {
         if (rewardsAllowed()) {
             addr.transfer(amount);
         } else {
-            rewardsStash[addr].amount += amount;
+            rewardsStash[addr].amount = rewardsStash[addr].amount.add(amount);
         }
     }
 
@@ -613,15 +623,21 @@ contract Stakers is Ownable, StakersConstants {
         return !isDelegation || (stakers[stakerID].stakeAmount != 0 && stakers[stakerID].status == OK_STATUS && stakers[stakerID].deactivatedTime == 0);
     }
 
+    event BurntRewardStash(address indexed addr, uint256 indexed stakerID, bool isDelegation, uint256 amount);
+
     // proportional part of stashed rewards are burnt on deactivation if _rewardsBurnableOnDeactivation returns true
     function _mayBurnRewardsOnDeactivation(bool isDelegation, uint256 stakerID, address addr, uint256 withdrawAmount, uint256 totalAmount) internal {
         if (_rewardsBurnableOnDeactivation(isDelegation, stakerID)) {
             uint256 leftAmount = totalAmount.sub(withdrawAmount);
-            uint256 newStash = rewardsStash[addr].amount.mul(leftAmount).div(totalAmount);
+            uint256 oldStash = rewardsStash[addr].amount;
+            uint256 newStash = oldStash.mul(leftAmount).div(totalAmount);
             if (newStash == 0) {
                 delete rewardsStash[addr];
             } else {
                 rewardsStash[addr].amount = newStash;
+            }
+            if (newStash != oldStash) {
+                emit BurntRewardStash(addr, stakerID, isDelegation, oldStash - newStash);
             }
         }
     }
@@ -635,6 +651,9 @@ contract Stakers is Ownable, StakersConstants {
         uint256 stakerID = _sfcAddressToStakerID(stakerSfcAddr);
         require(stakers[stakerID].stakeAmount != 0, "staker doesn't exist");
         require(stakers[stakerID].deactivatedTime == 0, "staker is deactivated");
+        require(stakers[stakerID].paidUntilEpoch == currentSealedEpoch, "not all rewards claimed"); // for rewards burning
+
+        _mayBurnRewardsOnDeactivation(false, stakerID, stakerSfcAddr, stakers[stakerID].stakeAmount, stakers[stakerID].stakeAmount);
 
         _mayBurnRewardsOnDeactivation(false, stakerID, stakerSfcAddr, stakers[stakerID].stakeAmount, stakers[stakerID].stakeAmount);
 
@@ -644,14 +663,15 @@ contract Stakers is Ownable, StakersConstants {
         emit DeactivatedStake(stakerID);
     }
 
-    event CreatedWithdrawRequest(address indexed auth, address indexed receiver, uint256 indexed stakerID, uint256 wrID, uint256 amount);
+    event CreatedWithdrawRequest(address indexed auth, address indexed receiver, uint256 indexed stakerID, uint256 wrID, bool delegation, uint256 amount);
 
     function prepareToWithdrawStakePartial(uint256 wrID, uint256 amount) external {
         address payable stakerSfcAddr = msg.sender;
         uint256 stakerID = _sfcAddressToStakerID(stakerSfcAddr);
         require(stakers[stakerID].stakeAmount != 0, "staker doesn't exist");
         require(stakers[stakerID].deactivatedTime == 0, "staker is deactivated");
-        require(amount != 0, "zero amount");
+        require(stakers[stakerID].paidUntilEpoch == currentSealedEpoch, "not all rewards claimed"); // for rewards burning
+        require(amount >= minStakeDecrease(), "too small amount"); // avoid confusing wrID and amount
 
         // don't allow to withdraw full as a request, because amount==0 originally meant "not existing"
         uint256 totalAmount = stakers[stakerID].stakeAmount;
@@ -669,7 +689,7 @@ contract Stakers is Ownable, StakersConstants {
         withdrawalRequests[stakerSfcAddr][wrID].epoch = currentEpoch();
         withdrawalRequests[stakerSfcAddr][wrID].time = block.timestamp;
 
-        emit CreatedWithdrawRequest(stakerSfcAddr, stakerSfcAddr, stakerID, wrID, amount);
+        emit CreatedWithdrawRequest(stakerSfcAddr, stakerSfcAddr, stakerID, wrID, false, amount);
 
         _syncStaker(stakerID);
     }
@@ -718,6 +738,7 @@ contract Stakers is Ownable, StakersConstants {
         address delegator = msg.sender;
         require(delegations[delegator].amount != 0, "delegation doesn't exist");
         require(delegations[delegator].deactivatedTime == 0, "delegation is deactivated");
+        require(delegations[delegator].paidUntilEpoch == currentSealedEpoch, "not all rewards claimed"); // for rewards burning
 
         uint256 stakerID = delegations[delegator].toStakerID;
         _mayBurnRewardsOnDeactivation(true, stakerID, delegator, delegations[delegator].amount, delegations[delegator].amount);
@@ -740,7 +761,7 @@ contract Stakers is Ownable, StakersConstants {
         require(delegations[delegator].deactivatedTime == 0, "delegation is deactivated");
         // previous rewards must be claimed because rewards calculation depends on current delegation amount
         require(delegations[delegator].paidUntilEpoch == currentSealedEpoch, "not all rewards claimed");
-        require(amount != 0, "zero amount");
+        require(amount >= minDelegationDecrease(), "too small amount"); // avoid confusing wrID and amount
 
         // don't allow to withdraw full as a request, because amount==0 originally meant "not existing"
         uint256 stakerID = delegations[delegator].toStakerID;
@@ -764,7 +785,7 @@ contract Stakers is Ownable, StakersConstants {
         withdrawalRequests[delegator][wrID].time = block.timestamp;
         withdrawalRequests[delegator][wrID].delegation = true;
 
-        emit CreatedWithdrawRequest(delegator, delegator, stakerID, wrID, amount);
+        emit CreatedWithdrawRequest(delegator, delegator, stakerID, wrID, true, amount);
 
         _syncDelegator(delegator);
         _syncStaker(stakerID);
@@ -800,7 +821,7 @@ contract Stakers is Ownable, StakersConstants {
         emit WithdrawnDelegation(delegator, stakerID, penalty);
     }
 
-    event WithdrawnByRequest(address indexed auth, address indexed receiver, uint256 indexed stakerID, uint256 wrID, uint256 penalty);
+    event WithdrawnByRequest(address indexed auth, address indexed receiver, uint256 indexed stakerID, uint256 wrID, bool delegation, uint256 penalty);
 
     function withdrawByRequest(uint256 wrID) external {
         address auth = msg.sender;
@@ -808,15 +829,16 @@ contract Stakers is Ownable, StakersConstants {
         require(withdrawalRequests[auth][wrID].time != 0, "request doesn't exist");
         bool delegation = withdrawalRequests[auth][wrID].delegation;
 
-        if (delegation) {
+        uint256 stakerID = withdrawalRequests[auth][wrID].stakerID;
+        if (delegation && stakers[stakerID].stakeAmount != 0) {
+            // if validator hasn't withdrawn already, then don't allow to withdraw delegation right away
             require(block.timestamp >= withdrawalRequests[auth][wrID].time + delegationLockPeriodTime(), "not enough time passed");
             require(currentEpoch() >= withdrawalRequests[auth][wrID].epoch + delegationLockPeriodEpochs(), "not enough epochs passed");
-        } else {
+        } else if (!delegation) {
             require(block.timestamp >= withdrawalRequests[auth][wrID].time + stakeLockPeriodTime(), "not enough time passed");
             require(currentEpoch() >= withdrawalRequests[auth][wrID].epoch + stakeLockPeriodEpochs(), "not enough epochs passed");
         }
 
-        uint256 stakerID = withdrawalRequests[auth][wrID].stakerID;
         uint256 penalty = 0;
         bool isCheater = stakers[stakerID].status & CHEATER_MASK != 0;
         uint256 amount = withdrawalRequests[auth][wrID].amount;
@@ -841,7 +863,7 @@ contract Stakers is Ownable, StakersConstants {
             slashedStakeTotalAmount = slashedStakeTotalAmount.add(penalty);
         }
 
-        emit WithdrawnByRequest(auth, receiver, stakerID, wrID, penalty);
+        emit WithdrawnByRequest(auth, receiver, stakerID, wrID, delegation, penalty);
     }
 
     function updateGasPowerAllocationRate(uint256 short, uint256 long) onlyOwner external {
@@ -960,6 +982,17 @@ contract UnitTestStakers is Stakers {
         epochPay += newSnapshot.epochFee;
 
         return epochPay;
+    }
+
+    function discardValidatorRewards() public {
+        uint256 stakerID = _sfcAddressToStakerID(msg.sender);
+        require(stakers[stakerID].stakeAmount != 0, "staker doesn't exist");
+        stakers[stakerID].paidUntilEpoch = currentSealedEpoch;
+    }
+
+    function discardDelegationRewards() public {
+        require(delegations[msg.sender].amount != 0, "delegation doesn't exist");
+        delegations[msg.sender].paidUntilEpoch = currentSealedEpoch;
     }
 
     function rewardsAllowed() public view returns (bool) {
