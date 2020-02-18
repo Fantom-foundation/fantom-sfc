@@ -10,7 +10,7 @@ contract StakersConstants {
     uint256 internal constant FORK_BIT = 1;
     uint256 internal constant OFFLINE_BIT = 1 << 8;
     uint256 internal constant CHEATER_MASK = FORK_BIT;
-    uint256 internal constant PERCENT_UNIT = 1000000;
+    uint256 internal constant RATIO_UNIT = 1e6;
 
     function minStake() public pure returns (uint256) {
         return 3175000 * 1e18; // 3175000 FTM
@@ -25,15 +25,15 @@ contract StakersConstants {
     }
 
     function maxDelegatedRatio() public pure returns (uint256) {
-        return 15 * PERCENT_UNIT; // 1500%
+        return 15 * RATIO_UNIT; // 1500%
     }
 
     function validatorCommission() public pure returns (uint256) {
-        return (15 * PERCENT_UNIT) / 100; // 15%
+        return (15 * RATIO_UNIT) / 100; // 15%
     }
 
     function contractCommission() public pure returns (uint256) {
-        return (30 * PERCENT_UNIT) / 100; // 30%
+        return (30 * RATIO_UNIT) / 100; // 30%
     }
 
     function stakeLockPeriodTime() public pure returns (uint256) {
@@ -52,8 +52,12 @@ contract StakersConstants {
       return 1577419000;
     }
 
-    function unbondingPeriod() public pure returns (uint256) {
-      return 60 * 60 * 24 * 700; // 700 days
+    function bondedTargetPeriod() public pure returns (uint256) {
+      return 60 * 60 * 24 * 700; // 100 weeks
+    }
+
+    function bondedTargetStart() public pure returns (uint256) {
+        return (80 * RATIO_UNIT) / 100; // 80%
     }
 
     function unbondingUnlockPeriod() public pure returns (uint256) {
@@ -169,7 +173,7 @@ contract Stakers is Ownable, StakersConstants {
 
     mapping(address => Delegation) public delegations; // delegationID -> delegation
 
-    uint256 public capReachedDate;
+    uint256 private deleted0;
 
     mapping(uint256 => bytes) public stakerMetadata;
 
@@ -199,24 +203,25 @@ contract Stakers is Ownable, StakersConstants {
             return 0;
         }
         uint256 totalStaked = epochSnapshots[currentSealedEpoch].stakeTotalAmount.add(epochSnapshots[currentSealedEpoch].delegationsTotalAmount);
-        return totalStaked.mul(PERCENT_UNIT).div(totalSupply);
-    }
-
-    function rewardsAllowed() public view returns (bool) {
-        if (capReachedDate == 0) {
-            return false;
-        }
-        return block.timestamp >= unbondingUnlockPeriod() + capReachedDate;
+        return totalStaked.mul(RATIO_UNIT).div(totalSupply);
     }
 
     // Calculate bonded ratio target
     function bondedTargetRewardUnlock() public view returns (uint256) {
         uint256 passedTime = block.timestamp.sub(unbondingStartDate());
-        uint256 passedPercents = PERCENT_UNIT.mul(passedTime).div(unbondingPeriod()); // total duration from 0% to 100% is unbondingPeriod
-        if (passedPercents > PERCENT_UNIT) {
+        uint256 passedPercents = RATIO_UNIT.mul(passedTime).div(bondedTargetPeriod()); // total duration from 0% to 100% is bondedTargetPeriod
+        if (passedPercents >= bondedTargetStart()) {
             return 0;
         }
-        return PERCENT_UNIT - passedPercents;
+        return bondedTargetStart() - passedPercents;
+    }
+
+    // rewardsAllowed returns true if rewards are unlocked.
+    // Rewards are unlocked when either 6 months passed or until TARGET% of the supply is staked,
+    // where TARGET starts with 80% and decreases 1% every week
+    function rewardsAllowed() public view returns (bool) {
+        return block.timestamp >= unbondingStartDate() + unbondingUnlockPeriod() ||
+               bondedRatio() >= bondedTargetRewardUnlock();
     }
 
     /*
@@ -294,7 +299,7 @@ contract Stakers is Ownable, StakersConstants {
         require(msg.value >= minDelegation(), "insufficient amount for delegation");
         require(delegations[from].amount == 0, "delegation already exists");
         require(stakerIDs[from] == 0, "already staking");
-        require((stakers[to].stakeAmount.mul(maxDelegatedRatio())).div(PERCENT_UNIT) >= stakers[to].delegatedMe.add(msg.value), "staker's limit is exceeded");
+        require((stakers[to].stakeAmount.mul(maxDelegatedRatio())).div(RATIO_UNIT) >= stakers[to].delegatedMe.add(msg.value), "staker's limit is exceeded");
 
         Delegation memory newDelegation;
         newDelegation.createdEpoch = currentEpoch();
@@ -327,7 +332,7 @@ contract Stakers is Ownable, StakersConstants {
         if (txRewardWeight != 0) {
             txReward = epochSnapshots[epoch].epochFee.mul(txRewardWeight).div(totalTxRewardWeight);
             // fee reward except contractCommission
-            txReward = txReward.mul(PERCENT_UNIT - contractCommission()).div(PERCENT_UNIT);
+            txReward = txReward.mul(RATIO_UNIT - contractCommission()).div(RATIO_UNIT);
         }
 
         return baseReward.add(txReward);
@@ -342,7 +347,7 @@ contract Stakers is Ownable, StakersConstants {
         if (totalStake == 0) {
             return 0; // avoid division by zero
         }
-        uint256 weightedTotalStake = stake.add((delegatedTotal.mul(validatorCommission())).div(PERCENT_UNIT));
+        uint256 weightedTotalStake = stake.add((delegatedTotal.mul(validatorCommission())).div(RATIO_UNIT));
         return (fullReward.mul(weightedTotalStake)).div(totalStake);
     }
 
@@ -355,7 +360,7 @@ contract Stakers is Ownable, StakersConstants {
         if (totalStake == 0) {
             return 0; // avoid division by zero
         }
-        uint256 weightedTotalStake = (delegatedAmount.mul(PERCENT_UNIT.sub(validatorCommission()))).div(PERCENT_UNIT);
+        uint256 weightedTotalStake = (delegatedAmount.mul(RATIO_UNIT.sub(validatorCommission()))).div(RATIO_UNIT);
         return (fullReward.mul(weightedTotalStake)).div(totalStake);
     }
 
@@ -416,7 +421,7 @@ contract Stakers is Ownable, StakersConstants {
 
         require(delegations[delegator].amount != 0, "delegation doesn't exist");
         require(delegations[delegator].deactivatedTime == 0, "delegation is deactivated");
-        require(checkBonded(), "before minimum unlock period");
+        require(rewardsAllowed(), "before minimum unlock period");
 
         (uint256 pendingRewards, uint256 fromEpoch, uint256 untilEpoch) = calcDelegationRewards(delegator, _fromEpoch, maxEpochs);
 
@@ -446,7 +451,7 @@ contract Stakers is Ownable, StakersConstants {
         uint256 stakerID = stakerIDs[staker];
 
         require(stakerID != 0, "staker doesn't exist");
-        require(checkBonded(), "before minimum unlock period");
+        require(rewardsAllowed(), "before minimum unlock period");
 
         (uint256 pendingRewards, uint256 fromEpoch, uint256 untilEpoch) = calcValidatorRewards(stakerID, _fromEpoch, maxEpochs);
 
@@ -563,41 +568,6 @@ contract Stakers is Ownable, StakersConstants {
 
     function updateBaseRewardPerSec(uint256 value) onlyOwner external {
         emit UpdatedBaseRewardPerSec(value);
-    }
-
-    // Bonded target logic
-
-    event ChangedCapReachedDate(uint256 _capReachedDate);
-
-    // Change cap reached date
-    function changeCapReachedDate(uint256 _capReachedDate) internal {
-        if (capReachedDate == _capReachedDate) {
-            return;
-        }
-        capReachedDate = _capReachedDate;
-        emit ChangedCapReachedDate(_capReachedDate);
-    }
-
-    function _updateCapReachedDate() internal returns(bool) {
-        uint256 current = bondedRatio();
-        uint256 target = bondedTargetRewardUnlock();
-        if (current >= target && capReachedDate == 0) {
-            changeCapReachedDate(block.timestamp);
-            return true;
-        } else if (current < target && capReachedDate != 0) {
-            changeCapReachedDate(0);
-            return true;
-        }
-        return false;
-    }
-
-    function updateCapReachedDate() public {
-        require(_updateCapReachedDate(), "not updated");
-    }
-
-    function checkBonded() internal returns (bool) {
-        _updateCapReachedDate();
-        return rewardsAllowed();
     }
 
     event UpdatedDelegation(address indexed delegator, uint256 indexed oldStakerID, uint256 indexed newStakerID, uint256 amount);
