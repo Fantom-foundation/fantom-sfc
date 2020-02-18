@@ -397,13 +397,17 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
         expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('3.0'));
 
         // check early withdrawal
+        await expectRevert(this.stakers.prepareToWithdrawStake({from: firstStaker}), 'not all rewards claimed');
+        await this.stakers.discardValidatorRewards({from: firstStaker});
         await this.stakers.prepareToWithdrawStake({from: firstStaker}); // deactivate staker
         {
             time.increase(86400 * 7);
             await this.stakers._makeEpochSnapshots(10000);
-            await this.stakers._makeEpochSnapshots(10000);
+            await this.stakers._makeEpochSnapshots(10000;
             await this.stakers._makeEpochSnapshots(10000);
         }
+        await expectRevert(this.stakers.prepareToWithdrawDelegation({from: thirdDepositor}), 'not all rewards claimed');
+        await this.stakers.discardDelegationRewards({from: thirdDepositor});
         await this.stakers.prepareToWithdrawDelegation({from: thirdDepositor});
         await expectRevert(this.stakers.withdrawDelegation({from: thirdDepositor}), 'not enough time passed');
         await this.stakers.withdrawStake({from: firstStaker});
