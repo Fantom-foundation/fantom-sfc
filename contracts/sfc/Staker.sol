@@ -24,6 +24,10 @@ contract StakersConstants {
         return 1 * 1e18;
     }
 
+    function minDelegationIncrease() public pure returns (uint256) {
+        return 1 * 1e18;
+    }
+
     function maxDelegatedRatio() public pure returns (uint256) {
         return 15 * RATIO_UNIT; // 1500%
     }
@@ -304,20 +308,25 @@ contract Stakers is Ownable, StakersConstants {
         emit IncreasedStake(stakerID, newAmount, msg.value);
     }
 
-    event CreatedDelegation(address indexed from, uint256 indexed toStakerID, uint256 amount);
+    // maxDelegatedLimit is maximum amount of delegations to staker
+    function maxDelegatedLimit(uint256 selfStake) internal view returns (uint256) {
+        return selfStake.mul(maxDelegatedRatio()).div(RATIO_UNIT);
+    }
+
+    event CreatedDelegation(address indexed delegator, uint256 indexed toStakerID, uint256 amount);
 
     // Create new delegation to a given staker
     // Delegated amount is msg.value
     function createDelegation(uint256 to) external payable {
-        address from = msg.sender;
+        address delegator = msg.sender;
 
         require(stakers[to].stakeAmount != 0, "staker doesn't exist");
         require(stakers[to].status == OK_STATUS, "staker should be active");
         require(stakers[to].deactivatedTime == 0, "staker is deactivated");
         require(msg.value >= minDelegation(), "insufficient amount for delegation");
-        require(delegations[from].amount == 0, "delegation already exists");
-        require(stakerIDs[from] == 0, "already staking");
-        require((stakers[to].stakeAmount.mul(maxDelegatedRatio())).div(RATIO_UNIT) >= stakers[to].delegatedMe.add(msg.value), "staker's limit is exceeded");
+        require(delegations[delegator].amount == 0, "delegation already exists");
+        require(stakerIDs[delegator] == 0, "already staking");
+        require(maxDelegatedLimit(stakers[to].stakeAmount) >= stakers[to].delegatedMe.add(msg.value), "staker's limit is exceeded");
 
         Delegation memory newDelegation;
         newDelegation.createdEpoch = currentEpoch();
@@ -325,13 +334,43 @@ contract Stakers is Ownable, StakersConstants {
         newDelegation.amount = msg.value;
         newDelegation.toStakerID = to;
         newDelegation.paidUntilEpoch = currentSealedEpoch;
-        delegations[from] = newDelegation;
+        delegations[delegator] = newDelegation;
 
         stakers[to].delegatedMe = stakers[to].delegatedMe.add(msg.value);
         delegationsNum++;
         delegationsTotalAmount = delegationsTotalAmount.add(msg.value);
 
-        emit CreatedDelegation(from, to, msg.value);
+        emit CreatedDelegation(delegator, to, msg.value);
+    }
+
+    event IncreasedDelegation(address indexed delegator, uint256 indexed stakerID, uint256 newAmount, uint256 diff);
+
+    // Increase msg.sender's delegation by msg.value
+    function increaseDelegation() external payable {
+        address delegator = msg.sender;
+
+        require(delegations[delegator].amount != 0, "delegation doesn't exist");
+        require(delegations[delegator].deactivatedTime == 0, "delegation is deactivated");
+        // previous rewards must be claimed because rewards calculation depends on current delegation amount
+        require(delegations[delegator].paidUntilEpoch == currentSealedEpoch, "not all rewards claimed");
+
+        uint256 to = delegations[delegator].toStakerID;
+
+        require(msg.value >= minDelegationIncrease(), "insufficient amount");
+        require(maxDelegatedLimit(stakers[to].stakeAmount) >= stakers[to].delegatedMe.add(msg.value), "staker's limit is exceeded");
+        require(stakers[to].deactivatedTime == 0, "staker is deactivated");
+        require(stakers[to].status == OK_STATUS, "staker should be active");
+
+        uint256 newAmount = delegations[delegator].amount.add(msg.value);
+
+        delegations[delegator].amount = newAmount;
+        stakers[to].delegatedMe = stakers[to].delegatedMe.add(msg.value);
+        delegationsTotalAmount = delegationsTotalAmount.add(msg.value);
+
+        emit IncreasedDelegation(delegator, to, newAmount, msg.value);
+
+        _syncDelegator(delegator);
+        _syncStaker(to);
     }
 
     function _calcTotalReward(uint256 stakerID, uint256 epoch) view public returns (uint256) {
@@ -536,7 +575,7 @@ contract Stakers is Ownable, StakersConstants {
         uint256 totalAmount = stakers[stakerID].stakeAmount;
         require(amount + minStake() <= totalAmount, "must leave at least minStake");
         uint256 newAmount = totalAmount - amount;
-        require((newAmount.mul(maxDelegatedRatio())).div(RATIO_UNIT) >= stakers[stakerID].delegatedMe, "too much delegations");
+        require(maxDelegatedLimit(newAmount) >= stakers[stakerID].delegatedMe, "too much delegations");
 
         require(withdrawalRequests[staker][wrID].amount == 0, "wrID already exists");
 
@@ -546,9 +585,9 @@ contract Stakers is Ownable, StakersConstants {
         withdrawalRequests[staker][wrID].epoch = currentEpoch();
         withdrawalRequests[staker][wrID].time = block.timestamp;
 
-        _syncStaker(stakerID);
-
         emit CreatedWithdrawRequest(staker, staker, stakerID, wrID, amount);
+
+        _syncStaker(stakerID);
     }
 
     event WithdrawnStake(uint256 indexed stakerID, uint256 penalty);
@@ -635,10 +674,10 @@ contract Stakers is Ownable, StakersConstants {
         withdrawalRequests[delegator][wrID].time = block.timestamp;
         withdrawalRequests[delegator][wrID].delegation = true;
 
+        emit CreatedWithdrawRequest(delegator, delegator, stakerID, wrID, amount);
+
         _syncDelegator(delegator);
         _syncStaker(stakerID);
-
-        emit CreatedWithdrawRequest(delegator, delegator, stakerID, wrID, amount);
     }
 
     event WithdrawnDelegation(address indexed delegator, uint256 indexed stakerID, uint256 penalty);
