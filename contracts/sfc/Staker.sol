@@ -183,6 +183,18 @@ contract Stakers is Ownable, StakersConstants {
 
     mapping(address => StashedRewards) public rewardsStash; // addr -> StashedRewards
 
+    struct WithdrawalRequest {
+        uint256 stakerID;
+        uint256 epoch;
+        uint256 time;
+
+        uint256 amount;
+
+        bool delegation;
+    }
+
+    mapping(address => mapping(uint256 => WithdrawalRequest)) public withdrawalRequests;
+
     /*
     Getters
     */
@@ -511,6 +523,34 @@ contract Stakers is Ownable, StakersConstants {
         emit DeactivatedStake(stakerID);
     }
 
+    event CreatedWithdrawRequest(address indexed auth, address indexed receiver, uint256 indexed stakerID, uint256 wrID, uint256 amount);
+
+    function prepareToWithdrawStakePartial(uint256 wrID, uint256 amount) external {
+        address payable staker = msg.sender;
+        uint256 stakerID = stakerIDs[staker];
+        require(stakers[stakerID].stakeAmount != 0, "staker doesn't exist");
+        require(stakers[stakerID].deactivatedTime == 0, "staker is deactivated");
+        require(amount != 0, "zero amount");
+
+        // don't allow to withdraw full as a request, because amount==0 originally meant "not existing"
+        uint256 totalAmount = stakers[stakerID].stakeAmount;
+        require(amount + minStake() <= totalAmount, "must leave at least minStake");
+        uint256 newAmount = totalAmount - amount;
+        require((newAmount.mul(maxDelegatedRatio())).div(RATIO_UNIT) >= stakers[stakerID].delegatedMe, "too much delegations");
+
+        require(withdrawalRequests[staker][wrID].amount == 0, "wrID already exists");
+
+        stakers[stakerID].stakeAmount -= amount;
+        withdrawalRequests[staker][wrID].stakerID = stakerID;
+        withdrawalRequests[staker][wrID].amount = amount;
+        withdrawalRequests[staker][wrID].epoch = currentEpoch();
+        withdrawalRequests[staker][wrID].time = block.timestamp;
+
+        _syncStaker(stakerID);
+
+        emit CreatedWithdrawRequest(staker, staker, stakerID, wrID, amount);
+    }
+
     event WithdrawnStake(uint256 indexed stakerID, uint256 penalty);
 
     function withdrawStake() external {
@@ -522,11 +562,15 @@ contract Stakers is Ownable, StakersConstants {
 
         uint256 stake = stakers[stakerID].stakeAmount;
         uint256 penalty = 0;
-        bool isCheater = stakers[stakerID].status & CHEATER_MASK != 0;
+        uint256 status = stakers[stakerID].status;
+        bool isCheater = status & CHEATER_MASK != 0;
         delete stakers[stakerID];
         delete stakerMetadata[stakerID];
         delete stakerIDs[staker];
 
+        if (status != 0) {
+            stakers[stakerID].status = status; // write status back into storage
+        }
         stakersNum--;
         stakeTotalAmount = stakeTotalAmount.sub(stake);
         // It's important that we transfer after erasing (protection against Re-Entrancy)
@@ -541,8 +585,8 @@ contract Stakers is Ownable, StakersConstants {
         emit WithdrawnStake(stakerID, penalty);
     }
 
-    event PreparedToWithdrawDelegation(address indexed from, uint256 indexed stakerID); // previous name for DeactivatedDelegation
-    event DeactivatedDelegation(address indexed from, uint256 indexed stakerID);
+    event PreparedToWithdrawDelegation(address indexed delegator, uint256 indexed stakerID); // previous name for DeactivatedDelegation
+    event DeactivatedDelegation(address indexed delegator, uint256 indexed stakerID);
 
     // deactivate delegation, to be able to withdraw later
     function prepareToWithdrawDelegation() external {
@@ -554,6 +598,7 @@ contract Stakers is Ownable, StakersConstants {
         delegations[from].deactivatedTime = block.timestamp;
         uint256 stakerID = delegations[from].toStakerID;
         uint256 delegatedAmount = delegations[from].amount;
+
         if (stakers[stakerID].stakeAmount != 0) {
             // if staker haven't withdrawn
             stakers[stakerID].delegatedMe = stakers[stakerID].delegatedMe.sub(delegatedAmount);
@@ -562,31 +607,109 @@ contract Stakers is Ownable, StakersConstants {
         emit DeactivatedDelegation(from, stakerID);
     }
 
-    event WithdrawnDelegation(address indexed from, uint256 indexed stakerID, uint256 penalty);
+    function prepareToWithdrawDelegationPartial(uint256 wrID, uint256 amount) external {
+        address payable delegator = msg.sender;
+        require(delegations[delegator].amount != 0, "delegation doesn't exist");
+        require(delegations[delegator].deactivatedTime == 0, "delegation is deactivated");
+        // previous rewards must be claimed because rewards calculation depends on current delegation amount
+        require(delegations[delegator].paidUntilEpoch == currentSealedEpoch, "not all rewards claimed");
+        require(amount != 0, "zero amount");
+
+        // don't allow to withdraw full as a request, because amount==0 originally meant "not existing"
+        uint256 stakerID = delegations[delegator].toStakerID;
+        uint256 totalAmount = delegations[delegator].amount;
+        require(amount + minDelegation() <= totalAmount, "must leave at least minDelegation");
+
+        require(withdrawalRequests[delegator][wrID].amount == 0, "wrID already exists");
+
+        if (stakers[stakerID].stakeAmount != 0) {
+            // if staker haven't withdrawn
+            stakers[stakerID].delegatedMe = stakers[stakerID].delegatedMe.sub(amount);
+        }
+
+
+        delegations[delegator].amount -= amount;
+        withdrawalRequests[delegator][wrID].stakerID = stakerID;
+        withdrawalRequests[delegator][wrID].amount = amount;
+        withdrawalRequests[delegator][wrID].epoch = currentEpoch();
+        withdrawalRequests[delegator][wrID].time = block.timestamp;
+        withdrawalRequests[delegator][wrID].delegation = true;
+
+        _syncDelegator(delegator);
+        _syncStaker(stakerID);
+
+        emit CreatedWithdrawRequest(delegator, delegator, stakerID, wrID, amount);
+    }
+
+    event WithdrawnDelegation(address indexed delegator, uint256 indexed stakerID, uint256 penalty);
 
     function withdrawDelegation() external {
-        address payable from = msg.sender;
-        require(delegations[from].deactivatedTime != 0, "delegation wasn't deactivated");
-        require(block.timestamp >= delegations[from].deactivatedTime + delegationLockPeriodTime(), "not enough time passed");
-        require(currentEpoch() >= delegations[from].deactivatedEpoch + delegationLockPeriodEpochs(), "not enough epochs passed");
-        uint256 stakerID = delegations[from].toStakerID;
+        address payable delegator = msg.sender;
+        require(delegations[delegator].deactivatedTime != 0, "delegation wasn't deactivated");
+        require(block.timestamp >= delegations[delegator].deactivatedTime + delegationLockPeriodTime(), "not enough time passed");
+        require(currentEpoch() >= delegations[delegator].deactivatedEpoch + delegationLockPeriodEpochs(), "not enough epochs passed");
+        uint256 stakerID = delegations[delegator].toStakerID;
         uint256 penalty = 0;
         bool isCheater = stakers[stakerID].status & CHEATER_MASK != 0;
-        uint256 delegatedAmount = delegations[from].amount;
-        delete delegations[from];
+        uint256 delegatedAmount = delegations[delegator].amount;
+        delete delegations[delegator];
 
         delegationsNum--;
         delegationsTotalAmount = delegationsTotalAmount.sub(delegatedAmount);
         // It's important that we transfer after erasing (protection against Re-Entrancy)
         if (isCheater == false) {
-            from.transfer(delegatedAmount);
+            delegator.transfer(delegatedAmount);
         } else {
             penalty = delegatedAmount;
         }
 
         slashedDelegationsTotalAmount = slashedDelegationsTotalAmount.add(penalty);
 
-        emit WithdrawnDelegation(from, stakerID, penalty);
+        emit WithdrawnDelegation(delegator, stakerID, penalty);
+    }
+
+    event WithdrawnByRequest(address indexed auth, address indexed receiver, uint256 indexed stakerID, uint256 wrID, uint256 penalty);
+
+    function withdrawByRequest(uint256 wrID) external {
+        address auth = msg.sender;
+        address payable receiver = msg.sender;
+        require(withdrawalRequests[auth][wrID].time != 0, "request doesn't exist");
+        bool delegation = withdrawalRequests[auth][wrID].delegation;
+
+        if (delegation) {
+            require(block.timestamp >= withdrawalRequests[auth][wrID].time + delegationLockPeriodTime(), "not enough time passed");
+            require(currentEpoch() >= withdrawalRequests[auth][wrID].epoch + delegationLockPeriodEpochs(), "not enough epochs passed");
+        } else {
+            require(block.timestamp >= withdrawalRequests[auth][wrID].time + stakeLockPeriodTime(), "not enough time passed");
+            require(currentEpoch() >= withdrawalRequests[auth][wrID].epoch + stakeLockPeriodEpochs(), "not enough epochs passed");
+        }
+
+        uint256 stakerID = withdrawalRequests[auth][wrID].stakerID;
+        uint256 penalty = 0;
+        bool isCheater = stakers[stakerID].status & CHEATER_MASK != 0;
+        uint256 amount = withdrawalRequests[auth][wrID].amount;
+        delete withdrawalRequests[auth][wrID];
+
+        if (delegation) {
+            delegationsTotalAmount = delegationsTotalAmount.sub(amount);
+        } else {
+            stakeTotalAmount = stakeTotalAmount.sub(amount);
+        }
+
+        // It's important that we transfer after erasing (protection against Re-Entrancy)
+        if (isCheater == false) {
+            receiver.transfer(amount);
+        } else {
+            penalty = amount;
+        }
+
+        if (delegation) {
+            slashedDelegationsTotalAmount = slashedDelegationsTotalAmount.add(penalty);
+        } else {
+            slashedStakeTotalAmount = slashedStakeTotalAmount.add(penalty);
+        }
+
+        emit WithdrawnByRequest(auth, receiver, stakerID, wrID, penalty);
     }
 
     function updateGasPowerAllocationRate(uint256 short, uint256 long) onlyOwner external {
