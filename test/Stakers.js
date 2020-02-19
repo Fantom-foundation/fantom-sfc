@@ -403,7 +403,7 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
         {
             time.increase(86400 * 7);
             await this.stakers._makeEpochSnapshots(10000);
-            await this.stakers._makeEpochSnapshots(10000;
+            await this.stakers._makeEpochSnapshots(10000);
             await this.stakers._makeEpochSnapshots(10000);
         }
         await expectRevert(this.stakers.prepareToWithdrawDelegation({from: thirdDepositor}), 'not all rewards claimed');
