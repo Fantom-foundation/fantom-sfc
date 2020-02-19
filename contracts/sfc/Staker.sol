@@ -912,6 +912,7 @@ contract TestStakers is Stakers {
 
 contract UnitTestStakers is Stakers {
     uint256[] public stakerIDsArr;
+    bool public _rewardsAllowed = true;
 
     function _baseRewardPerSecond() public pure returns (uint256) {
         return 0.0000000001 * 1e18;
@@ -995,7 +996,11 @@ contract UnitTestStakers is Stakers {
         delegations[msg.sender].paidUntilEpoch = currentSealedEpoch;
     }
 
+    function setRewardsAllowance(bool allowed) public {
+        _rewardsAllowed = allowed;
+    }
+
     function rewardsAllowed() public view returns (bool) {
-        return true;
+        return _rewardsAllowed;
     }
 }

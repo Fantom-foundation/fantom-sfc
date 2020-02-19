@@ -420,6 +420,7 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
     });
 
     it('test getters', async () => {
+        // as far as some getters are functions it is assumed that we should test output values to enshure that no changes were made occasuonaly 
         const lockTime = 60 * 60 * 24 * 7;
         const unlockPeriod = 60 * 60 * 24 * 30 * 6;
         const tg = new subs.TestingGetters(15, 100, 30, lockTime, lockTime, lockTime * 100, unlockPeriod, 3, 1577419000, 80, 3, 256);
@@ -451,8 +452,103 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
 
     it('bondedTargetRewardUnlock test', async () => {
         let unbondingStartDate = await this.stakers.unbondingStartDate();
-        console.log("unbondingStartDate", unbondingStartDate)
         const bondedTargetRewardUnlock = await this.stakers.bondedTargetRewardUnlock();
-        console.log("bondedTargetRewardUnlock", bondedTargetRewardUnlock.toString())
+        expect(bondedTargetRewardUnlock).to.be.bignumber.equal(new BN(692809));
+    })
+
+    it('updateStakerSfcAddress test', async () => {
+        await this.stakers._createStake({from: firstStaker, value: ether('1.0')});
+        await this.stakers._createStake({from: secondStaker, value: ether('1.0')});
+        const firstStakerID = await this.stakers.getStakerID(firstStaker);
+
+        await this.stakers.createDelegation(firstStakerID, {from: firstDepositor, value: ether('1.0')});
+
+        await expectRevert(this.stakers.updateStakerSfcAddress(firstDepositor, {from: firstDepositor}), "already delegating");
+        await expectRevert(this.stakers.updateStakerSfcAddress(thirdDepositor, {from: firstDepositor}), "staker doesn't exist");
+        await expectRevert(this.stakers.updateStakerSfcAddress(firstStaker, {from: firstStaker}), 'the same address');
+        await this.stakers.updateStakerSfcAddress(thirdStaker, {from: firstStaker});
+        
+        await expectRevert(this.stakers.updateStakerSfcAddress(thirdStaker, {from: secondStaker}), 'address already used');
+        await this.stakers.updateStakerSfcAddress(firstStaker, {from: thirdStaker});
+        // since StakerIDs are internal we cannot verify it changed correctly
+    })
+
+    it('test increase delegation', async () => {
+        await this.stakers._createStake({from: firstStaker, value: ether('1.0')});
+        const firstStakerID = await this.stakers.getStakerID(firstStaker);
+        await this.stakers.createDelegation(firstStakerID, {from: firstDepositor, value: ether('1.0')});
+        let delegationTotalPrev = await this.stakers.delegationsTotalAmount.call();
+        let delegationPrev = await this.stakers.delegations.call(firstDepositor)
+
+        await expectRevert(this.stakers.increaseDelegation({from: secondDepositor}), "delegation doesn't exist");
+        await expectRevert(this.stakers.increaseDelegation({from: firstDepositor, value: new BN(1)}), "insufficient amount");
+        const delegationIncrement = ether('1.0');
+        await this.stakers.increaseDelegation({from: firstDepositor, value: delegationIncrement});
+        delegationTotal = await this.stakers.delegationsTotalAmount.call();
+        expect(delegationTotal).to.be.bignumber.equal(delegationTotalPrev.add(delegationIncrement));
+        delegation = await this.stakers.delegations.call(firstDepositor);
+        expect(delegation.amount).to.be.bignumber.equal(delegationPrev.amount.add(delegationIncrement));
+    })
+
+    it('test unstashRewards', async () => {
+        await this.stakers._createStake({from: firstStaker, value: ether('1.0')});
+        await expectRevert(this.stakers.unstashRewards({from: firstStaker}), "no rewards");
+        const firstStakerID = await this.stakers.getStakerID(firstStaker);
+
+        const delEth = ether('5.0');
+        let prevBlnc = await balance.current(firstStaker);
+        await this.stakers.createDelegation(firstStakerID, {from: firstDepositor, value: delEth});
+        await this.stakers._makeEpochSnapshots(1);
+        await this.stakers.setRewardsAllowance(false);
+        expect(await this.stakers.rewardsAllowed()).to.be.false;
+        await this.stakers.claimValidatorRewards(new BN('1'), {from: firstStaker});
+
+        await expectRevert(this.stakers.unstashRewards({from: firstStaker}), "before minimum unlock period");
+        await this.stakers.setRewardsAllowance(true);
+        expect(await this.stakers.rewardsAllowed()).to.be.true;
+        await this.stakers.unstashRewards({from: firstStaker});
+        let blnc = await balance.current(firstStaker);
+        expect(prevBlnc).to.be.bignumber.most(blnc);
+    })
+
+    it("test prepareToWithdrawStakePartial", async () => {
+        await expectRevert(this.stakers.prepareToWithdrawStakePartial(0, 0, {from: firstStaker}), "staker doesn't exist");
+        await this.stakers._createStake({from: firstStaker, value: ether('5.0')});
+        const firstStakerID = await this.stakers.getStakerID(firstStaker);
+        await this.stakers._createStake({from: secondStaker, value: ether('1.0')});
+        await this.stakers.prepareToWithdrawStake({from: secondStaker})
+        await expectRevert(this.stakers.prepareToWithdrawStakePartial(0, 0, {from: secondStaker}), "staker is deactivated");
+        await expectRevert(this.stakers.prepareToWithdrawStakePartial(0, 0, {from: firstStaker}), "too small amount");
+        const amount = ether("3.0");
+
+        const currEpoch = await this.stakers.currentEpoch();
+        await this.stakers.prepareToWithdrawStakePartial(0, amount, {from: firstStaker})
+        const wReq = await this.stakers.withdrawalRequests.call(firstStaker, 0);
+        expect(wReq.stakerID).to.be.bignumber.equal(firstStakerID);
+        expect(wReq.amount).to.be.bignumber.equal(amount);
+        expect(wReq.epoch).to.be.bignumber.equal(currEpoch);
+
+        await expectRevert(this.stakers.withdrawByRequest(0), "not enough time passed");
+    })
+
+    it("test prepareToWithdrawDelegationPartial", async () => {
+        await expectRevert(this.stakers.prepareToWithdrawDelegationPartial(0, 0, {from: firstDepositor}), "delegation doesn't exist");
+        await this.stakers._createStake({from: firstStaker, value: ether('10.0')});
+        const firstStakerID = await this.stakers.getStakerID(firstStaker);
+        await this.stakers.createDelegation(firstStakerID, {from: firstDepositor, value: ether('5.0')});
+        await this.stakers.createDelegation(firstStakerID, {from: secondDepositor, value: ether('1.0')});
+        
+        await this.stakers.prepareToWithdrawDelegation({from: secondDepositor});
+        await expectRevert(this.stakers.prepareToWithdrawDelegationPartial(0, 0, {from: secondDepositor}), "delegation is deactivated");
+        await expectRevert(this.stakers.prepareToWithdrawDelegationPartial(0, 0, {from: firstDepositor}), "too small amount");
+
+        const amount = ether("3.0");
+
+        const currEpoch = await this.stakers.currentEpoch();
+        await this.stakers.prepareToWithdrawDelegationPartial(0, amount, {from: firstDepositor})
+        const wReq = await this.stakers.withdrawalRequests.call(firstDepositor, 0);
+        expect(wReq.stakerID).to.be.bignumber.equal(firstStakerID);
+        expect(wReq.amount).to.be.bignumber.equal(amount);
+        expect(wReq.epoch).to.be.bignumber.equal(currEpoch);
     })
 });
