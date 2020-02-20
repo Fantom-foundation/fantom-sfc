@@ -419,7 +419,7 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
         expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('3.0'));
     });
 
-    it('test getters', async () => {
+    it('checking getters', async () => {
         // as far as some getters are functions it is assumed that we should test output values to enshure that no changes were made occasuonaly 
         const lockTime = 60 * 60 * 24 * 7;
         const unlockPeriod = 60 * 60 * 24 * 30 * 6;
@@ -450,13 +450,15 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
         expect(maxStakerMetadataSize).to.be.bignumber.equal(tg.maxStakerMetadataSize);
     })
 
-    it('bondedTargetRewardUnlock test', async () => {
+    it('checking bondedTargetRewardUnlock', async () => {
         let unbondingStartDate = await this.stakers.unbondingStartDate();
         const bondedTargetRewardUnlock = await this.stakers.bondedTargetRewardUnlock();
-        expect(bondedTargetRewardUnlock).to.be.bignumber.equal(new BN(692809));
+        
+        // we need to get current block timestamp to verify bondedTargetRewardUnlock output
+        // should web3 be considered?
     })
 
-    it('updateStakerSfcAddress test', async () => {
+    it('checking updateStakerSfcAddress', async () => {
         await this.stakers._createStake({from: firstStaker, value: ether('1.0')});
         await this.stakers._createStake({from: secondStaker, value: ether('1.0')});
         const firstStakerID = await this.stakers.getStakerID(firstStaker);
@@ -473,7 +475,7 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
         // since StakerIDs are internal we cannot verify it changed correctly
     })
 
-    it('test increase delegation', async () => {
+    it('checking increase delegation', async () => {
         await this.stakers._createStake({from: firstStaker, value: ether('1.0')});
         const firstStakerID = await this.stakers.getStakerID(firstStaker);
         await this.stakers.createDelegation(firstStakerID, {from: firstDepositor, value: ether('1.0')});
@@ -490,7 +492,7 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
         expect(delegation.amount).to.be.bignumber.equal(delegationPrev.amount.add(delegationIncrement));
     })
 
-    it('test unstashRewards', async () => {
+    it('checking unstashRewards', async () => {
         await this.stakers._createStake({from: firstStaker, value: ether('1.0')});
         await expectRevert(this.stakers.unstashRewards({from: firstStaker}), "no rewards");
         const firstStakerID = await this.stakers.getStakerID(firstStaker);
@@ -511,7 +513,7 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
         expect(prevBlnc).to.be.bignumber.most(blnc);
     })
 
-    it("test prepareToWithdrawStakePartial", async () => {
+    it("checking prepareToWithdrawStakePartial", async () => {
         await expectRevert(this.stakers.prepareToWithdrawStakePartial(0, 0, {from: firstStaker}), "staker doesn't exist");
         await this.stakers._createStake({from: firstStaker, value: ether('5.0')});
         const firstStakerID = await this.stakers.getStakerID(firstStaker);
@@ -531,7 +533,7 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
         await expectRevert(this.stakers.withdrawByRequest(0), "not enough time passed");
     })
 
-    it("test prepareToWithdrawDelegationPartial", async () => {
+    it("checking prepareToWithdrawDelegationPartial", async () => {
         await expectRevert(this.stakers.prepareToWithdrawDelegationPartial(0, 0, {from: firstDepositor}), "delegation doesn't exist");
         await this.stakers._createStake({from: firstStaker, value: ether('10.0')});
         const firstStakerID = await this.stakers.getStakerID(firstStaker);
