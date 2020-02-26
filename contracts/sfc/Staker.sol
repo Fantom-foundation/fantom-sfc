@@ -194,7 +194,7 @@ contract Stakers is Ownable, StakersConstants {
         uint256 amount;
     }
 
-    mapping(address => StashedRewards) public rewardsStash; // addr -> StashedRewards
+    mapping(address => mapping(uint256 => StashedRewards)) public rewardsStash; // addr, stashID -> StashedRewards
 
     struct WithdrawalRequest {
         uint256 stakerID;
@@ -343,9 +343,9 @@ contract Stakers is Ownable, StakersConstants {
         stakerIDs[stakers[stakerID].dagAddress] = stakerID; // it's possible dagAddress == oldSfcAddress
 
         // redirect rewards stash
-        if (rewardsStash[oldSfcAddress].amount != 0) {
-            rewardsStash[newSfcAddress] = rewardsStash[oldSfcAddress];
-            delete rewardsStash[oldSfcAddress];
+        if (rewardsStash[oldSfcAddress][0].amount != 0) {
+            rewardsStash[newSfcAddress][0] = rewardsStash[oldSfcAddress][0];
+            delete rewardsStash[oldSfcAddress][0];
         }
 
         emit UpdatedStakerSfcAddress(stakerID, oldSfcAddress, newSfcAddress);
@@ -547,7 +547,7 @@ contract Stakers is Ownable, StakersConstants {
         if (rewardsAllowed()) {
             addr.transfer(amount);
         } else {
-            rewardsStash[addr].amount = rewardsStash[addr].amount.add(amount);
+            rewardsStash[addr][0].amount = rewardsStash[addr][0].amount.add(amount);
         }
     }
 
@@ -605,11 +605,11 @@ contract Stakers is Ownable, StakersConstants {
     function unstashRewards() external {
         address auth = msg.sender;
         address payable receiver = msg.sender;
-        uint256 rewards = rewardsStash[auth].amount;
+        uint256 rewards = rewardsStash[auth][0].amount;
         require(rewards != 0, "no rewards");
         require(rewardsAllowed(), "before minimum unlock period");
 
-        delete rewardsStash[auth];
+        delete rewardsStash[auth][0];
 
         // It's important that we transfer after erasing (protection against Re-Entrancy)
         receiver.transfer(rewards);
@@ -629,12 +629,12 @@ contract Stakers is Ownable, StakersConstants {
     function _mayBurnRewardsOnDeactivation(bool isDelegation, uint256 stakerID, address addr, uint256 withdrawAmount, uint256 totalAmount) internal {
         if (_rewardsBurnableOnDeactivation(isDelegation, stakerID)) {
             uint256 leftAmount = totalAmount.sub(withdrawAmount);
-            uint256 oldStash = rewardsStash[addr].amount;
+            uint256 oldStash = rewardsStash[addr][0].amount;
             uint256 newStash = oldStash.mul(leftAmount).div(totalAmount);
             if (newStash == 0) {
-                delete rewardsStash[addr];
+                delete rewardsStash[addr][0];
             } else {
-                rewardsStash[addr].amount = newStash;
+                rewardsStash[addr][0].amount = newStash;
             }
             if (newStash != oldStash) {
                 emit BurntRewardStash(addr, stakerID, isDelegation, oldStash - newStash);
