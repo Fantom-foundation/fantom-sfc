@@ -14,14 +14,14 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
     beforeEach(async () => {
         this.firstEpoch = 0;
         this.stakers = await UnitTestStakers.new(this.firstEpoch);
-        this.validatorComission = new BN('150000'); // 0.15
+        this.validatorCommission = new BN('150000'); // 0.15
     });
 
     it('checking Staker parameters', async () => {
         expect(await this.stakers.minStake.call()).to.be.bignumber.equal(ether('1.0'));
         expect(await this.stakers.minDelegation.call()).to.be.bignumber.equal(ether('1.0'));
         expect(await this.stakers.maxDelegatedRatio.call()).to.be.bignumber.equal(new BN('15000000'));
-        expect(await this.stakers.validatorCommission.call()).to.be.bignumber.equal(this.validatorComission);
+        expect(await this.stakers.validatorCommission.call()).to.be.bignumber.equal(this.validatorCommission);
         expect(await this.stakers.stakeLockPeriodTime.call()).to.be.bignumber.equal(new BN('86400').mul(new BN('7')));
         expect(await this.stakers.stakeLockPeriodEpochs.call()).to.be.bignumber.equal(new BN('3'));
         expect(await this.stakers.delegationLockPeriodTime.call()).to.be.bignumber.equal(new BN('86400').mul(new BN('7')));
@@ -172,9 +172,9 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
         let thirdStakerID = await this.stakers.getStakerID(thirdStaker);
         await this.stakers._makeEpochSnapshots(10000);
 
-        expect(await this.stakers._calcValidatorEpochReward(firstStakerID, new BN('1'), this.validatorComission)).to.be.bignumber.equal(ether('0.267647249999999983'));
-        expect(await this.stakers._calcValidatorEpochReward(secondStakerID, new BN('1'), this.validatorComission)).to.be.bignumber.equal(ether('0.082353000000000076'));
-        expect(await this.stakers._calcValidatorEpochReward(thirdStakerID, new BN('1'), this.validatorComission)).to.be.bignumber.equal(ether('0'));
+        expect(await this.stakers._calcValidatorEpochReward(firstStakerID, new BN('1'), this.validatorCommission)).to.be.bignumber.equal(ether('0.267647249999999983'));
+        expect(await this.stakers._calcValidatorEpochReward(secondStakerID, new BN('1'), this.validatorCommission)).to.be.bignumber.equal(ether('0.082353000000000076'));
+        expect(await this.stakers._calcValidatorEpochReward(thirdStakerID, new BN('1'), this.validatorCommission)).to.be.bignumber.equal(ether('0'));
 
     });
 
@@ -192,8 +192,8 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
         let thirdStakerID = await this.stakers.getStakerID(thirdStaker);
         await this.stakers._makeEpochSnapshots(10000);
 
-        expect(await this.stakers._calcDelegationEpochReward(firstStakerID, new BN('1'), ether('15.0'), this.validatorComission)).to.be.bignumber.equal(ether('1.050000749999999937'));
-        expect(await this.stakers._calcDelegationEpochReward(thirdStakerID, new BN('1'), ether('0'), this.validatorComission)).to.be.bignumber.equal(ether('0'));
+        expect(await this.stakers._calcDelegationEpochReward(firstStakerID, new BN('1'), ether('15.0'), this.validatorCommission)).to.be.bignumber.equal(ether('1.050000749999999937'));
+        expect(await this.stakers._calcDelegationEpochReward(thirdStakerID, new BN('1'), ether('0'), this.validatorCommission)).to.be.bignumber.equal(ether('0'));
     });
 
     it('checking claimDelegationRewards function', async () => {
@@ -438,8 +438,8 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
         let maxStakerMetadataSize = await this.stakers.maxStakerMetadataSize();
         
         expect(maxDelegatedRatio).to.be.bignumber.equal(tg.expectedMaxDelegationRatio(ratioUnit));
-        expect(validatorCommission).to.be.bignumber.equal(tg.expectedValidatorComission(ratioUnit));
-        expect(contractCommission).to.be.bignumber.equal(tg.expectedContractComission(ratioUnit));
+        expect(validatorCommission).to.be.bignumber.equal(tg.expectedValidatorCommission(ratioUnit));
+        expect(contractCommission).to.be.bignumber.equal(tg.expectedContractCommission(ratioUnit));
         expect(stakeLockPeriodTime).to.be.bignumber.equal(tg.lockPeriodTime);
         expect(delegationLockPeriodTime).to.be.bignumber.equal(tg.delegationLockPeriodTime);
         expect(stakeLockPeriodEpochs).to.be.bignumber.equal(tg.stakeLockPeriodEpochs);
@@ -552,5 +552,10 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
         expect(wReq.stakerID).to.be.bignumber.equal(firstStakerID);
         expect(wReq.amount).to.be.bignumber.equal(amount);
         expect(wReq.epoch).to.be.bignumber.equal(currEpoch);
+    })
+
+    it("temp", async ()=> {
+        const x = await this.stakers.stakersNum.call()
+        console.log("stakersNum at start", x.toString())
     })
 });

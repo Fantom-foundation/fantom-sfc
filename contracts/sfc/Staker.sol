@@ -728,6 +728,12 @@ contract Stakers is Ownable, StakersConstants {
         emit WithdrawnStake(stakerID, penalty);
     }
 
+    event AdvanceEpoch();
+
+    function advanceEpoch() external {
+        emit AdvanceEpoch();
+    }
+
     event PreparedToWithdrawDelegation(address indexed delegator, uint256 indexed stakerID); // previous name for DeactivatedDelegation
     event DeactivatedDelegation(address indexed delegator, uint256 indexed stakerID);
 
