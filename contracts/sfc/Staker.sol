@@ -789,9 +789,9 @@ contract Stakers is Ownable, StakersConstants {
         _syncStaker(stakerID);
     }
 
-    event WithdrawnDelegation(address indexed delegator, uint256 indexed stakerID, uint256 penalty);
+    event PartialWithdrawnDelegation(address indexed delegator, uint256 indexed stakerID, uint256 penalty);
 
-    function withdrawDelegation() external {
+    function PartialWithdrawDelegation() external {
         address payable delegator = msg.sender;
         require(delegations[delegator].deactivatedTime != 0, "delegation wasn't deactivated");
         uint256 stakerID = delegations[delegator].toStakerID;
@@ -816,12 +816,12 @@ contract Stakers is Ownable, StakersConstants {
 
         slashedDelegationsTotalAmount = slashedDelegationsTotalAmount.add(penalty);
 
-        emit WithdrawnDelegation(delegator, stakerID, penalty);
+        emit PartialWithdrawnDelegation(delegator, stakerID, penalty);
     }
 
-    event WithdrawnByRequest(address indexed auth, address indexed receiver, uint256 indexed stakerID, uint256 wrID, bool delegation, uint256 penalty);
+    event PartialWithdrawnByRequest(address indexed auth, address indexed receiver, uint256 indexed stakerID, uint256 wrID, bool delegation, uint256 penalty);
 
-    function withdrawByRequest(uint256 wrID) external {
+    function PartialWithdrawByRequest(uint256 wrID) external {
         address auth = msg.sender;
         address payable receiver = msg.sender;
         require(withdrawalRequests[auth][wrID].time != 0, "request doesn't exist");
@@ -861,7 +861,7 @@ contract Stakers is Ownable, StakersConstants {
             slashedStakeTotalAmount = slashedStakeTotalAmount.add(penalty);
         }
 
-        emit WithdrawnByRequest(auth, receiver, stakerID, wrID, delegation, penalty);
+        emit PartialWithdrawnByRequest(auth, receiver, stakerID, wrID, delegation, penalty);
     }
 
     function updateGasPowerAllocationRate(uint256 short, uint256 long) onlyOwner external {
