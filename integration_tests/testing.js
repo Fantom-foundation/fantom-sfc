@@ -1,5 +1,7 @@
-const {DefaultTests} = require('./defaultTests');const Web3 = require('web3');
+const {DefaultTests} = require('./defaultTests');
+const Web3 = require('web3');
 const commander = require('commander');
+const keythereum = require("keythereum-pure-js");
 const config = require('./config');
 const program = new commander.Command();
 
@@ -13,12 +15,14 @@ program
   .option('-c, --contractAddress <type>', 'sets contract address. if not set 0xfc00face00000000000000000000000000000000 is used')
   .option('-b, --before run special "before updetes" tests', 'desc')
   .option('-a, --after', 'run special "after updetes" tests')
-  .option('-u, --update run special "after updetes" tests', 'desc');
+  .option('-u, --update run special "after updetes" tests', 'desc')
+  .option('-o, --keyObject <type>', 'payer key object, use only with command --payer')
+  .option('-w, --password <type>', 'payer password, yse only with command --payer');
 
 program.parse(process.argv);
 
 const defaultHost = "localhost";
-const defaultPort = "18545"
+const defaultPort = "18545";
 const defaultContractAddress = '0xfc00face00000000000000000000000000000000';
 let host = program.host ? program.host : defaultHost;
 let port = program.port ? program.port : defaultPort;
@@ -27,10 +31,20 @@ let contractAddress = program.contractAddress ? program.contractAddress : defaul
 
 let payer;
 if (program.payer) {
-  payer = config.payer;
+    if (program.keyObject && program.password) {
+        let keyObject = JSON.parse(program.keyObject);
+        payer = {
+            keyObject: keyObject,
+            privateKey: keythereum.recover(program.password.toString(), keyObject).toString('hex'),
+            address: `0x${keyObject.address}`,
+        };
+    } else {
+        payer = config.payer;
+    }
+
 }
 
-console.log("payer:", payer)
+console.log('payer:', payer)
 const testHandler = new DefaultTests(endpoint, contractAddress, payer)
 
 
