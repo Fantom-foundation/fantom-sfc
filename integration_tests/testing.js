@@ -17,7 +17,7 @@ program
   .option('-a, --after', 'run special "after updetes" tests')
   .option('-u, --update run special "after updetes" tests', 'desc')
   .option('-o, --keyObject <type>', 'payer key object, use only with command --payer')
-  .option('-w, --password <type>', 'payer password, yse only with command --payer');
+  .option('-w, --password <type>', 'payer password, use only with command --payer');
 
 program.parse(process.argv);
 
