@@ -8,6 +8,11 @@ import "./Constants.sol";
 contract Governance is Constants {
     using SafeMath for uint256;
 
+    struct Choise {
+        uint256 type;
+        uint256 votes;
+    }
+
     struct ProposalDeadlint {
         uint256 id;
         uint256 deadline;
@@ -28,6 +33,11 @@ contract Governance is Constants {
         uint256 status; // status is a bitmask, check out "constants" for a further info
         uint256 minDeposit;
         uint256 deposit;
+        uint256 permissionsRequired; // might be a bitmask?
+        uint256 minVotesRequired;
+        uint256 totalVotes;
+        Choise[] possibleChoises;
+
         ProposalTimelines timelines
 
         string description;
@@ -47,6 +57,7 @@ contract Governance is Constants {
 
     address ADMIN;
 
+    mapping(uint256 => uint256) public deadlineIndex;
     mapping(uint256 => uint256) public deadlineMap;
     mapping(uint256 => Proposal) public proposals;
     mapping(address => []uint256)) public proposalCreators; // maps proposal id to a voter and its voting power
@@ -61,10 +72,46 @@ contract Governance is Constants {
         return 1;
     }
 
+    function accountVotingPower(address acc, uint256 proposalId) public view returns (uint256) {
+        return 1;
+    }
+
+    function ensureAccountCanVote(address acc) {
+        if (acc == ADMIN) {
+            return;
+        }
+
+        return;
+    }
+
+    function vote(uint256 proposalId, uint256 choise) public {
+        ensureAccountCanVote(msg.sender);
+
+        Proposal storage prop = proposals[proposalId];
+        require(prop.id == proposalId, "cannot find proposal with a passed id");
+        require(statusActiveVoting(prop.status), "cannot vote for a given proposal");
+
+        for (int8 i=0; i<prop.possibleChoises.length; i++) {
+            if (prop.possibleChoises[i].id == choise) {
+                prop.possibleChoises[i].votes += accountVotingPower(msg.sender, prop.id);
+                prop.possibleChoises[i].totalVotes++;
+                return;
+            }
+        }
+        revert("could not find choise among proposal possible choises");
+    }
+
+    function handleDeadlines() {}
+
+    function finalizeProposalVoting(uint256 proposalId) {
+
+    }
+
     function canCreateProposal(address addr) public returns (bool) {
         if (addr == ADMIN) {
             return true;
         }
+
         return proposalCreators[msg.sender].length < maxProposalsPerUser();
     }
 
