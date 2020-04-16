@@ -1,5 +1,5 @@
 
-pragma solidity ^0.5.0;
+pragma solidity ^0.6.0;
 
 import "./SafeMath.sol";
 
@@ -77,7 +77,7 @@ contract Constants {
         return status & STATUS_DEPOSITING_FAILED == STATUS_DEPOSITING_FAILED;
     }
 
-    function statusActiveVoting(uint256 status) internal pure returns (bool) {
+    function statusVoting(uint256 status) internal pure returns (bool) {
         return status & STATUS_VOTING == STATUS_VOTING;
     }
 
