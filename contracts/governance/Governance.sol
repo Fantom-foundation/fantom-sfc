@@ -95,22 +95,32 @@ contract Governance is Constants {
         require(prop.id == proposalId, "cannot find proposal with a passed id");
         require(statusVoting(prop.status), "cannot vote for a given proposal");
 
-        address[] memory delegatedAddresses = delegations[msg.sender][proposalId];
-        uint256 additionalVotingPower;
-        for (uint256 i = 0; i<delegatedAddresses.length; i++) {
-            additionalVotingPower = additionalVotingPower.add(accountVotingPower(msg.sender, prop.id));
-        }
-
-        prop.choises[choise] += accountVotingPower(msg.sender, prop.id).add(additionalVotingPower);
+        uint256 delegatedVotingPower = getDelegatedVotingPower(proposalId, msg.sender);
+        uint256 ownVotingPower = accountVotingPower(msg.sender, prop.id);
+        prop.choises[choise] += ownVotingPower.add(delegatedVotingPower);
 
         voters[msg.sender][proposalId] = choise;
         revert("could not find choise among proposal possible choises");
+    }
+
+    function getDelegatedVotingPower(uint256 proposalId, address voter) public {
+        address[] memory delegatedAddresses = delegations[msg.sender][proposalId];
+        uint256 additionalVotingPower;
+        for (uint256 i = 0; i<delegatedAddresses.length; i++) {
+            additionalVotingPower = additionalVotingPower.add(accountVotingPower(voter, prop.id));
+        }
+
+        return additionalVotingPower;
     }
 
     function cancelVote(uint256 proposalId) public {
         Proposal storage prop = proposals[proposalId];
         require(prop.votesCanBeCanceled, "votes cannot be canceled due to proposal settings");
         require(delegators[msg.sender][proposalId] == address(0), "sender has delegated his vote");
+
+        uint256 delegatedVotingPower = getDelegatedVotingPower(proposalId, msg.sender);
+        uint256 ownVotingPower = accountVotingPower(msg.sender, prop.id);
+        prop.choises[choise] -= ownVotingPower.add(delegatedVotingPower);
 
         voters[msg.sender][proposalId] = 0;
     }
@@ -258,7 +268,7 @@ contract Governance is Constants {
     }
 
     function finalizeProposalVoting(uint256 proposalId) internal {
-
+        
     }
 
     function pushNewProposal(Proposal memory prop) internal {

@@ -85,9 +85,16 @@ contract Constants is StatusConstants {
     uint256 constant IMMEDIATE_ACTION_MIN_DEPOSIT = 150;
     uint256 constant IMMEDIATE_ACTION_REQUIRED_DEPOSIT = 1500;
 
+    // temprorary constant
+    uint256 constant CANCEL_VOTE_FEE = 123;
+
     // temprorary timestamp constants
     uint256 constant DEPOSITING_PERIOD = 100000;
     uint256 constant VOTING_PERIOD = 100000;
+
+    function cancelVoteFee() public pure returns (uint256) {
+        return VOTING_PERIOD;
+    }
 
     function votingPeriod() public pure returns (uint256) {
         return VOTING_PERIOD;
