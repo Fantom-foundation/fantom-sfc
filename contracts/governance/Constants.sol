@@ -87,13 +87,18 @@ contract Constants is StatusConstants {
 
     // temprorary constant
     uint256 constant CANCEL_VOTE_FEE = 123;
+    uint256 constant CANCEL_DELEGATION_FEE = 123;
 
     // temprorary timestamp constants
     uint256 constant DEPOSITING_PERIOD = 100000;
     uint256 constant VOTING_PERIOD = 100000;
 
     function cancelVoteFee() public pure returns (uint256) {
-        return VOTING_PERIOD;
+        return CANCEL_VOTE_FEE;
+    }
+
+    function cancelDelegationFee() public pure returns (uint256) {
+        return CANCEL_DELEGATION_FEE;
     }
 
     function votingPeriod() public pure returns (uint256) {

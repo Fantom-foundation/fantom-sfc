@@ -60,10 +60,14 @@ contract Governance is Constants {
     address ADMIN;
 
     mapping(uint256 => uint256) deadlineIdxs;
+    // mapping(address => mapping(uint256 => uint256)) selfVotingPower;
+    mapping(address => mapping(uint256 => bool)) delegationAllowed;
+    mapping(address => mapping(uint256 => uint256)) delegatedVotingPower;
     mapping(uint256 => uint256[]) proposalsAtDeadline;
     mapping(uint256 => Proposal) proposals;
     mapping(address => mapping(uint256 => address)) delegators; // delegation from address to another address at some proposalId
-    mapping(address => mapping(uint256 => address[])) delegations; // delegation from address to another address at some proposalId
+    mapping(address => mapping(uint256 => address[])) delegations; // delegation from address to another address at some proposalId\
+    mapping(address => mapping(uint256 => uint256) delegatorsIdxs; // delegators' indexes at the end of delegations map
     mapping(address => uint256[]) proposalCreators; // maps proposal id to a voter and its voting power
     mapping(uint256 => mapping(address => uint256)) depositors; // maps proposal id to a sender and deposit
     mapping(address => mapping(uint256 => uint256)) voters; // maps proposal id to a voter and its voting power
@@ -85,6 +89,48 @@ contract Governance is Constants {
         return 1;
     }
 
+    function rejectDelegations(uint256 proposalId) public {
+        require(delegatedVotingPower[msg.sender][proposalId] == 0, "this address has already accepted delegation");
+        delegationAllowed[msg.sender][proposalId] = false;
+    }
+
+    function allowDelegations(uint256 proposalId) public {
+        require(canAcceptDelegations(msg.sender), "this address cannot accept delegations");
+        delegationAllowed[msg.sender][proposalId] = true;
+    }
+
+    function delegateVote(uint256 proposalId, address delegateTo) public {
+        Proposal storage prop = proposals[proposalId];
+
+        require(prop.id != 0, "proposal with a given id doesnt exist");
+        require(delegateTo != msg.sender, "cannot delegate vote to oneself");
+        require(delegators[msg.sender][proposalId] == address(0), "already delegated");
+        require(delegationAllowed[delegateTo], "address gave no permissions to accept delegations");
+        require(delegations[msg.sender][proposalId].length == 0, "this address has already accepted delegations");
+
+        uint256 ownVotingPower = accountVotingPower(msg.sender, prop.id);
+        require(ownVotingPower != 0, "account has no votes to delegate");
+
+        address[] storage delegators = delegations[delegateTo][prop.id];
+        delegators.push(msg.sender);
+        delegators[msg.sender][proposalId] = delegateTo;
+        delegatedVotingPower[delegateTo][proposalId] = ownVotingPower;
+        delegatorsIdxs[msg.sender][proposalId] = delegators.length-1;
+    }
+
+    function cancelDelegation(uint256 proposalId) {
+        uint256 delegIdx = delegatorsIdxs[msg.sender][proposalId];
+
+        delete delegators[msg.sender][proposalId];
+        delete delegatedVotingPower[delegateTo][proposalId];
+        address[] storage delegators = delegations[delegateTo][prop.id];
+        delegators[delegIdx] = delegators[delegators.length - 1];
+        address addrToShigt = delegators[delegators.length - 1];
+        delegatorsIdxs[addrToShigt][proposalId] = delegIdx;
+        delete delegatorsIdxs[msg.sender][proposalId];
+        delegators.length--;
+    }
+
     function vote(uint256 proposalId, uint256 choise) public {
         ensureAccountCanVote(msg.sender);
 
@@ -95,9 +141,9 @@ contract Governance is Constants {
         require(prop.id == proposalId, "cannot find proposal with a passed id");
         require(statusVoting(prop.status), "cannot vote for a given proposal");
 
-        uint256 delegatedVotingPower = getDelegatedVotingPower(proposalId, msg.sender);
+        uint256 delegPower = delegatedVotingPower[msg.sender, proposalId];
         uint256 ownVotingPower = accountVotingPower(msg.sender, prop.id);
-        prop.choises[choise] += ownVotingPower.add(delegatedVotingPower);
+        prop.choises[choise] += ownVotingPower.add(delegPower);
 
         voters[msg.sender][proposalId] = choise;
         revert("could not find choise among proposal possible choises");
@@ -246,12 +292,17 @@ contract Governance is Constants {
         emit ResolvedProposal(proposalId);
     }
 
-    function ensureAccountCanVote(address acc) internal {
-        if (acc == ADMIN) {
+    function ensureAccountCanVote(address addr) internal {
+        if (addr == ADMIN) {
             return;
         }
 
         return;
+    }
+
+    function canAcceptDelegations(address addr) internal returns(bool) {
+        // temprorary
+        return false;
     }
 
     function proceedToVoting(uint256 proposalId) internal {
