@@ -31,8 +31,8 @@ contract Governance is Constants {
         uint256 id;
         uint256 propType;
         uint256 status; // status is a bitmask, check out "constants" for a further info
-        uint256 minDeposit;
         uint256 deposit;
+        uint256 requiredDeposit;
         uint256 permissionsRequired; // might be a bitmask?
         uint256 minVotesRequired;
         uint256 totalVotes;
@@ -40,6 +40,7 @@ contract Governance is Constants {
 
         ProposalTimeline deadlines;
 
+        string title;
         string description;
         bytes proposalSpecialData;
         bool votesCanBeCanceled;
@@ -145,7 +146,7 @@ contract Governance is Constants {
     function handleProposalDeadline(uint256 proposalId) public {
         Proposal storage prop = proposals[proposalId];
         if (statusDepositing(prop.status)) {
-            if (prop.deposit >= prop.minDeposit) {
+            if (prop.deposit >= prop.requiredDeposit) {
                 proceedToVoting(prop.id);
                 return;
             }
@@ -178,34 +179,6 @@ contract Governance is Constants {
         require(canCreateProposal(addr), "address has no permissions to create new proposal");
     }
 
-    function createSoftwareUpgradeProposal(string memory description, string memory version) public {
-        ensureProposalCanBeCreated(msg.sender);
-        createNewProposal(
-            description,
-            version,
-            makeSUData(version),
-            typeSoftwareUpgrade());
-    }
-
-    function createNewProposal(
-        string memory description,
-        string memory version,
-        bytes memory proposalSpecialData,
-        uint256 proposalType) internal
-    {
-        lastProposalId++;
-
-        Proposal memory prop;
-        prop.id = lastProposalId;
-        prop.description = description;
-        prop.minDeposit = minimumDeposit(proposalType);
-        prop.proposalSpecialData = makeSUData(version);
-        prop.propType = typeSoftwareUpgrade();
-        pushNewProposal(prop);
-
-        emit ProposalIsCreated(prop.id);
-    }
-
     function increaseProposalDeposit(uint256 proposalId) public payable {
         Proposal storage prop = proposals[proposalId];
 
@@ -216,6 +189,46 @@ contract Governance is Constants {
 
         prop.deposit = prop.deposit.add(msg.value);
         depositors[prop.id][msg.sender] = depositors[prop.id][msg.sender].add(msg.value);
+    }
+
+    function totalVotersNum() public view returns (uint256) {
+        // temprorary constant
+        return 99999;
+    }
+
+    function createSoftwareUpgradeProposal(string memory title, string memory description, string memory version) public {
+        ensureProposalCanBeCreated(msg.sender);
+        createNewProposal(
+            title,
+            description,
+            makeSUData(version),
+            typeSoftwareUpgrade());
+    }
+
+    function createNewProposal(
+        string memory title,
+        string memory description,
+        bytes memory proposalSpecialData,
+        uint256 proposalType) internal
+    {
+        lastProposalId++;
+        uint256 deposit = minimumDeposit(proposalType);
+        require(msg.value >= minimumDeposit(proposalType), "starting deposit is less than required minimum deposit");
+
+        Proposal memory prop;
+        prop.id = lastProposalId;
+        prop.title = title;
+        prop.description = description;
+        prop.deposit = deposit;
+        prop.requiredDeposit = requiredDeposit(proposalType);
+        prop.minVotesRequired = minVotesRequired(totalVotersNum(), proposalType);
+        prop.proposalSpecialData = proposalSpecialData;
+        prop.deadlines.depositingStartTime = block.timestamp;
+        prop.deadlines.depositingEndTime = block.timestamp + depositingPeriod();
+        prop.propType = proposalType;
+        pushNewProposal(prop);
+
+        emit ProposalIsCreated(prop.id);
     }
 
     function resolveProposal(uint256 proposalId) internal {
@@ -233,6 +246,8 @@ contract Governance is Constants {
 
     function proceedToVoting(uint256 proposalId) internal {
         Proposal storage prop = proposals[proposalId];
+        prop.deadlines.votingStartTime = block.timestamp;
+        prop.deadlines.votingEndTime = block.timestamp + votingPeriod();
         prop.status = setStatusVoting(prop.status);
     }
 
@@ -248,13 +263,16 @@ contract Governance is Constants {
 
     function pushNewProposal(Proposal memory prop) internal {
         proposals[prop.id] = prop;
-
+        uint256[] storage proposalIds = proposalsAtDeadline[prop.deadlines.depositingEndTime];
+        proposalIds.push(prop.id);
+        addNewDeadline(prop.deadlines.depositingEndTime);
     }
 
     function addNewDeadline(uint256 deadline) internal {
         deadlines.push(deadline);
         deadlineIdxs[deadline] = deadlines.length - 1;
 
+        emit DeadlineAdded(deadline);
     }
 
     // creates special data for a software upgrade proposal

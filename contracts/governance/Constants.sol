@@ -85,6 +85,18 @@ contract Constants is StatusConstants {
     uint256 constant IMMEDIATE_ACTION_MIN_DEPOSIT = 150;
     uint256 constant IMMEDIATE_ACTION_REQUIRED_DEPOSIT = 1500;
 
+    // temprorary timestamp constants
+    uint256 constant DEPOSITING_PERIOD = 100000;
+    uint256 constant VOTING_PERIOD = 100000;
+
+    function votingPeriod() public pure returns (uint256) {
+        return VOTING_PERIOD;
+    }
+
+    function depositingPeriod() public pure returns (uint256) {
+        return DEPOSITING_PERIOD;
+    }
+
     function typeSoftwareUpgrade() public pure returns (uint256) {
         return TYPE_SOFTWARE_UPGRADE;
     }
@@ -99,6 +111,20 @@ contract Constants is StatusConstants {
 
     function minimumDeposit(uint256 proposalType) public pure returns (uint256) {
         if (proposalType == TYPE_SOFTWARE_UPGRADE) {
+            return SOFTWARE_UPGRADE_MIN_DEPOSIT;
+        }
+        if (proposalType == TYPE_PLAIN_TEXT) {
+            return PLAIN_TEXT_MIN_DEPOSIT;
+        }
+        if (proposalType == TYPE_IMMEDIATE_ACTION) {
+            return IMMEDIATE_ACTION_MIN_DEPOSIT;
+        }
+
+        revert("proposal type is incorrect");
+    }
+
+    function requiredDeposit(uint256 proposalType) public pure returns (uint256) {
+        if (proposalType == TYPE_SOFTWARE_UPGRADE) {
             return SOFTWARE_UPGRADE_REQUIRED_DEPOSIT;
         }
         if (proposalType == TYPE_PLAIN_TEXT) {
@@ -109,5 +135,10 @@ contract Constants is StatusConstants {
         }
 
         revert("proposal type is incorrect");
+    }
+
+    function minVotesRequired(uint256 totalVotersNum, uint256 proposalType) public pure returns (uint256) {
+        // temprorary sol
+        return totalVotersNum;
     }
 }
