@@ -85,8 +85,9 @@ contract Governance is Constants {
     event DeadlineRemoved(uint256 deadline);
     event DeadlineAdded(uint256 deadline);
 
-    constructor(address _governableContract) {
-        setGovernableContract(_governableContract);
+    // temprorary commented out GC
+    constructor(/*address _governableContract*/) public {
+        // setGovernableContract(_governableContract);
     }
 
     function setGovernableContract(address _governableContract) public {
@@ -94,25 +95,6 @@ contract Governance is Constants {
         checkContractIsValid(_governableContract);
 
         governableContract = Governable(_governableContract);
-    }
-
-    function checkContractIsValid(address addr) internal {
-        address testAddr = address(0); // this.addr??
-
-        require(isContract(addr), "address does not belong to a contract");
-        for (uint i = 0; i<methodsOfAnOracle.length; i++) {
-            string memory method = methodsOfAnOracle[i];
-            bytes memory payload = abi.encodeWithSignature(method, testAddr);
-            string memory errorMsg = string(abi.encodePacked(method, " is not implemented by contract"));
-            (bool success, ) = addr.call(payload);
-            require(success, errorMsg);
-        }
-    }
-
-    function isContract(address account) internal view returns (bool) {
-        uint256 size;
-        assembly { size := extcodesize(account) }
-        return size > 0;
     }
 
     // TODO: should this be a part of governableContract interface?
@@ -147,11 +129,11 @@ contract Governance is Constants {
         delegationAllowed[msg.sender][proposalId] = true;
     }
 
-    function getDelegatedVotingPower(uint256 proposalId, address voter) public {
+    function getDelegatedVotingPower(uint256 proposalId, address voter) public returns(uint256) {
         address[] memory delegatedAddresses = delegations[msg.sender][proposalId];
         uint256 additionalVotingPower;
         for (uint256 i = 0; i<delegatedAddresses.length; i++) {
-            additionalVotingPower = additionalVotingPower.add(accountVotingPower(voter, prop.id));
+            additionalVotingPower = additionalVotingPower.add(accountVotingPower(voter, proposalId));
         }
 
         return additionalVotingPower;
@@ -163,21 +145,21 @@ contract Governance is Constants {
         require(prop.id != 0, "proposal with a given id doesnt exist");
         require(delegateTo != msg.sender, "cannot delegate vote to oneself");
         require(delegators[msg.sender][proposalId] == address(0), "already delegated");
-        require(delegationAllowed[delegateTo], "address gave no permissions to accept delegations");
+        require(delegationAllowed[delegateTo][proposalId], "address gave no permissions to accept delegations");
         require(delegations[msg.sender][proposalId].length == 0, "this address has already accepted delegations");
 
         uint256 ownVotingPower = accountVotingPower(msg.sender, prop.id);
         require(ownVotingPower != 0, "account has no votes to delegate");
 
-        address[] storage delegators = delegations[delegateTo][prop.id];
-        delegators.push(msg.sender);
+        address[] storage delegs = delegations[delegateTo][prop.id];
+        delegs.push(msg.sender);
         delegators[msg.sender][proposalId] = delegateTo;
         delegationVotingPower[delegateTo][proposalId] += ownVotingPower;
         delegatedVotingPower[msg.sender][proposalId] = ownVotingPower;
-        delegatorsIdxs[msg.sender][proposalId] = delegators.length-1;
+        delegatorsIdxs[msg.sender][proposalId] = delegs.length-1;
     }
 
-    function cancelDelegation(uint256 proposalId) {
+    function cancelDelegation(uint256 proposalId) public {
         uint256 delegIdx = delegatorsIdxs[msg.sender][proposalId];
 
         // address[] storage delegators = delegations[delegatedTo][proposalId];
@@ -186,11 +168,13 @@ contract Governance is Constants {
         delete delegators[msg.sender][proposalId];
         delegationVotingPower[delegatedTo][proposalId] -= delegatedVotingPower[msg.sender][proposalId];
         delete delegatedVotingPower[msg.sender][proposalId];
-        delegators[delegIdx] = delegators[delegators.length - 1];
-        address addrToShigt = delegators[delegators.length - 1];
-        delegatorsIdxs[addrToShigt][proposalId] = delegIdx;
+
+        address[] storage delegs = delegations[delegatedTo][proposalId];
+        delegs[delegIdx] = delegs[delegs.length - 1];
+        address addrToShift = delegs[delegs.length - 1];
+        delegatorsIdxs[addrToShift][proposalId] = delegIdx;
         delete delegatorsIdxs[msg.sender][proposalId];
-        delegators.length--;
+        delegs.length--;
     }
 
     function vote(uint256 proposalId, uint256 choise) public {
@@ -415,4 +399,24 @@ contract Governance is Constants {
     //
     //    }
     //}
+
+    function checkContractIsValid(address addr) internal {
+        // address testAddr = address(0); // this.addr??
+
+        require(isContract(addr), "address does not belong to a contract");
+        // Todo: implement method check during SOProposal
+        //for (uint i = 0; i<methodsOfGovernable.length; i++) {
+        //    string memory method = methodsOfGovernable[i];
+        //    bytes memory payload = abi.encodeWithSignature(method, testAddr);
+        //    string memory errorMsg = string(abi.encodePacked(method, " is not implemented by contract"));
+        //    (bool success, ) = addr.call(payload);
+        //    require(success, errorMsg);
+        //}
+    }
+
+    function isContract(address account) internal view returns (bool) {
+        uint256 size;
+        assembly { size := extcodesize(account) }
+        return size > 0;
+    }
 }

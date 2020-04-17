@@ -227,15 +227,18 @@ contract Stakers is Ownable, StakersConstants, Governable {
     }
 
     function softwareUpgradeVotingPower(address addr) public view returns(uint256) {
-        return stakers[addr].stakeAmount;
+        uint256 id = stakerIDs[addr];
+        return stakers[id].stakeAmount;
     }
 
     function plainTextVotingPower(address addr) public view returns(uint256) {
-        return stakers[addr].stakeAmount;
+        uint256 id = stakerIDs[addr];
+        return stakers[id].stakeAmount;
     }
 
     function immediateActionVotingPower(address addr) public view returns(uint256) {
-        return stakers[addr].stakeAmount;
+        uint256 id = stakerIDs[addr];
+        return stakers[id].stakeAmount;
     }
 
     function epochValidator(uint256 e, uint256 v) external view returns (uint256 stakeAmount, uint256 delegatedMe, uint256 baseRewardWeight, uint256 txRewardWeight) {
