@@ -1,4 +1,4 @@
-pragma solidity ^0.6.0;
+pragma solidity ^0.5.0;
 
 import "./SafeMath.sol";
 import "./Constants.sol";
@@ -18,7 +18,7 @@ contract Governance is Constants {
         uint256 deadline;
     }
 
-    struct ProposalTimelines {
+    struct ProposalTimeline {
         uint256 depositingStartTime;
         uint256 depositingEndTime;
         uint256 votingStartEpoch;
@@ -36,9 +36,9 @@ contract Governance is Constants {
         uint256 permissionsRequired; // might be a bitmask?
         uint256 minVotesRequired;
         uint256 totalVotes;
-        Choise[] possibleChoises;
+        mapping (uint256 => uint256) choises;
 
-        ProposalTimelines timelines;
+        ProposalTimeline deadlines;
 
         string description;
         bytes proposalSpecialData;
@@ -58,14 +58,14 @@ contract Governance is Constants {
 
     address ADMIN;
 
-    mapping(uint256 => uint256) public deadlineIdxs;
-    mapping(uint256 => uint256[]) public proposalsAtDeadline;
-    mapping(uint256 => Proposal) public proposals;
-    mapping(address => mapping(uint256 => address)) public delegators; // delegation from address to another address at some proposalId
-    mapping(address => mapping(uint256 => address[])) public delegations; // delegation from address to another address at some proposalId
-    mapping(address => uint256[]) public proposalCreators; // maps proposal id to a voter and its voting power
-    mapping(uint256 => mapping(address => uint256)) public depositors; // maps proposal id to a sender and deposit
-    mapping(address => mapping(uint256 => uint256)) public voters; // maps proposal id to a voter and its voting power
+    mapping(uint256 => uint256) deadlineIdxs;
+    mapping(uint256 => uint256[]) proposalsAtDeadline;
+    mapping(uint256 => Proposal) proposals;
+    mapping(address => mapping(uint256 => address)) delegators; // delegation from address to another address at some proposalId
+    mapping(address => mapping(uint256 => address[])) delegations; // delegation from address to another address at some proposalId
+    mapping(address => uint256[]) proposalCreators; // maps proposal id to a voter and its voting power
+    mapping(uint256 => mapping(address => uint256)) depositors; // maps proposal id to a sender and deposit
+    mapping(address => mapping(uint256 => uint256)) voters; // maps proposal id to a voter and its voting power
 
     event ProposalIsCreated(uint256 proposalId);
     event ProposalIsResolved(uint256 proposalId);
@@ -73,6 +73,8 @@ contract Governance is Constants {
     event DeadlinesResolved(uint256 startIdx, uint256 quantity);
     event ResolvedProposal(uint256 proposalId);
     event ImplementedProposal(uint256 proposalId);
+    event DeadlineRemoved(uint256 deadline);
+    event DeadlineAdded(uint256 deadline);
 
     function maxProposalsPerUser() public view returns (uint256) {
         return 1;
@@ -80,14 +82,6 @@ contract Governance is Constants {
 
     function accountVotingPower(address acc, uint256 proposalId) public view returns (uint256) {
         return 1;
-    }
-
-    function ensureAccountCanVote(address acc) {
-        if (acc == ADMIN) {
-            return;
-        }
-
-        return;
     }
 
     function vote(uint256 proposalId, uint256 choise) public {
@@ -98,21 +92,15 @@ contract Governance is Constants {
         require(voters[msg.sender][proposalId] == 0, "this account has already voted. try to cancel a vote if you want to revote");
         require(delegators[msg.sender][proposalId] == address(0), "this account has delegated a vote. try to cancel a delegation");
         require(prop.id == proposalId, "cannot find proposal with a passed id");
-        require(statusActiveVoting(prop.status), "cannot vote for a given proposal");
+        require(statusVoting(prop.status), "cannot vote for a given proposal");
 
-        address[] delegatedAddresses = delegations[msg.sender][proposalId];
+        address[] memory delegatedAddresses = delegations[msg.sender][proposalId];
         uint256 additionalVotingPower;
-        for (int8 i = 0; i<delegatedAddresses.length; i++) {
+        for (uint256 i = 0; i<delegatedAddresses.length; i++) {
             additionalVotingPower = additionalVotingPower.add(accountVotingPower(msg.sender, prop.id));
         }
 
-        for (int8 i = 0; i<prop.possibleChoises.length; i++) {
-            if (prop.possibleChoises[i].id == choise) {
-                prop.possibleChoises[i].votes += accountVotingPower(msg.sender, prop.id).add(additionalVotingPower);
-                prop.possibleChoises[i].totalVotes++;
-                return;
-            }
-        }
+        prop.choises[choise] += accountVotingPower(msg.sender, prop.id).add(additionalVotingPower);
 
         voters[msg.sender][proposalId] = choise;
         revert("could not find choise among proposal possible choises");
@@ -121,7 +109,7 @@ contract Governance is Constants {
     function cancelVote(uint256 proposalId) public {
         Proposal storage prop = proposals[proposalId];
         require(prop.votesCanBeCanceled, "votes cannot be canceled due to proposal settings");
-        require(delegators[msg.from][proposalId] == address(0), "sender has delegated his vote");
+        require(delegators[msg.sender][proposalId] == address(0), "sender has delegated his vote");
 
         voters[msg.sender][proposalId] = 0;
     }
@@ -129,7 +117,7 @@ contract Governance is Constants {
     function handleDeadlines(uint256 startIdx, uint256 endIdx) public {
         require(startIdx <= endIdx, "incorrect indexes passed");
 
-        for (int i = startIdx; i < endIdx; i++) {
+        for (uint256 i = startIdx; i < endIdx; i++) {
             handleDeadline(deadlines[i]);
         }
 
@@ -137,17 +125,25 @@ contract Governance is Constants {
     }
 
     function handleDeadline(uint256 deadline) public {
-        uint256 idx = deadlineIdxs[deadline];
-        delete deadlines[idx];
-        uint256[] proposalIds = proposalsAtDeadline[deadline];
-        for (int i = 0; i < proposalIds.length; i++) {
+
+        uint256[] memory proposalIds = proposalsAtDeadline[deadline];
+        for (uint256 i = 0; i < proposalIds.length; i++) {
             uint256 proposalId = proposalIds[i];
             handleProposalDeadline(proposalId);
         }
+
+        uint256 idx = deadlineIdxs[deadline];
+        uint256 deadlineToDelete = deadlines[idx];
+        deadlines[idx] = deadlines[deadlines.length - 1];
+        deadlineIdxs[deadlines[idx]] = idx;
+        deadlines.length--;
+
+        emit DeadlineRemoved(deadlineToDelete);
+        emit DeadlineAdded(deadlines[idx]);
     }
 
-    function handleProposalDeadline(uint256 proposalId) {
-        Proposal memory prop = proposals[proposalId];
+    function handleProposalDeadline(uint256 proposalId) public {
+        Proposal storage prop = proposals[proposalId];
         if (statusDepositing(prop.status)) {
             if (prop.deposit >= prop.minDeposit) {
                 proceedToVoting(prop.id);
@@ -163,26 +159,6 @@ contract Governance is Constants {
         }
 
         failProposal(prop.id);
-    }
-
-    function resolveProposal(uint256 proposalId) {
-        // todo: implement logic below
-        emit ResolvedProposal(proposalId);
-    }
-
-    function proceedToVoting(uint256 proposalId) internal {
-        Proposal storage prop = proposals[proposalId];
-        prop.status = setStatusVoting(prop.status);
-    }
-
-    function failProposal(uint256 proposalId) internal {
-        Proposal storage prop = proposals[proposalId];
-        prop.status = failStatus(prop.status);
-        inactiveProposalIds.push(prop.id);
-    }
-
-    function finalizeProposalVoting(uint256 proposalId) {
-
     }
 
     function canCreateProposal(address addr) public returns (bool) {
@@ -202,35 +178,27 @@ contract Governance is Constants {
         require(canCreateProposal(addr), "address has no permissions to create new proposal");
     }
 
-    function pushNewProposal(Proposal memory prop) internal {
-        proposals[prop.id] = prop;
-
-    }
-
-    function addNewDeadline(uint256 deadline) {
-        for (uint256 i = deadlines.length; i > 0; i--) {
-            if (deadlines[i] < block.timestamp) {
-
-            }
-        }
-    }
-
-    function insertToDeadlines(uint256 idx, uint256 dedline) {
-        deadlines.push(dedline);
-
-        for (uint256 i = idx; i < deadlines.length; i++) {
-
-        }
-    }
-
-    function createSoftwareUpgradeProposal(string memory description, string memory version, uint256 minDeposit) public {
+    function createSoftwareUpgradeProposal(string memory description, string memory version) public {
         ensureProposalCanBeCreated(msg.sender);
+        createNewProposal(
+            description,
+            version,
+            makeSUData(version),
+            typeSoftwareUpgrade());
+    }
+
+    function createNewProposal(
+        string memory description,
+        string memory version,
+        bytes memory proposalSpecialData,
+        uint256 proposalType) internal
+    {
         lastProposalId++;
 
         Proposal memory prop;
         prop.id = lastProposalId;
         prop.description = description;
-        prop.minDeposit = minDeposit;
+        prop.minDeposit = minimumDeposit(proposalType);
         prop.proposalSpecialData = makeSUData(version);
         prop.propType = typeSoftwareUpgrade();
         pushNewProposal(prop);
@@ -244,41 +212,62 @@ contract Governance is Constants {
         require(prop.id != 0, "proposal with a given id doesnt exist");
         require(statusDepositing(prop.status), "proposal is not depositing");
         require(msg.value > 0, "msg.value is zero");
-        require(block.timestamp > prop.depositingEndTime, "cannot deposit to an overdue proposal");
+        require(block.timestamp > prop.deadlines.depositingEndTime, "cannot deposit to an overdue proposal");
 
         prop.deposit = prop.deposit.add(msg.value);
         depositors[prop.id][msg.sender] = depositors[prop.id][msg.sender].add(msg.value);
     }
 
-    function deactivateProposal(Proposal storage prop) public {
-        bool foundProposal;
-        if (statusDepositing(prop.status)) {
-            deactivateDepositingProposal(prop);
-        }
-        if (statusVoting(prop.status)) {
-            deactivateDepositingProposal(prop);
-        }
+    function resolveProposal(uint256 proposalId) internal {
+        // todo: implement logic below
+        emit ResolvedProposal(proposalId);
     }
 
-    function deactivateDepositingProposal(Proposal storage prop) public {
-        bool foundProposal;
-        for (uint256 i = 0; i < depositingProposalIds.length; i++) {
-            if (depositingProposalIds[i] == prop.id) {
-                foundProposal = true;
-                delete depositingProposalIds[i];
-                break;
-            }
-            if (foundProposal) {
-                depositingProposalIds[i] = depositingProposalIds[i + 1];
-            }
+    function ensureAccountCanVote(address acc) internal {
+        if (acc == ADMIN) {
+            return;
         }
 
-        if (foundProposal) {
-            revert("proposal is not present in an array");
-        }
+        return;
+    }
 
-        depositingProposalIds[i].length--;
+    function proceedToVoting(uint256 proposalId) internal {
+        Proposal storage prop = proposals[proposalId];
+        prop.status = setStatusVoting(prop.status);
+    }
+
+    function failProposal(uint256 proposalId) internal {
+        Proposal storage prop = proposals[proposalId];
         prop.status = failStatus(prop.status);
         inactiveProposalIds.push(prop.id);
     }
+
+    function finalizeProposalVoting(uint256 proposalId) internal {
+
+    }
+
+    function pushNewProposal(Proposal memory prop) internal {
+        proposals[prop.id] = prop;
+
+    }
+
+    function addNewDeadline(uint256 deadline) internal {
+        deadlines.push(deadline);
+        deadlineIdxs[deadline] = deadlines.length - 1;
+
+    }
+
+    // creates special data for a software upgrade proposal
+    function makeSUData(string memory version) internal pure returns (bytes memory) {
+        return bytes(version);
+    }
+
+    //function insertToDeadlines(uint256 idx, uint256 deadline) internal {
+    //    deadlines.push(deadline);
+    //    deadlineIdxs[deadlines.length - 1]
+    //
+    //    for (uint256 i = idx; i < deadlines.length; i++) {
+    //
+    //    }
+    //}
 }
