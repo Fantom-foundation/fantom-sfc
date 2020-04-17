@@ -2,6 +2,7 @@ pragma solidity ^0.5.0;
 
 import "./SafeMath.sol";
 import "../ownership/Ownable.sol";
+import "../governance/Governable.sol";
 
 contract StakersConstants {
     using SafeMath for uint256;
@@ -88,7 +89,7 @@ contract StakersConstants {
     event UpdatedGasPowerAllocationRate(uint256 short, uint256 long);
 }
 
-contract Stakers is Ownable, StakersConstants {
+contract Stakers is Ownable, StakersConstants, Governable {
     using SafeMath for uint256;
 
     struct Delegation {
@@ -211,6 +212,31 @@ contract Stakers is Ownable, StakersConstants {
     /*
     Getters
     */
+
+    // might be changed after discussion
+    function softwareUpgradeTotalVoters() public view returns(uint256) {
+        return stakersNum;
+    }
+
+    function plainTextTotalVoters() public view returns(uint256) {
+        return stakersNum;
+    }
+
+    function immediateActionTotalVoters() public view returns(uint256) {
+        return stakersNum;
+    }
+
+    function softwareUpgradeVotingPower(address addr) public view returns(uint256) {
+        return stakers[addr].stakeAmount;
+    }
+
+    function plainTextVotingPower(address addr) public view returns(uint256) {
+        return stakers[addr].stakeAmount;
+    }
+
+    function immediateActionVotingPower(address addr) public view returns(uint256) {
+        return stakers[addr].stakeAmount;
+    }
 
     function epochValidator(uint256 e, uint256 v) external view returns (uint256 stakeAmount, uint256 delegatedMe, uint256 baseRewardWeight, uint256 txRewardWeight) {
         return (epochSnapshots[e].validators[v].stakeAmount,

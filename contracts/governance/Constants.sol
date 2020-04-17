@@ -150,7 +150,7 @@ contract Constants is StatusConstants {
     }
 
     function minVotesRequired(uint256 totalVotersNum, uint256 proposalType) public pure returns (uint256) {
-        // temprorary sol
-        return totalVotersNum;
+        // default (temprorary?) response is that 2/3 of a voters should vote fore a quorum
+        return totalVotersNum * 2 / 3;
     }
 }

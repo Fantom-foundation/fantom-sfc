@@ -2,6 +2,7 @@ pragma solidity ^0.5.0;
 
 import "./SafeMath.sol";
 import "./Constants.sol";
+import "./Governable.sol";
 
 
 // add non reentrant!!
@@ -59,15 +60,18 @@ contract Governance is Constants {
 
     address ADMIN;
 
+    Governable governableContract;
+
     mapping(uint256 => uint256) deadlineIdxs;
     // mapping(address => mapping(uint256 => uint256)) selfVotingPower;
     mapping(address => mapping(uint256 => bool)) delegationAllowed;
     mapping(address => mapping(uint256 => uint256)) delegatedVotingPower;
+    mapping(address => mapping(uint256 => uint256)) delegationVotingPower;
     mapping(uint256 => uint256[]) proposalsAtDeadline;
     mapping(uint256 => Proposal) proposals;
     mapping(address => mapping(uint256 => address)) delegators; // delegation from address to another address at some proposalId
     mapping(address => mapping(uint256 => address[])) delegations; // delegation from address to another address at some proposalId\
-    mapping(address => mapping(uint256 => uint256) delegatorsIdxs; // delegators' indexes at the end of delegations map
+    mapping(address => mapping(uint256 => uint256)) delegatorsIdxs; // delegators' indexes at the end of delegations map
     mapping(address => uint256[]) proposalCreators; // maps proposal id to a voter and its voting power
     mapping(uint256 => mapping(address => uint256)) depositors; // maps proposal id to a sender and deposit
     mapping(address => mapping(uint256 => uint256)) voters; // maps proposal id to a voter and its voting power
@@ -81,22 +85,76 @@ contract Governance is Constants {
     event DeadlineRemoved(uint256 deadline);
     event DeadlineAdded(uint256 deadline);
 
+    constructor(address _governableContract) {
+        setGovernableContract(_governableContract);
+    }
+
+    function setGovernableContract(address _governableContract) public {
+        require(msg.sender == ADMIN, "operation is not permitted");
+        checkContractIsValid(_governableContract);
+
+        governableContract = Governable(_governableContract);
+    }
+
+    function checkContractIsValid(address addr) internal {
+        address testAddr = address(0); // this.addr??
+
+        require(isContract(addr), "address does not belong to a contract");
+        for (uint i = 0; i<methodsOfAnOracle.length; i++) {
+            string memory method = methodsOfAnOracle[i];
+            bytes memory payload = abi.encodeWithSignature(method, testAddr);
+            string memory errorMsg = string(abi.encodePacked(method, " is not implemented by contract"));
+            (bool success, ) = addr.call(payload);
+            require(success, errorMsg);
+        }
+    }
+
+    function isContract(address account) internal view returns (bool) {
+        uint256 size;
+        assembly { size := extcodesize(account) }
+        return size > 0;
+    }
+
+    // TODO: should this be a part of governableContract interface?
     function maxProposalsPerUser() public view returns (uint256) {
         return 1;
     }
 
     function accountVotingPower(address acc, uint256 proposalId) public view returns (uint256) {
-        return 1;
+        Proposal memory prop = proposals[proposalId];
+        if (prop.propType == typeSoftwareUpgrade()) {
+            return governableContract.softwareUpgradeVotingPower(acc);
+        }
+
+        if (prop.propType == typePlainText()) {
+            return governableContract.plainTextVotingPower(acc);
+        }
+
+        if (prop.propType == typeImmediateAction()) {
+            return governableContract.immediateActionVotingPower(acc);
+        }
+
+        return 0;
     }
 
     function rejectDelegations(uint256 proposalId) public {
-        require(delegatedVotingPower[msg.sender][proposalId] == 0, "this address has already accepted delegation");
+        require(delegationVotingPower[msg.sender][proposalId] == 0, "this address has already accepted delegation");
         delegationAllowed[msg.sender][proposalId] = false;
     }
 
     function allowDelegations(uint256 proposalId) public {
         require(canAcceptDelegations(msg.sender), "this address cannot accept delegations");
         delegationAllowed[msg.sender][proposalId] = true;
+    }
+
+    function getDelegatedVotingPower(uint256 proposalId, address voter) public {
+        address[] memory delegatedAddresses = delegations[msg.sender][proposalId];
+        uint256 additionalVotingPower;
+        for (uint256 i = 0; i<delegatedAddresses.length; i++) {
+            additionalVotingPower = additionalVotingPower.add(accountVotingPower(voter, prop.id));
+        }
+
+        return additionalVotingPower;
     }
 
     function delegateVote(uint256 proposalId, address delegateTo) public {
@@ -114,16 +172,20 @@ contract Governance is Constants {
         address[] storage delegators = delegations[delegateTo][prop.id];
         delegators.push(msg.sender);
         delegators[msg.sender][proposalId] = delegateTo;
-        delegatedVotingPower[delegateTo][proposalId] = ownVotingPower;
+        delegationVotingPower[delegateTo][proposalId] += ownVotingPower;
+        delegatedVotingPower[msg.sender][proposalId] = ownVotingPower;
         delegatorsIdxs[msg.sender][proposalId] = delegators.length-1;
     }
 
     function cancelDelegation(uint256 proposalId) {
         uint256 delegIdx = delegatorsIdxs[msg.sender][proposalId];
 
+        // address[] storage delegators = delegations[delegatedTo][proposalId];
+        address delegatedTo = delegators[msg.sender][proposalId];
+
         delete delegators[msg.sender][proposalId];
-        delete delegatedVotingPower[delegateTo][proposalId];
-        address[] storage delegators = delegations[delegateTo][prop.id];
+        delegationVotingPower[delegatedTo][proposalId] -= delegatedVotingPower[msg.sender][proposalId];
+        delete delegatedVotingPower[msg.sender][proposalId];
         delegators[delegIdx] = delegators[delegators.length - 1];
         address addrToShigt = delegators[delegators.length - 1];
         delegatorsIdxs[addrToShigt][proposalId] = delegIdx;
@@ -141,22 +203,13 @@ contract Governance is Constants {
         require(prop.id == proposalId, "cannot find proposal with a passed id");
         require(statusVoting(prop.status), "cannot vote for a given proposal");
 
-        uint256 delegPower = delegatedVotingPower[msg.sender, proposalId];
+        uint256 delegPower = delegationVotingPower[msg.sender][proposalId];
         uint256 ownVotingPower = accountVotingPower(msg.sender, prop.id);
         prop.choises[choise] += ownVotingPower.add(delegPower);
 
+        // TODO: check is choise possible!!!!
+        // revert("could not find choise among proposal possible choises");
         voters[msg.sender][proposalId] = choise;
-        revert("could not find choise among proposal possible choises");
-    }
-
-    function getDelegatedVotingPower(uint256 proposalId, address voter) public {
-        address[] memory delegatedAddresses = delegations[msg.sender][proposalId];
-        uint256 additionalVotingPower;
-        for (uint256 i = 0; i<delegatedAddresses.length; i++) {
-            additionalVotingPower = additionalVotingPower.add(accountVotingPower(voter, prop.id));
-        }
-
-        return additionalVotingPower;
     }
 
     function cancelVote(uint256 proposalId) public {
@@ -166,7 +219,8 @@ contract Governance is Constants {
 
         uint256 delegatedVotingPower = getDelegatedVotingPower(proposalId, msg.sender);
         uint256 ownVotingPower = accountVotingPower(msg.sender, prop.id);
-        prop.choises[choise] -= ownVotingPower.add(delegatedVotingPower);
+        uint256 prevChoise = voters[msg.sender][proposalId];
+        prop.choises[prevChoise] -= ownVotingPower.add(delegatedVotingPower);
 
         voters[msg.sender][proposalId] = 0;
     }
@@ -196,7 +250,7 @@ contract Governance is Constants {
         deadlines.length--;
 
         emit DeadlineRemoved(deadlineToDelete);
-        emit DeadlineAdded(deadlines[idx]);
+        // emit DeadlineAdded(deadlines[idx]);
     }
 
     function handleProposalDeadline(uint256 proposalId) public {
@@ -247,9 +301,21 @@ contract Governance is Constants {
         depositors[prop.id][msg.sender] = depositors[prop.id][msg.sender].add(msg.value);
     }
 
-    function totalVotersNum() public view returns (uint256) {
+    function totalVotersNum(uint256 proposalType) public view returns (uint256) {
         // temprorary constant
-        return 99999;
+        if (proposalType == typeSoftwareUpgrade()) {
+            return governableContract.softwareUpgradeTotalVoters();
+        }
+
+        if (proposalType == typePlainText()) {
+            return governableContract.plainTextTotalVoters();
+        }
+
+        if (proposalType == typeImmediateAction()) {
+            return governableContract.immediateActionTotalVoters();
+        }
+
+        return 0;
     }
 
     function createSoftwareUpgradeProposal(string memory title, string memory description, string memory version) public {
@@ -277,7 +343,7 @@ contract Governance is Constants {
         prop.description = description;
         prop.deposit = deposit;
         prop.requiredDeposit = requiredDeposit(proposalType);
-        prop.minVotesRequired = minVotesRequired(totalVotersNum(), proposalType);
+        prop.minVotesRequired = minVotesRequired(totalVotersNum(proposalType), proposalType);
         prop.proposalSpecialData = proposalSpecialData;
         prop.deadlines.depositingStartTime = block.timestamp;
         prop.deadlines.depositingEndTime = block.timestamp + depositingPeriod();
