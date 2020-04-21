@@ -3,7 +3,6 @@ pragma solidity ^0.5.0;
 import "./SafeMath.sol";
 import "./Constants.sol";
 import "./Governable.sol";
-import "./ProposalHandler.sol";
 import "./SoftwareUpgradeProposal.sol";
 import "../common/ImplementationValidator.sol";
 
@@ -87,8 +86,7 @@ contract Governance is Constants {
     event GovernableContractSet(address addr);
 
     constructor() public {
-        string[] memory methodsOfAContract = [];
-        implementationValidator = new ImplementationValidator(methodsOfAContract);
+        implementationValidator = new ImplementationValidator();
     }
 
     function vote(uint256 proposalId, uint256 choise) public {
@@ -163,36 +161,11 @@ contract Governance is Constants {
 
     function accountVotingPower(address acc, uint256 proposalId) public view returns (uint256, uint256, uint256) {
         Proposal memory prop = proposals[proposalId];
-        if (prop.propType == typeSoftwareUpgrade()) {
-            return governableContract.softwareUpgradeVotingPower(acc);
-        }
-
-        if (prop.propType == typePlainText()) {
-            return governableContract.plainTextVotingPower(acc);
-        }
-
-        if (prop.propType == typeImmediateAction()) {
-            return governableContract.immediateActionVotingPower(acc);
-        }
-
-        return (0, 0, 0);
+        return governableContract.getVotingPower(acc, prop.propType);
     }
 
-    function totalVotersNum(uint256 proposalType) public view returns (uint256) {
-        // temprorary constant
-        if (proposalType == typeSoftwareUpgrade()) {
-            return governableContract.softwareUpgradeTotalVoters();
-        }
-
-        if (proposalType == typePlainText()) {
-            return governableContract.plainTextTotalVoters();
-        }
-
-        if (proposalType == typeImmediateAction()) {
-            return governableContract.immediateActionTotalVoters();
-        }
-
-        return 0;
+    function totalVotes(uint256 proposalType) public view returns (uint256) {
+        return governableContract.getTotalVotes(proposalType);
     }
 
     // TODO: should this be a part of governableContract interface?
@@ -303,7 +276,7 @@ contract Governance is Constants {
         prop.description = description;
         prop.deposit = deposit;
         prop.requiredDeposit = requiredDeposit(proposalType);
-        prop.minVotesRequired = minVotesRequired(totalVotersNum(proposalType), proposalType);
+        prop.minVotesRequired = minVotesRequired(totalVotes(proposalType), proposalType);
         prop.proposalSpecialData = proposalSpecialData;
         prop.deadlines.depositingStartTime = block.timestamp;
         prop.deadlines.depositingEndTime = block.timestamp + depositingPeriod();
