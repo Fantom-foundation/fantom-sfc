@@ -226,19 +226,38 @@ contract Stakers is Ownable, StakersConstants, Governable {
         return stakersNum;
     }
 
-    function softwareUpgradeVotingPower(address addr) public view returns(uint256) {
+    function softwareUpgradeVotingPower(address addr) public view returns(uint256, uint256, uint256) {
         uint256 id = stakerIDs[addr];
-        return stakers[id].stakeAmount;
+        if (id == 0) {
+            return (0, 0, delegations[addr].amount);
+        }
+
+        return (stakers[id].stakeAmount, stakers[id].delegatedMe, 0);
     }
 
-    function plainTextVotingPower(address addr) public view returns(uint256) {
+    function plainTextVotingPower(address addr) public view returns(uint256, uint256, uint256) {
         uint256 id = stakerIDs[addr];
-        return stakers[id].stakeAmount;
+        if (id == 0) {
+            return (0, 0, delegations[addr].amount);
+        }
+
+        return (stakers[id].stakeAmount, stakers[id].delegatedMe, 0);
     }
 
-    function immediateActionVotingPower(address addr) public view returns(uint256) {
+    function immediateActionVotingPower(address addr) public view returns(uint256, uint256, uint256) {
         uint256 id = stakerIDs[addr];
-        return stakers[id].stakeAmount;
+        if (id == 0) {
+            return (0, 0, delegations[addr].amount);
+        }
+
+        return (stakers[id].stakeAmount, stakers[id].delegatedMe, 0);
+    }
+
+    function delegatedVotesTo(address addr) external view returns(address) {
+        if (delegations[addr].amount > 0) {
+            return stakers[delegations[addr].toStakerID].sfcAddress;
+        }
+        return address(0);
     }
 
     function epochValidator(uint256 e, uint256 v) external view returns (uint256 stakeAmount, uint256 delegatedMe, uint256 baseRewardWeight, uint256 txRewardWeight) {

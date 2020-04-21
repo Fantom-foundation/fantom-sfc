@@ -5,7 +5,6 @@ import "./Constants.sol";
 import "./Governable.sol";
 
 
-// add non reentrant!!
 contract Governance is Constants {
     using SafeMath for uint256;
 
@@ -47,34 +46,29 @@ contract Governance is Constants {
         bool votesCanBeCanceled;
     }
 
-    uint256 lastProposalId;
-    uint256 earliestActiveEndtime;
-    uint256 earliestPreActiveEndtime;
+    struct Voter {
+        uint256 power;
+        uint256 choise;
+        address previousDelegation;
+    }
 
-    // TODO: should we set a limit of active and inactive proposals ?
-    uint256[] votingProposalIds;
-    uint256[] depositingProposalIds;
-    uint256[] inactiveProposalIds; // inactive proposal is a proposal that once became active, but was eventualy rejected
-    uint256[] proposalDeadlines;
-    uint256[] deadlines;
-
-    address ADMIN;
+    struct Depositor {
+        uint256 depositedAmount;
+    }
 
     Governable governableContract;
+    address ADMIN;
+    uint256[] deadlines;
+    uint256[] inactiveProposalIds;
+    uint256 lastProposalId;
 
-    mapping(uint256 => uint256) deadlineIdxs;
-    // mapping(address => mapping(uint256 => uint256)) selfVotingPower;
-    mapping(address => mapping(uint256 => bool)) delegationAllowed;
-    mapping(address => mapping(uint256 => uint256)) delegatedVotingPower;
-    mapping(address => mapping(uint256 => uint256)) delegationVotingPower;
-    mapping(uint256 => uint256[]) proposalsAtDeadline;
     mapping(uint256 => Proposal) proposals;
-    mapping(address => mapping(uint256 => address)) delegators; // delegation from address to another address at some proposalId
-    mapping(address => mapping(uint256 => address[])) delegations; // delegation from address to another address at some proposalId\
-    mapping(address => mapping(uint256 => uint256)) delegatorsIdxs; // delegators' indexes at the end of delegations map
+    mapping(address => mapping(uint256 => Voter)) voters;
+    mapping(address => mapping(uint256 => Depositor)) depositors;
+    mapping(address => mapping(uint256 => uint256)) reducedVotersPower;
+    mapping(uint256 => uint256) deadlineIdxs;
+    mapping(uint256 => uint256[]) proposalsAtDeadline;
     mapping(address => uint256[]) proposalCreators; // maps proposal id to a voter and its voting power
-    mapping(uint256 => mapping(address => uint256)) depositors; // maps proposal id to a sender and deposit
-    mapping(address => mapping(uint256 => uint256)) voters; // maps proposal id to a voter and its voting power
 
     event ProposalIsCreated(uint256 proposalId);
     event ProposalIsResolved(uint256 proposalId);
@@ -85,24 +79,70 @@ contract Governance is Constants {
     event DeadlineRemoved(uint256 deadline);
     event DeadlineAdded(uint256 deadline);
 
-    // temprorary commented out GC
-    constructor(/*address _governableContract*/) public {
-        // setGovernableContract(_governableContract);
+    function vote(uint256 proposalId, uint256 choise) public {
+        Proposal storage prop = proposals[proposalId];
+
+        require(voters[msg.sender][proposalId].power == 0, "this account has already voted. try to cancel a vote if you want to revote");
+        // require(delegators[msg.sender][proposalId] == address(0), "this account has delegated a vote. try to cancel a delegation");
+        require(prop.id == proposalId, "cannot find proposal with a passed id");
+        require(statusVoting(prop.status), "cannot vote for a given proposal");
+
+        (uint256 ownVotingPower, uint256 delegationVotingPower, uint256 givenAwayVotingPower) = accountVotingPower(msg.sender, prop.id);
+
+        if (ownVotingPower != 0) {
+            uint256 power = ownVotingPower + delegationVotingPower - reducedVotersPower[msg.sender][proposalId];
+            makeVote(proposalId, choise, power);
+        }
+
+        if (givenAwayVotingPower != 0) {
+            address delegatedTo = governableContract.delegatedVotesTo(msg.sender);
+            recountVoter(proposalId, delegatedTo);
+            reduceVotersPower(proposalId, delegatedTo, givenAwayVotingPower);
+            makeVote(proposalId, choise, givenAwayVotingPower);
+            voters[msg.sender][proposalId].previousDelegation = delegatedTo;
+        }
     }
 
-    function setGovernableContract(address _governableContract) public {
-        require(msg.sender == ADMIN, "operation is not permitted");
-        checkContractIsValid(_governableContract);
+    function makeVote(uint256 proposalId, uint256 choise, uint256 power) public {
+        Proposal storage prop = proposals[proposalId];
 
-        governableContract = Governable(_governableContract);
+        Voter storage voter = voters[msg.sender][proposalId];
+        voter.choise = choise;
+        voter.power = power;
+
+        prop.choises[choise] += power;
+        // voters[msg.sender][proposalId] = voter;
     }
 
-    // TODO: should this be a part of governableContract interface?
-    function maxProposalsPerUser() public view returns (uint256) {
-        return 1;
+    function cancelVote(uint256 proposalId, address voterAddr) public {
+        Voter memory voter = voters[voterAddr][proposalId];
+        Proposal storage prop = proposals[proposalId];
+
+        prop.choises[voter.choise] -= voter.power;
+        if (voters[voterAddr][proposalId].previousDelegation != address(0)) {
+            increaseVotersPower(proposalId, voterAddr, voter.power);
+        }
+        delete voters[voterAddr][proposalId];
     }
 
-    function accountVotingPower(address acc, uint256 proposalId) public view returns (uint256) {
+    function recountVoter(uint256 proposalId, address voterAddr) public {
+        Voter memory voter = voters[voterAddr][proposalId];
+        Proposal storage prop = proposals[proposalId];
+        cancelVote(proposalId, voterAddr);
+
+        (uint256 ownVotingPower, uint256 delegationVotingPower, uint256 givenAwayVotingPower) = accountVotingPower(voterAddr, prop.id);
+        uint256 power;
+        if (ownVotingPower > 0) {
+            power = ownVotingPower + delegationVotingPower - reducedVotersPower[voterAddr][proposalId];
+        }
+        if (givenAwayVotingPower > 0) {
+            power = givenAwayVotingPower + delegationVotingPower - reducedVotersPower[voterAddr][proposalId];
+        }
+
+        makeVote(proposalId, voter.choise, power);
+    }
+
+    function accountVotingPower(address acc, uint256 proposalId) public view returns (uint256, uint256, uint256) {
         Proposal memory prop = proposals[proposalId];
         if (prop.propType == typeSoftwareUpgrade()) {
             return governableContract.softwareUpgradeVotingPower(acc);
@@ -116,97 +156,29 @@ contract Governance is Constants {
             return governableContract.immediateActionVotingPower(acc);
         }
 
+        return (0, 0, 0);
+    }
+
+    function totalVotersNum(uint256 proposalType) public view returns (uint256) {
+        // temprorary constant
+        if (proposalType == typeSoftwareUpgrade()) {
+            return governableContract.softwareUpgradeTotalVoters();
+        }
+
+        if (proposalType == typePlainText()) {
+            return governableContract.plainTextTotalVoters();
+        }
+
+        if (proposalType == typeImmediateAction()) {
+            return governableContract.immediateActionTotalVoters();
+        }
+
         return 0;
     }
 
-    function rejectDelegations(uint256 proposalId) public {
-        require(delegationVotingPower[msg.sender][proposalId] == 0, "this address has already accepted delegation");
-        delegationAllowed[msg.sender][proposalId] = false;
-    }
-
-    function allowDelegations(uint256 proposalId) public {
-        require(canAcceptDelegations(msg.sender), "this address cannot accept delegations");
-        delegationAllowed[msg.sender][proposalId] = true;
-    }
-
-    function getDelegatedVotingPower(uint256 proposalId, address voter) public returns(uint256) {
-        address[] memory delegatedAddresses = delegations[msg.sender][proposalId];
-        uint256 additionalVotingPower;
-        for (uint256 i = 0; i<delegatedAddresses.length; i++) {
-            additionalVotingPower = additionalVotingPower.add(accountVotingPower(voter, proposalId));
-        }
-
-        return additionalVotingPower;
-    }
-
-    function delegateVote(uint256 proposalId, address delegateTo) public {
-        Proposal storage prop = proposals[proposalId];
-
-        require(prop.id != 0, "proposal with a given id doesnt exist");
-        require(delegateTo != msg.sender, "cannot delegate vote to oneself");
-        require(delegators[msg.sender][proposalId] == address(0), "already delegated");
-        require(delegationAllowed[delegateTo][proposalId], "address gave no permissions to accept delegations");
-        require(delegations[msg.sender][proposalId].length == 0, "this address has already accepted delegations");
-
-        uint256 ownVotingPower = accountVotingPower(msg.sender, prop.id);
-        require(ownVotingPower != 0, "account has no votes to delegate");
-
-        address[] storage delegs = delegations[delegateTo][prop.id];
-        delegs.push(msg.sender);
-        delegators[msg.sender][proposalId] = delegateTo;
-        delegationVotingPower[delegateTo][proposalId] += ownVotingPower;
-        delegatedVotingPower[msg.sender][proposalId] = ownVotingPower;
-        delegatorsIdxs[msg.sender][proposalId] = delegs.length-1;
-    }
-
-    function cancelDelegation(uint256 proposalId) public {
-        uint256 delegIdx = delegatorsIdxs[msg.sender][proposalId];
-
-        // address[] storage delegators = delegations[delegatedTo][proposalId];
-        address delegatedTo = delegators[msg.sender][proposalId];
-
-        delete delegators[msg.sender][proposalId];
-        delegationVotingPower[delegatedTo][proposalId] -= delegatedVotingPower[msg.sender][proposalId];
-        delete delegatedVotingPower[msg.sender][proposalId];
-
-        address[] storage delegs = delegations[delegatedTo][proposalId];
-        delegs[delegIdx] = delegs[delegs.length - 1];
-        address addrToShift = delegs[delegs.length - 1];
-        delegatorsIdxs[addrToShift][proposalId] = delegIdx;
-        delete delegatorsIdxs[msg.sender][proposalId];
-        delegs.length--;
-    }
-
-    function vote(uint256 proposalId, uint256 choise) public {
-        ensureAccountCanVote(msg.sender);
-
-        Proposal storage prop = proposals[proposalId];
-
-        require(voters[msg.sender][proposalId] == 0, "this account has already voted. try to cancel a vote if you want to revote");
-        require(delegators[msg.sender][proposalId] == address(0), "this account has delegated a vote. try to cancel a delegation");
-        require(prop.id == proposalId, "cannot find proposal with a passed id");
-        require(statusVoting(prop.status), "cannot vote for a given proposal");
-
-        uint256 delegPower = delegationVotingPower[msg.sender][proposalId];
-        uint256 ownVotingPower = accountVotingPower(msg.sender, prop.id);
-        prop.choises[choise] += ownVotingPower.add(delegPower);
-
-        // TODO: check is choise possible!!!!
-        // revert("could not find choise among proposal possible choises");
-        voters[msg.sender][proposalId] = choise;
-    }
-
-    function cancelVote(uint256 proposalId) public {
-        Proposal storage prop = proposals[proposalId];
-        require(prop.votesCanBeCanceled, "votes cannot be canceled due to proposal settings");
-        require(delegators[msg.sender][proposalId] == address(0), "sender has delegated his vote");
-
-        uint256 delegatedVotingPower = getDelegatedVotingPower(proposalId, msg.sender);
-        uint256 ownVotingPower = accountVotingPower(msg.sender, prop.id);
-        uint256 prevChoise = voters[msg.sender][proposalId];
-        prop.choises[prevChoise] -= ownVotingPower.add(delegatedVotingPower);
-
-        voters[msg.sender][proposalId] = 0;
+    // TODO: should this be a part of governableContract interface?
+    function maxProposalsPerUser() public view returns (uint256) {
+        return 1;
     }
 
     function handleDeadlines(uint256 startIdx, uint256 endIdx) public {
@@ -234,7 +206,6 @@ contract Governance is Constants {
         deadlines.length--;
 
         emit DeadlineRemoved(deadlineToDelete);
-        // emit DeadlineAdded(deadlines[idx]);
     }
 
     function handleProposalDeadline(uint256 proposalId) public {
@@ -256,6 +227,20 @@ contract Governance is Constants {
         failProposal(prop.id);
     }
 
+    function increaseProposalDeposit(uint256 proposalId) public payable {
+        Proposal storage prop = proposals[proposalId];
+
+        require(prop.id != 0, "proposal with a given id doesnt exist");
+        require(statusDepositing(prop.status), "proposal is not depositing");
+        require(msg.value > 0, "msg.value is zero");
+        require(block.timestamp > prop.deadlines.depositingEndTime, "cannot deposit to an overdue proposal");
+
+        prop.deposit = prop.deposit.add(msg.value);
+
+        Depositor storage dep = depositors[msg.sender][prop.id];
+        dep.depositedAmount = dep.depositedAmount + msg.value;
+    }
+
     function canCreateProposal(address addr) public returns (bool) {
         if (addr == ADMIN) {
             return true;
@@ -271,35 +256,6 @@ contract Governance is Constants {
 
         require(proposalCreators[addr].length < maxProposalsPerUser(), "maximum created proposal limit for a user exceeded");
         require(canCreateProposal(addr), "address has no permissions to create new proposal");
-    }
-
-    function increaseProposalDeposit(uint256 proposalId) public payable {
-        Proposal storage prop = proposals[proposalId];
-
-        require(prop.id != 0, "proposal with a given id doesnt exist");
-        require(statusDepositing(prop.status), "proposal is not depositing");
-        require(msg.value > 0, "msg.value is zero");
-        require(block.timestamp > prop.deadlines.depositingEndTime, "cannot deposit to an overdue proposal");
-
-        prop.deposit = prop.deposit.add(msg.value);
-        depositors[prop.id][msg.sender] = depositors[prop.id][msg.sender].add(msg.value);
-    }
-
-    function totalVotersNum(uint256 proposalType) public view returns (uint256) {
-        // temprorary constant
-        if (proposalType == typeSoftwareUpgrade()) {
-            return governableContract.softwareUpgradeTotalVoters();
-        }
-
-        if (proposalType == typePlainText()) {
-            return governableContract.plainTextTotalVoters();
-        }
-
-        if (proposalType == typeImmediateAction()) {
-            return governableContract.immediateActionTotalVoters();
-        }
-
-        return 0;
     }
 
     function createSoftwareUpgradeProposal(string memory title, string memory description, string memory version) public {
@@ -337,22 +293,41 @@ contract Governance is Constants {
         emit ProposalIsCreated(prop.id);
     }
 
+    function pushNewProposal(Proposal memory prop) internal {
+        proposals[prop.id] = prop;
+        uint256[] storage proposalIds = proposalsAtDeadline[prop.deadlines.depositingEndTime];
+        proposalIds.push(prop.id);
+        addNewDeadline(prop.deadlines.depositingEndTime);
+    }
+
+    function addNewDeadline(uint256 deadline) internal {
+        deadlines.push(deadline);
+        deadlineIdxs[deadline] = deadlines.length - 1;
+
+        emit DeadlineAdded(deadline);
+    }
+
     function resolveProposal(uint256 proposalId) internal {
         // todo: implement logic below
         emit ResolvedProposal(proposalId);
     }
 
-    function ensureAccountCanVote(address addr) internal {
-        if (addr == ADMIN) {
-            return;
-        }
+    function reduceVotersPower(uint256 proposalId, address voter, uint256 power) internal {
+        uint256 choise = voters[voter][proposalId].choise;
 
-        return;
+        Proposal storage prop = proposals[proposalId];
+        prop.choises[choise] -= power;
+        voters[voter][proposalId].power -= power;
+        reducedVotersPower[voter][proposalId] += power;
     }
 
-    function canAcceptDelegations(address addr) internal returns(bool) {
-        // temprorary
-        return false;
+    function increaseVotersPower(uint256 proposalId, address voter, uint256 power) internal {
+        uint256 choise = voters[voter][proposalId].choise;
+
+        Proposal storage prop = proposals[proposalId];
+        prop.choises[choise] += power;
+        voters[voter][proposalId].power += power;
+        reducedVotersPower[voter][proposalId] -= power;
     }
 
     function proceedToVoting(uint256 proposalId) internal {
@@ -368,55 +343,8 @@ contract Governance is Constants {
         inactiveProposalIds.push(prop.id);
     }
 
-    function finalizeProposalVoting(uint256 proposalId) internal {
-        
-    }
-
-    function pushNewProposal(Proposal memory prop) internal {
-        proposals[prop.id] = prop;
-        uint256[] storage proposalIds = proposalsAtDeadline[prop.deadlines.depositingEndTime];
-        proposalIds.push(prop.id);
-        addNewDeadline(prop.deadlines.depositingEndTime);
-    }
-
-    function addNewDeadline(uint256 deadline) internal {
-        deadlines.push(deadline);
-        deadlineIdxs[deadline] = deadlines.length - 1;
-
-        emit DeadlineAdded(deadline);
-    }
-
     // creates special data for a software upgrade proposal
     function makeSUData(string memory version) internal pure returns (bytes memory) {
         return bytes(version);
-    }
-
-    //function insertToDeadlines(uint256 idx, uint256 deadline) internal {
-    //    deadlines.push(deadline);
-    //    deadlineIdxs[deadlines.length - 1]
-    //
-    //    for (uint256 i = idx; i < deadlines.length; i++) {
-    //
-    //    }
-    //}
-
-    function checkContractIsValid(address addr) internal {
-        // address testAddr = address(0); // this.addr??
-
-        require(isContract(addr), "address does not belong to a contract");
-        // Todo: implement method check during SOProposal
-        //for (uint i = 0; i<methodsOfGovernable.length; i++) {
-        //    string memory method = methodsOfGovernable[i];
-        //    bytes memory payload = abi.encodeWithSignature(method, testAddr);
-        //    string memory errorMsg = string(abi.encodePacked(method, " is not implemented by contract"));
-        //    (bool success, ) = addr.call(payload);
-        //    require(success, errorMsg);
-        //}
-    }
-
-    function isContract(address account) internal view returns (bool) {
-        uint256 size;
-        assembly { size := extcodesize(account) }
-        return size > 0;
     }
 }
