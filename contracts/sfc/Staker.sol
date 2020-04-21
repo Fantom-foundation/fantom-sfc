@@ -213,38 +213,18 @@ contract Stakers is Ownable, StakersConstants, Governable {
     Getters
     */
 
-    // might be changed after discussion
-    function softwareUpgradeTotalVoters() public view returns(uint256) {
-        return stakersNum;
+    function epochValidator(uint256 e, uint256 v) external view returns (uint256 stakeAmount, uint256 delegatedMe, uint256 baseRewardWeight, uint256 txRewardWeight) {
+        return (epochSnapshots[e].validators[v].stakeAmount,
+                epochSnapshots[e].validators[v].delegatedMe,
+                epochSnapshots[e].validators[v].baseRewardWeight,
+                epochSnapshots[e].validators[v].txRewardWeight);
     }
 
-    function plainTextTotalVoters() public view returns(uint256) {
-        return stakersNum;
+    function getTotalVotes(uint256 propType) external view returns(uint256) {
+        return stakeTotalAmount + delegationsTotalAmount;
     }
 
-    function immediateActionTotalVoters() public view returns(uint256) {
-        return stakersNum;
-    }
-
-    function softwareUpgradeVotingPower(address addr) public view returns(uint256, uint256, uint256) {
-        uint256 id = stakerIDs[addr];
-        if (id == 0) {
-            return (0, 0, delegations[addr].amount);
-        }
-
-        return (stakers[id].stakeAmount, stakers[id].delegatedMe, 0);
-    }
-
-    function plainTextVotingPower(address addr) public view returns(uint256, uint256, uint256) {
-        uint256 id = stakerIDs[addr];
-        if (id == 0) {
-            return (0, 0, delegations[addr].amount);
-        }
-
-        return (stakers[id].stakeAmount, stakers[id].delegatedMe, 0);
-    }
-
-    function immediateActionVotingPower(address addr) public view returns(uint256, uint256, uint256) {
+    function getVotingPower(address addr, uint256 propType) external view returns(uint256, uint256, uint256) {
         uint256 id = stakerIDs[addr];
         if (id == 0) {
             return (0, 0, delegations[addr].amount);
@@ -258,13 +238,6 @@ contract Stakers is Ownable, StakersConstants, Governable {
             return stakers[delegations[addr].toStakerID].sfcAddress;
         }
         return address(0);
-    }
-
-    function epochValidator(uint256 e, uint256 v) external view returns (uint256 stakeAmount, uint256 delegatedMe, uint256 baseRewardWeight, uint256 txRewardWeight) {
-        return (epochSnapshots[e].validators[v].stakeAmount,
-                epochSnapshots[e].validators[v].delegatedMe,
-                epochSnapshots[e].validators[v].baseRewardWeight,
-                epochSnapshots[e].validators[v].txRewardWeight);
     }
 
     function currentEpoch() public view returns (uint256) {

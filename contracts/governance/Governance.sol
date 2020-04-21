@@ -3,6 +3,9 @@ pragma solidity ^0.5.0;
 import "./SafeMath.sol";
 import "./Constants.sol";
 import "./Governable.sol";
+import "./ProposalHandler.sol";
+import "./SoftwareUpgradeProposal.sol";
+import "../common/ImplementationValidator.sol";
 
 
 contract Governance is Constants {
@@ -57,6 +60,9 @@ contract Governance is Constants {
     }
 
     Governable governableContract;
+    ImplementationValidator implementationValidator;
+    SoftwareUpgradeProposalHandler sopHandler;
+
     address ADMIN;
     uint256[] deadlines;
     uint256[] inactiveProposalIds;
@@ -78,6 +84,12 @@ contract Governance is Constants {
     event ImplementedProposal(uint256 proposalId);
     event DeadlineRemoved(uint256 deadline);
     event DeadlineAdded(uint256 deadline);
+    event GovernableContractSet(address addr);
+
+    constructor() public {
+        string[] memory methodsOfAContract = [];
+        implementationValidator = new ImplementationValidator(methodsOfAContract);
+    }
 
     function vote(uint256 proposalId, uint256 choise) public {
         Proposal storage prop = proposals[proposalId];
@@ -101,6 +113,13 @@ contract Governance is Constants {
             makeVote(proposalId, choise, givenAwayVotingPower);
             voters[msg.sender][proposalId].previousDelegation = delegatedTo;
         }
+    }
+
+    function setGovernableContract(address newImplementation) internal {
+        implementationValidator.checkContractIsValid(newImplementation);
+        governableContract = Governable(newImplementation);
+
+        emit GovernableContractSet(newImplementation);
     }
 
     function makeVote(uint256 proposalId, uint256 choise, uint256 power) public {
@@ -260,6 +279,7 @@ contract Governance is Constants {
 
     function createSoftwareUpgradeProposal(string memory title, string memory description, string memory version) public {
         ensureProposalCanBeCreated(msg.sender);
+        sopHandler.validateProposalRequest(version);
         createNewProposal(
             title,
             description,
@@ -309,6 +329,12 @@ contract Governance is Constants {
 
     function resolveProposal(uint256 proposalId) internal {
         // todo: implement logic below
+        Proposal storage prop = proposals[proposalId];
+        if (prop.propType == typeSoftwareUpgrade()) {
+            string memory version = string(prop.proposalSpecialData);
+            sopHandler.resolveSoftwareUpgrade(version);
+        }
+
         emit ResolvedProposal(proposalId);
     }
 
