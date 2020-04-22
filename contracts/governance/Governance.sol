@@ -63,17 +63,17 @@ contract Governance is Constants {
     SoftwareUpgradeProposalHandler sopHandler;
 
     address ADMIN;
-    uint256[] deadlines;
-    uint256[] inactiveProposalIds;
-    uint256 lastProposalId;
+    uint256[] public deadlines;
+    uint256[] public inactiveProposalIds;
+    uint256 public lastProposalId;
 
     mapping(uint256 => Proposal) proposals;
-    mapping(address => mapping(uint256 => Voter)) voters;
-    mapping(address => mapping(uint256 => Depositor)) depositors;
-    mapping(address => mapping(uint256 => uint256)) reducedVotersPower;
-    mapping(uint256 => uint256) deadlineIdxs;
-    mapping(uint256 => uint256[]) proposalsAtDeadline;
-    mapping(address => uint256[]) proposalCreators; // maps proposal id to a voter and its voting power
+    mapping(address => mapping(uint256 => Voter)) public voters;
+    mapping(address => mapping(uint256 => Depositor)) public depositors;
+    mapping(address => mapping(uint256 => uint256)) public reducedVotersPower;
+    mapping(uint256 => uint256) public deadlineIdxs;
+    mapping(uint256 => uint256[]) public proposalsAtDeadline;
+    mapping(address => uint256[]) public proposalCreators; // maps proposal id to a voter and its voting power
 
     event ProposalIsCreated(uint256 proposalId);
     event ProposalIsResolved(uint256 proposalId);
@@ -84,9 +84,45 @@ contract Governance is Constants {
     event DeadlineRemoved(uint256 deadline);
     event DeadlineAdded(uint256 deadline);
     event GovernableContractSet(address addr);
+    event SoftwareVersionAdded(string version, address addr);
 
-    constructor() public {
+    constructor(address governableAddr) public {
         implementationValidator = new ImplementationValidator();
+        sopHandler = new SoftwareUpgradeProposalHandler();
+        setGovernableContract(governableAddr);
+    }
+
+    // since solidity doesnt allow to use a custom struct in a public map, we made a simple workaround to get values from "proposals" map
+    function getProposal(uint256 id) public returns(uint256,uint256,uint256,uint256,uint256,uint256,string memory,string memory,bytes memory) {
+        // uint256 id;
+        // uint256 propType;
+        // uint256 status; // status is a bitmask, check out "constants" for a further info
+        // uint256 deposit;
+        // uint256 requiredDeposit;
+        // uint256 permissionsRequired; // might be a bitmask?
+        // uint256 minVotesRequired;
+        // uint256 totalVotes;
+        // mapping (uint256 => uint256) choises;
+ 
+        // ProposalTimeline deadlines;
+
+        // string title;
+        // string description;
+        // bytes proposalSpecialData;
+        // bool votesCanBeCanceled;
+        Proposal storage prop = proposals[id];
+
+        return (
+            prop.id, 
+            prop.propType, 
+            prop.status, 
+            prop.deposit, 
+            prop.minVotesRequired, 
+            prop.totalVotes, 
+            prop.title,
+            prop.description,
+            prop.proposalSpecialData
+        );
     }
 
     function vote(uint256 proposalId, uint256 choise) public {
@@ -95,7 +131,7 @@ contract Governance is Constants {
         require(voters[msg.sender][proposalId].power == 0, "this account has already voted. try to cancel a vote if you want to revote");
         // require(delegators[msg.sender][proposalId] == address(0), "this account has delegated a vote. try to cancel a delegation");
         require(prop.id == proposalId, "cannot find proposal with a passed id");
-        require(statusVoting(prop.status), "cannot vote for a given proposal");
+        require(statusVoting(prop.status), "proposal is not at voting period");
 
         (uint256 ownVotingPower, uint256 delegationVotingPower, uint256 givenAwayVotingPower) = accountVotingPower(msg.sender, prop.id);
 
@@ -247,10 +283,9 @@ contract Governance is Constants {
         }
 
         require(proposalCreators[addr].length < maxProposalsPerUser(), "maximum created proposal limit for a user exceeded");
-        require(canCreateProposal(addr), "address has no permissions to create new proposal");
     }
 
-    function createSoftwareUpgradeProposal(string memory title, string memory description, string memory version) public {
+    function createSoftwareUpgradeProposal(string memory title, string memory description, string memory version) public payable {
         ensureProposalCanBeCreated(msg.sender);
         sopHandler.validateProposalRequest(version);
         createNewProposal(
@@ -258,6 +293,15 @@ contract Governance is Constants {
             description,
             makeSUData(version),
             typeSoftwareUpgrade());
+    }
+
+    function addNewSoftwareVersion(string memory version, address addr) public {
+        sopHandler.addSoftwareVersion(version, addr);
+        emit SoftwareVersionAdded(version, addr);
+    }
+
+    function getVersionDescription(string memory version) public view returns(string memory,address,bool,bool) {
+        return sopHandler.getVersionDescription(version);
     }
 
     function createNewProposal(
@@ -345,5 +389,12 @@ contract Governance is Constants {
     // creates special data for a software upgrade proposal
     function makeSUData(string memory version) internal pure returns (bytes memory) {
         return bytes(version);
+    }
+}
+
+contract UnitTestGovernance is Governance {
+    function addNewSoftwareVersion(string memory version, address addr) public {
+        sopHandler.addSoftwareVersion(version, addr);
+        emit SoftwareVersionAdded(version, addr);
     }
 }
