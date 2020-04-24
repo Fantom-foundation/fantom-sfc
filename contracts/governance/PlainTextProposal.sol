@@ -4,7 +4,6 @@ import "./SafeMath.sol";
 import "./Constants.sol";
 import "./Governable.sol";
 import "./Upgradability.sol";
-import "./Proposal.sol";
 
 
 contract PlainTextProposalHandler {

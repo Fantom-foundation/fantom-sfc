@@ -26,6 +26,10 @@ contract SoftwareUpgradeProposalHandler {
         require(vDesc.sealedVersion == false, "this version is sealed");
     }
 
+    function setUpgradableContract(address addr) public {
+        upgradableContract = Upgradability(addr);
+    }
+
     function addSoftwareVersion(string memory version, address addr) public {
         VersionDescription memory vDesc;
         vDesc.version = version;

@@ -38,6 +38,11 @@ contract StatusConstants {
         return status;
     }
 
+    function setStatusAccepted(uint256 status) public pure returns (uint256) {
+        status |= 1 << BIT_IS_ACCEPTED;
+        return status;
+    }
+
     function statusActive(uint256 status) internal view returns (bool) {
         return (status >> BIT_IS_ACTIVE) & 1 == 1;
     }

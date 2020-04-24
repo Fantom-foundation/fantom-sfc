@@ -77,7 +77,8 @@ contract Governance is Constants {
 
     event ProposalIsCreated(uint256 proposalId);
     event ProposalIsResolved(uint256 proposalId);
-    event ProposalIsRejected(uint256 proposalId, uint256 reason);
+    event StartedProposalVoting(uint256 proposalId);
+    event ProposalIsRejected(uint256 proposalId);
     event DeadlinesResolved(uint256 startIdx, uint256 quantity);
     event ResolvedProposal(uint256 proposalId);
     event ImplementedProposal(uint256 proposalId);
@@ -85,31 +86,18 @@ contract Governance is Constants {
     event DeadlineAdded(uint256 deadline);
     event GovernableContractSet(address addr);
     event SoftwareVersionAdded(string version, address addr);
+    event VotersPowerReduced(address voter);
 
     constructor(address governableAddr) public {
         implementationValidator = new ImplementationValidator();
         sopHandler = new SoftwareUpgradeProposalHandler();
         setGovernableContract(governableAddr);
+        // it is assumed that function should receive an addr in constructor
+        sopHandler.setUpgradableContract(address(0));
     }
 
     // since solidity doesnt allow to use a custom struct in a public map, we made a simple workaround to get values from "proposals" map
     function getProposal(uint256 id) public returns(uint256,uint256,uint256,uint256,uint256,uint256,string memory,string memory,bytes memory) {
-        // uint256 id;
-        // uint256 propType;
-        // uint256 status; // status is a bitmask, check out "constants" for a further info
-        // uint256 deposit;
-        // uint256 requiredDeposit;
-        // uint256 permissionsRequired; // might be a bitmask?
-        // uint256 minVotesRequired;
-        // uint256 totalVotes;
-        // mapping (uint256 => uint256) choises;
- 
-        // ProposalTimeline deadlines;
-
-        // string title;
-        // string description;
-        // bytes proposalSpecialData;
-        // bool votesCanBeCanceled;
         Proposal storage prop = proposals[id];
 
         return (
@@ -295,7 +283,19 @@ contract Governance is Constants {
             typeSoftwareUpgrade());
     }
 
+    function createPlainTextProposal(string memory title, string memory description, string memory version) public payable {
+        ensureProposalCanBeCreated(msg.sender);
+        sopHandler.validateProposalRequest(version);
+        createNewProposal(
+            title,
+            description,
+            bytes(""),
+            typePlainText());
+    }
+
     function addNewSoftwareVersion(string memory version, address addr) public {
+        (uint256 ownVotingPower, , uint256 givenAwayVotingPower) = governableContract.getVotingPower(msg.sender, typeSoftwareUpgrade());
+        require(ownVotingPower != 0 || givenAwayVotingPower != 0, "only delegators and stakers can create a proposal");
         sopHandler.addSoftwareVersion(version, addr);
         emit SoftwareVersionAdded(version, addr);
     }
@@ -352,6 +352,12 @@ contract Governance is Constants {
             sopHandler.resolveSoftwareUpgrade(version);
         }
 
+        if (prop.propType == typePlainText()) {
+
+        }
+
+        prop.status = setStatusAccepted(prop.status);
+        inactiveProposalIds.push(proposalId);
         emit ResolvedProposal(proposalId);
     }
 
@@ -362,6 +368,7 @@ contract Governance is Constants {
         prop.choises[choise] -= power;
         voters[voter][proposalId].power -= power;
         reducedVotersPower[voter][proposalId] += power;
+        emit VotersPowerReduced(voter);
     }
 
     function increaseVotersPower(uint256 proposalId, address voter, uint256 power) internal {
@@ -378,12 +385,14 @@ contract Governance is Constants {
         prop.deadlines.votingStartTime = block.timestamp;
         prop.deadlines.votingEndTime = block.timestamp + votingPeriod();
         prop.status = setStatusVoting(prop.status);
+        emit StartedProposalVoting(proposalId);
     }
 
     function failProposal(uint256 proposalId) internal {
         Proposal storage prop = proposals[proposalId];
         prop.status = failStatus(prop.status);
         inactiveProposalIds.push(prop.id);
+        emit ProposalIsRejected(proposalId);
     }
 
     // creates special data for a software upgrade proposal

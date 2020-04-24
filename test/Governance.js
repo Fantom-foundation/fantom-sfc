@@ -52,4 +52,19 @@ contract('Governance test', async ([acc1, acc2, contractAddr]) => {
         await this.governance.createSoftwareUpgradeProposal(validTitle, validDescription, version, createMsg);
         await expectRevert(this.governance.vote(1, 1, voteMsg), "proposal is not at voting period");
     })
+
+    it('check voting', async () => {
+        // console.log(Governance);
+        let validTitle = "title";
+        let validDescription = "description";
+        let version = "1.00";
+
+        let createMsg = {from: acc1, value: ether('2.0')};
+        let voteMsg = {from: acc1};
+        await this.stakers._createStake({from: acc1, value: ether('2.0')});
+        await this.governance.addNewSoftwareVersion(version, contractAddr);
+        await this.governance.createSoftwareUpgradeProposal(validTitle, validDescription, version, createMsg);
+        await expectRevert(this.governance.vote(1, 1, voteMsg), "proposal is not at voting period");
+        await this.governance.vote(1, 1);
+    })
 })
