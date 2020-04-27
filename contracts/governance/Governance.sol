@@ -3,6 +3,7 @@ pragma solidity ^0.5.0;
 import "./SafeMath.sol";
 import "./Constants.sol";
 import "./Governable.sol";
+import "./Proposal.sol";
 import "./SoftwareUpgradeProposal.sol";
 import "../common/ImplementationValidator.sol";
 
@@ -68,6 +69,7 @@ contract Governance is Constants {
     uint256 public lastProposalId;
 
     mapping(uint256 => Proposal) proposals;
+    mapping(uint256 => ProposalA) preps;
     mapping(address => mapping(uint256 => Voter)) public voters;
     mapping(address => mapping(uint256 => Depositor)) public depositors;
     mapping(address => mapping(uint256 => uint256)) public reducedVotersPower;
@@ -275,7 +277,7 @@ contract Governance is Constants {
 
     function createSoftwareUpgradeProposal(string memory title, string memory description, string memory version) public payable {
         ensureProposalCanBeCreated(msg.sender);
-        sopHandler.validateProposalRequest(version);
+        // sopHandler.validateProposalRequest(version);
         createNewProposal(
             title,
             description,
@@ -285,7 +287,7 @@ contract Governance is Constants {
 
     function createPlainTextProposal(string memory title, string memory description, string memory version) public payable {
         ensureProposalCanBeCreated(msg.sender);
-        sopHandler.validateProposalRequest(version);
+        // sopHandler.validateProposalRequest(version);
         createNewProposal(
             title,
             description,

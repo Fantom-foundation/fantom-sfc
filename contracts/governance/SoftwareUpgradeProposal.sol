@@ -20,7 +20,29 @@ contract SoftwareUpgradeProposalHandler {
     Upgradability upgradableContract;
     mapping(string => VersionDescription) versions;
 
-    function validateProposalRequest(string memory version) public {
+
+    function createSpecialData(bytes32[] calldata dataValues) external returns(bytes32) {
+        require(dataValues.length == 1, "incorrect special data length");
+
+    }
+
+    function modifyInnerState(bytes32[] calldata dataValues) external returns(bytes32) {
+
+    }
+
+    function validateProposal(bytes32) external {
+
+    }
+
+    function resolveProposal(bytes32) external {
+
+    }
+
+    function proposalName() external returns(string memory) {
+
+    }
+
+    function validateProposal(string memory version) public {
         VersionDescription memory vDesc = versions[version];
         require(vDesc.addr != address(0), "this version is not yet present among available versions");
         require(vDesc.sealedVersion == false, "this version is sealed");
