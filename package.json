@@ -12,7 +12,7 @@
     "flatten": "rm -rf contracts/Flattened.sol && truffle-flattener contracts/Staker.sol >> contracts/Flattened.sol"
   },
   "dependencies": {
-    "@openzeppelin/contracts": "^2.3.0"
+    "@openzeppelin/contracts": "^3.0.1"
   },
   "devDependencies": {
     "babel-polyfill": "^6.26.0",
