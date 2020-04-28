@@ -78,9 +78,10 @@ contract Constants is StatusConstants {
     using SafeMath for uint256;
 
     // types
-    uint256 constant TYPE_SOFTWARE_UPGRADE = 0x1; // software upgrade type
-    uint256 constant TYPE_PLAIN_TEXT = 0x2; // plane text type
-    uint256 constant TYPE_IMMEDIATE_ACTION = 0x3; // immediate action type
+    // uint256 constant TYPE_SOFTWARE_UPGRADE = 0x1; // software upgrade type
+    // uint256 constant TYPE_PLAIN_TEXT = 0x2; // plane text type
+    // uint256 constant TYPE_IMMEDIATE_ACTION = 0x3; // immediate action type
+    uint8 constant TYPE_EXECUTABLE = 0x1;
 
     // deposit constants are temprorary
     uint256 constant SOFTWARE_UPGRADE_MIN_DEPOSIT = 150;
@@ -97,6 +98,10 @@ contract Constants is StatusConstants {
     // temprorary timestamp constants
     uint256 constant DEPOSITING_PERIOD = 100000;
     uint256 constant VOTING_PERIOD = 100000;
+
+    function typeExecutable() public pure returns (uint8) {
+        return TYPE_EXECUTABLE;
+    }
 
     function cancelVoteFee() public pure returns (uint256) {
         return CANCEL_VOTE_FEE;

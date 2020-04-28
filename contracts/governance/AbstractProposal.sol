@@ -18,6 +18,7 @@ contract AbstractProposal {
         uint256 votingEndEpoch;
     }
 
+    uint256 INTERFACE_ID;
     uint256 public id;
     uint256 public propType;
     uint256 public status; // status is a bitmask, check out "constants" for a further info
@@ -26,6 +27,7 @@ contract AbstractProposal {
     uint256 public permissionsRequired; // might be a bitmask?
     uint256 public minVotesRequired;
     uint256 public totalVotes;
+    bool public executable;
     mapping (uint256 => uint256) public choises;
 
     ProposalTimeline deadlines;
@@ -40,5 +42,9 @@ contract AbstractProposal {
     function createSpecialData(bytes32[] calldata dataValues) external returns(bytes32);
     function modifyInnerState(bytes32[] calldata dataValues) external returns(bytes32);
     function validateProposal(bytes32) external;
-    function resolveProposal(bytes32) external;
+    function execute(bytes32) external;
+
+    function supportsInterface(bytes4 interfaceID) external view returns (bool) {
+        return interfaceID == INTERFACE_ID;
+    }
 }

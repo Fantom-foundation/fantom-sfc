@@ -8,13 +8,12 @@ import "./SoftwareUpgradeProposal.sol";
 import "./GovernanceSettings.sol";
 import "../common/ImplementationValidator.sol";
 
-
+// TODO: 
+// Add lib to prevent reentrance
+// Add more tests
+// Add LRC voting and calculation
 contract Governance is GovernanceSettings {
     using SafeMath for uint256;
-
-    uint256 constant choiseYes = 0x01;
-    uint256 constant choiseNo = 0x02;
-    uint256 constant choiseAbstain = 0x03;
 
     struct Voter {
         uint256 power;
@@ -33,17 +32,21 @@ contract Governance is GovernanceSettings {
         ProposalTimeline deadlines;
         uint256 id;
         uint256 requiredDeposit;
-        uint256 requiredVotesNum;
+        uint256 requiredVotes;
         uint256 deposit;
         uint256 votes;
+        uint256 status;
+        uint256[] choises;
+        uint8 propType;
         address proposalContract;
-        uint256[3] choises;
     }
 
     Governable governableContract;
     ImplementationValidator implementationValidator;
     uint256 lastProposalId;
     uint256[] public deadlines;
+    uint256[] public inactiveProposalIds;
+    uint256 abstractProposalInterfaceId;
 
     mapping(uint256 => ProposalDescription) proposals;
     mapping(uint256 => uint256) deposits;
@@ -51,6 +54,7 @@ contract Governance is GovernanceSettings {
     mapping(uint256 => uint256) votes;
     mapping(uint256 => uint256) proposalRequiredVotes;
     mapping(uint256 => ProposalTimeline) proposalDeadlines;
+    mapping(address => mapping(uint256 => uint256)) public reducedVotersPower;
     mapping(address => mapping(uint256 => uint256)) public depositors;
     mapping(address => mapping(uint256 => Voter)) public voters;
     mapping(uint256 => uint256) public deadlineIdxs;
@@ -73,24 +77,24 @@ contract Governance is GovernanceSettings {
     function vote(uint256 proposalId, uint256 choise) public {
         ProposalDescription storage prop = proposals[proposalId];
 
-        require(choise >= choiseYes || choiseYes <= choiseAbstain, "impossible choise");
-        require(voters[msg.sender][proposalId].power == 0, "this account has already voted. try to cancel a vote if you want to revote");
         require(prop.id == proposalId, "proposal with a given id doesnt exist");
+        require(statusVoting(prop.status), "proposal is not at voting period");
+        require(voters[msg.sender][proposalId].power == 0, "this account has already voted. try to cancel a vote if you want to revote");
         require(prop.deposit != 0, "proposal didnt enter depositing period");
         require(prop.deposit >= prop.requiredDeposit, "proposal is not at voting period");
 
-        (uint256 ownVotingPower, uint256 delegationVotingPower, uint256 givenAwayVotingPower) = accountVotingPower(msg.sender, prop.id);
+        (uint256 ownVotingPower, uint256 delegationVotingPower, uint256 delegatedVotingPower) = accountVotingPower(msg.sender, prop.id);
 
         if (ownVotingPower != 0) {
             uint256 power = ownVotingPower + delegationVotingPower - reducedVotersPower[msg.sender][proposalId];
             makeVote(proposalId, choise, power);
         }
 
-        if (givenAwayVotingPower != 0) {
+        if (delegatedVotingPower != 0) {
             address delegatedTo = governableContract.delegatedVotesTo(msg.sender);
             recountVoter(proposalId, delegatedTo);
-            reduceVotersPower(proposalId, delegatedTo, givenAwayVotingPower);
-            makeVote(proposalId, choise, givenAwayVotingPower);
+            reduceVotersPower(proposalId, delegatedTo, delegatedVotingPower);
+            makeVote(proposalId, choise, delegatedVotingPower);
             voters[msg.sender][proposalId].previousDelegation = delegatedTo;
         }
     }
@@ -123,12 +127,13 @@ contract Governance is GovernanceSettings {
         ProposalDescription storage prop = proposals[lastProposalId];
         prop.id = lastProposalId;
         prop.requiredDeposit = reqDeposit;
-        prop.requiredVotesNum = minimumVotesRequired();
+        prop.requiredVotes = minimumVotesRequired();
         prop.deposit = msg.value;
     }
 
     function validateProposalContract(address proposalContract) public {
-
+        AbstractProposal memory proposal = AbstractProposal(proposalContract);
+        require(proposal.supportsInterface(abstractProposalInterfaceId), "address does not implement proposal interface");
     }
 
     function handleDeadlines(uint256 startIdx, uint256 endIdx) public {
@@ -142,7 +147,6 @@ contract Governance is GovernanceSettings {
     }
 
     function handleDeadline(uint256 deadline) public {
-
         uint256[] memory proposalIds = proposalsAtDeadline[deadline];
         for (uint256 i = 0; i < proposalIds.length; i++) {
             uint256 proposalId = proposalIds[i];
@@ -150,12 +154,13 @@ contract Governance is GovernanceSettings {
         }
 
         uint256 idx = deadlineIdxs[deadline];
-        uint256 deadlineToDelete = deadlines[idx];
+        uint256 daedline = deadlines[idx];
         deadlines[idx] = deadlines[deadlines.length - 1];
         deadlineIdxs[deadlines[idx]] = idx;
         deadlines.length--;
 
-        emit DeadlineRemoved(deadlineToDelete);
+        delete deadlineIdxs[deadlineToDelete]
+        emit DeadlineRemoved(daedline);
     }
 
     function handleProposalDeadline(uint256 proposalId) public {
@@ -168,13 +173,64 @@ contract Governance is GovernanceSettings {
         }
 
         if (statusVoting(prop.status)) {
-            if (prop.totalVotes >= prop.minVotesRequired) {
+            if (proposalIsAccepted(prop.id)) {
                 resolveProposal(prop.id);
                 return;
             }
         }
 
         failProposal(prop.id);
+    }
+
+    function cancelVote(uint256 proposalId) public {
+        _cancelVote(proposalId, msg.sender);
+    }
+
+    function resolveProposal(uint256 proposalId) internal {
+        // todo: implement logic below
+        Proposal storage prop = proposals[proposalId];
+        require(statusVoting(prop.status), "proposal is not at voting period");
+        require(prop.votes >= prop.requiredVotes, "proposal has not enough votes to resolve");
+        require(prop.deadlines.votingEndTime <= block.timestamp, "proposal voting deadline is not passed");
+
+        if (prop.propType == typeExecutable()) {
+            address propAddr = prop.proposalContract;
+            propAddr.delegatecall(bytes4(keccak256("execute()")));
+        }
+
+        prop.status = setStatusAccepted(prop.status);
+        inactiveProposalIds.push(proposalId);
+        emit ResolvedProposal(proposalId);
+    }
+
+    function proposalIsAccepted(uint256 proposalId) internal returns(bool) {
+        Proposal storage prop = proposals[proposalId];
+        if (prop.deposit < prop.requiredDeposit) {
+            return false;
+        }
+
+        if (prop.totalVotes < prop.requiredVotes) {
+            return false;
+        }
+
+        return proposalSupported(proposalId);
+    }
+
+    // TODO: this function will be used to calculate all the LRC voting stuff
+    function proposalSupported(uint256 proposalId) internal returns(bool) {
+
+    }
+
+    function _cancelVote(uint256 proposalId, address voterAddr) internal {
+        Voter memory voter = voters[voterAddr][proposalId];
+        Proposal storage prop = proposals[proposalId];
+
+        prop.choises[voter.choise] -= voter.power;
+        if (voters[voterAddr][proposalId].previousDelegation != address(0)) {
+            increaseVotersPower(proposalId, voterAddr, voter.power);
+        }
+
+        delete voters[voterAddr][proposalId];
     }
 
     function makeVote(uint256 proposalId, uint256 choise, uint256 power) internal {
@@ -192,15 +248,15 @@ contract Governance is GovernanceSettings {
     function recountVoter(uint256 proposalId, address voterAddr) internal {
         Voter memory voter = voters[voterAddr][proposalId];
         Proposal storage prop = proposals[proposalId];
-        cancelVote(proposalId, voterAddr);
+        _cancelVote(proposalId, voterAddr);
 
-        (uint256 ownVotingPower, uint256 delegationVotingPower, uint256 givenAwayVotingPower) = accountVotingPower(voterAddr, prop.id);
+        (uint256 ownVotingPower, uint256 delegationVotingPower, uint256 delegatedVotingPower) = accountVotingPower(voterAddr, prop.id);
         uint256 power;
         if (ownVotingPower > 0) {
             power = ownVotingPower + delegationVotingPower - reducedVotersPower[voterAddr][proposalId];
         }
-        if (givenAwayVotingPower > 0) {
-            power = givenAwayVotingPower + delegationVotingPower - reducedVotersPower[voterAddr][proposalId];
+        if (delegatedVotingPower > 0) {
+            power = delegatedVotingPower + delegationVotingPower - reducedVotersPower[voterAddr][proposalId];
         }
 
         makeVote(proposalId, voter.choise, power);
@@ -214,5 +270,20 @@ contract Governance is GovernanceSettings {
         voters[voter][proposalId].power -= power;
         reducedVotersPower[voter][proposalId] += power;
         emit VotersPowerReduced(voter);
+    }
+
+
+    function failProposal(uint256 proposalId) internal {
+        Proposal storage prop = proposals[proposalId];
+        if (statusDepositing(prop.status)) {
+            require(prop.deadlines.depositingEndTime < block.timestamp);
+        }
+        if (statusVoting(prop.status)) {
+            require(prop.deadlines.votingEndTime < block.timestamp);
+        }
+
+        prop.status = failStatus(prop.status);
+        inactiveProposalIds.push(prop.id);
+        emit ProposalIsRejected(proposalId);
     }
 }
