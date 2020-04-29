@@ -81,7 +81,7 @@ contract Constants is StatusConstants {
     // uint256 constant TYPE_SOFTWARE_UPGRADE = 0x1; // software upgrade type
     // uint256 constant TYPE_PLAIN_TEXT = 0x2; // plane text type
     // uint256 constant TYPE_IMMEDIATE_ACTION = 0x3; // immediate action type
-    uint8 constant TYPE_EXECUTABLE = 0x1;
+    uint8 constant TYPE_EXECUTABLE = 0x4;
 
     // deposit constants are temprorary
     uint256 constant SOFTWARE_UPGRADE_MIN_DEPOSIT = 150;
@@ -117,46 +117,6 @@ contract Constants is StatusConstants {
 
     function depositingPeriod() public pure returns (uint256) {
         return DEPOSITING_PERIOD;
-    }
-
-    function typeSoftwareUpgrade() public pure returns (uint256) {
-        return TYPE_SOFTWARE_UPGRADE;
-    }
-
-    function typePlainText() public pure returns (uint256) {
-        return TYPE_PLAIN_TEXT;
-    }
-
-    function typeImmediateAction() public pure returns (uint256) {
-        return TYPE_IMMEDIATE_ACTION;
-    }
-
-    function minimumDeposit(uint256 proposalType) public pure returns (uint256) {
-        if (proposalType == TYPE_SOFTWARE_UPGRADE) {
-            return SOFTWARE_UPGRADE_MIN_DEPOSIT;
-        }
-        if (proposalType == TYPE_PLAIN_TEXT) {
-            return PLAIN_TEXT_MIN_DEPOSIT;
-        }
-        if (proposalType == TYPE_IMMEDIATE_ACTION) {
-            return IMMEDIATE_ACTION_MIN_DEPOSIT;
-        }
-
-        revert("proposal type is incorrect");
-    }
-
-    function requiredDeposit(uint256 proposalType) public pure returns (uint256) {
-        if (proposalType == TYPE_SOFTWARE_UPGRADE) {
-            return SOFTWARE_UPGRADE_REQUIRED_DEPOSIT;
-        }
-        if (proposalType == TYPE_PLAIN_TEXT) {
-            return PLAIN_TEXT_REQUIRED_DEPOSIT;
-        }
-        if (proposalType == TYPE_IMMEDIATE_ACTION) {
-            return IMMEDIATE_ACTION_REQUIRED_DEPOSIT;
-        }
-
-        revert("proposal type is incorrect");
     }
 
     function minVotesRequired(uint256 totalVotersNum, uint256 proposalType) public pure returns (uint256) {

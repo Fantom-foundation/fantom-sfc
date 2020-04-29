@@ -6,6 +6,7 @@ import "./Governable.sol";
 import "./Proposal.sol";
 import "./SoftwareUpgradeProposal.sol";
 import "./GovernanceSettings.sol";
+import "./AbstractProposal.sol";
 import "../common/ImplementationValidator.sol";
 
 // TODO: 
@@ -46,7 +47,7 @@ contract Governance is GovernanceSettings {
     uint256 lastProposalId;
     uint256[] public deadlines;
     uint256[] public inactiveProposalIds;
-    uint256 abstractProposalInterfaceId;
+    bytes4 abstractProposalInterfaceId;
 
     mapping(uint256 => ProposalDescription) proposals;
     mapping(uint256 => uint256) deposits;
@@ -57,6 +58,7 @@ contract Governance is GovernanceSettings {
     mapping(address => mapping(uint256 => uint256)) public reducedVotersPower;
     mapping(address => mapping(uint256 => uint256)) public depositors;
     mapping(address => mapping(uint256 => Voter)) public voters;
+    mapping(uint256 => uint256[]) public proposalsAtDeadline;
     mapping(uint256 => uint256) public deadlineIdxs;
 
     event ProposalIsCreated(uint256 proposalId);
@@ -112,9 +114,9 @@ contract Governance is GovernanceSettings {
         emit ProposalDepositIncreased(msg.sender, proposalId, msg.value, prop.deposit);
     }
 
-    function createProposal(address proposalContract, uint256 requiredDeposit, bytes32[] choises) public payable {
+    function createProposal(address proposalContract, uint256 requiredDeposit, bytes32[] memory choises) public payable {
         validateProposalContract(proposalContract);
-        require(msg.value >= minimumStartingDeposit();
+        require(msg.value >= minimumStartingDeposit(), "starting deposit is not enough");
 
         uint256 reqDeposit;
         if (requiredDeposit >= minimumDeposit()) {
@@ -123,16 +125,16 @@ contract Governance is GovernanceSettings {
             reqDeposit = minimumDeposit();
         }
 
-        lastProposalId++;    
+        lastProposalId++;
         ProposalDescription storage prop = proposals[lastProposalId];
         prop.id = lastProposalId;
         prop.requiredDeposit = reqDeposit;
-        prop.requiredVotes = minimumVotesRequired();
+        prop.requiredVotes = minimumVotesRequired(totalVotes(prop.propType));
         prop.deposit = msg.value;
     }
 
     function validateProposalContract(address proposalContract) public {
-        AbstractProposal memory proposal = AbstractProposal(proposalContract);
+        AbstractProposal proposal = AbstractProposal(proposalContract);
         require(proposal.supportsInterface(abstractProposalInterfaceId), "address does not implement proposal interface");
     }
 
@@ -154,17 +156,16 @@ contract Governance is GovernanceSettings {
         }
 
         uint256 idx = deadlineIdxs[deadline];
-        uint256 daedline = deadlines[idx];
         deadlines[idx] = deadlines[deadlines.length - 1];
         deadlineIdxs[deadlines[idx]] = idx;
         deadlines.length--;
 
-        delete deadlineIdxs[deadlineToDelete]
-        emit DeadlineRemoved(daedline);
+        delete deadlineIdxs[deadline];
+        emit DeadlineRemoved(deadline);
     }
 
     function handleProposalDeadline(uint256 proposalId) public {
-        Proposal storage prop = proposals[proposalId];
+        ProposalDescription storage prop = proposals[proposalId];
         if (statusDepositing(prop.status)) {
             if (prop.deposit >= prop.requiredDeposit) {
                 proceedToVoting(prop.id);
@@ -186,16 +187,24 @@ contract Governance is GovernanceSettings {
         _cancelVote(proposalId, msg.sender);
     }
 
+    function proceedToVoting(uint256 proposalId) internal {
+        ProposalDescription storage prop = proposals[proposalId];
+        prop.deadlines.votingStartTime = block.timestamp;
+        prop.deadlines.votingEndTime = block.timestamp + votingPeriod();
+        prop.status = setStatusVoting(prop.status);
+        emit StartedProposalVoting(proposalId);
+    }
+
     function resolveProposal(uint256 proposalId) internal {
         // todo: implement logic below
-        Proposal storage prop = proposals[proposalId];
+        ProposalDescription storage prop = proposals[proposalId];
         require(statusVoting(prop.status), "proposal is not at voting period");
         require(prop.votes >= prop.requiredVotes, "proposal has not enough votes to resolve");
         require(prop.deadlines.votingEndTime <= block.timestamp, "proposal voting deadline is not passed");
 
         if (prop.propType == typeExecutable()) {
             address propAddr = prop.proposalContract;
-            propAddr.delegatecall(bytes4(keccak256("execute()")));
+            propAddr.delegatecall(abi.encodeWithSignature("execute()"));
         }
 
         prop.status = setStatusAccepted(prop.status);
@@ -203,13 +212,17 @@ contract Governance is GovernanceSettings {
         emit ResolvedProposal(proposalId);
     }
 
+    function totalVotes(uint256 propType) internal view returns (uint256) {
+        return governableContract.getTotalVotes(propType);
+    }
+
     function proposalIsAccepted(uint256 proposalId) internal returns(bool) {
-        Proposal storage prop = proposals[proposalId];
+        ProposalDescription storage prop = proposals[proposalId];
         if (prop.deposit < prop.requiredDeposit) {
             return false;
         }
 
-        if (prop.totalVotes < prop.requiredVotes) {
+        if (prop.votes < prop.requiredVotes) {
             return false;
         }
 
@@ -221,9 +234,18 @@ contract Governance is GovernanceSettings {
 
     }
 
+    function increaseVotersPower(uint256 proposalId, address voter, uint256 power) internal {
+        uint256 choise = voters[voter][proposalId].choise;
+
+        ProposalDescription storage prop = proposals[proposalId];
+        prop.choises[choise] += power;
+        voters[voter][proposalId].power += power;
+        reducedVotersPower[voter][proposalId] -= power;
+    }
+
     function _cancelVote(uint256 proposalId, address voterAddr) internal {
         Voter memory voter = voters[voterAddr][proposalId];
-        Proposal storage prop = proposals[proposalId];
+        ProposalDescription storage prop = proposals[proposalId];
 
         prop.choises[voter.choise] -= voter.power;
         if (voters[voterAddr][proposalId].previousDelegation != address(0)) {
@@ -242,12 +264,13 @@ contract Governance is GovernanceSettings {
 
         prop.choises[choise] += power;
         prop.votes += power;
-        emit UserVoted(msg.sender, proposalId, choise, power, prop.votes);
+
+        emit UserVoted(msg.sender, proposalId, choise, power);
     }
 
     function recountVoter(uint256 proposalId, address voterAddr) internal {
         Voter memory voter = voters[voterAddr][proposalId];
-        Proposal storage prop = proposals[proposalId];
+        ProposalDescription storage prop = proposals[proposalId];
         _cancelVote(proposalId, voterAddr);
 
         (uint256 ownVotingPower, uint256 delegationVotingPower, uint256 delegatedVotingPower) = accountVotingPower(voterAddr, prop.id);
@@ -265,16 +288,20 @@ contract Governance is GovernanceSettings {
     function reduceVotersPower(uint256 proposalId, address voter, uint256 power) internal {
         uint256 choise = voters[voter][proposalId].choise;
 
-        Proposal storage prop = proposals[proposalId];
+        ProposalDescription storage prop = proposals[proposalId];
         prop.choises[choise] -= power;
         voters[voter][proposalId].power -= power;
         reducedVotersPower[voter][proposalId] += power;
         emit VotersPowerReduced(voter);
     }
 
+    function accountVotingPower(address acc, uint256 proposalId) public view returns (uint256, uint256, uint256) {
+        ProposalDescription memory prop = proposals[proposalId];
+        return governableContract.getVotingPower(acc, prop.propType);
+    }
 
     function failProposal(uint256 proposalId) internal {
-        Proposal storage prop = proposals[proposalId];
+        ProposalDescription storage prop = proposals[proposalId];
         if (statusDepositing(prop.status)) {
             require(prop.deadlines.depositingEndTime < block.timestamp);
         }

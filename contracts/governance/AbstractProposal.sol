@@ -18,7 +18,7 @@ contract AbstractProposal {
         uint256 votingEndEpoch;
     }
 
-    uint256 INTERFACE_ID;
+    bytes4 INTERFACE_ID;
     uint256 public id;
     uint256 public propType;
     uint256 public status; // status is a bitmask, check out "constants" for a further info
@@ -38,9 +38,6 @@ contract AbstractProposal {
     bytes public proposalSpecialData;
     bool public votesCanBeCanceled;
 
-
-    function createSpecialData(bytes32[] calldata dataValues) external returns(bytes32);
-    function modifyInnerState(bytes32[] calldata dataValues) external returns(bytes32);
     function validateProposal(bytes32) external;
     function execute(bytes32) external;
 
