@@ -39,7 +39,7 @@ contract AbstractProposal {
     bool public votesCanBeCanceled;
 
     function validateProposal(bytes32) external;
-    function execute(bytes32) external;
+    function execute(uint256 optionId) external;
 
     function supportsInterface(bytes4 interfaceID) external view returns (bool) {
         return interfaceID == INTERFACE_ID;

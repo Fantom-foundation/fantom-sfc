@@ -7,6 +7,7 @@ import "./Proposal.sol";
 import "./SoftwareUpgradeProposal.sol";
 import "./GovernanceSettings.sol";
 import "./AbstractProposal.sol";
+import "./LRC.sol";
 import "../common/ImplementationValidator.sol";
 
 // TODO: 
@@ -15,10 +16,11 @@ import "../common/ImplementationValidator.sol";
 // Add LRC voting and calculation
 contract Governance is GovernanceSettings {
     using SafeMath for uint256;
+    using LRC for LRC.LrcOption;
 
     struct Voter {
         uint256 power;
-        uint256 choise;
+        uint256[] choises;
         address previousDelegation;
     }
 
@@ -31,15 +33,18 @@ contract Governance is GovernanceSettings {
 
     struct ProposalDescription {
         ProposalTimeline deadlines;
+        string description;
         uint256 id;
         uint256 requiredDeposit;
         uint256 requiredVotes;
         uint256 deposit;
-        uint256 votes;
         uint256 status;
-        uint256[] choises;
+        LRC.LrcOption[] options;
+        uint256 electedOption;
+        uint256 totalVotes;
         uint8 propType;
         address proposalContract;
+        mapping(address voter => uint256[] choises);
     }
 
     Governable governableContract;
@@ -74,9 +79,9 @@ contract Governance is GovernanceSettings {
     event GovernableContractSet(address addr);
     event SoftwareVersionAdded(string version, address addr);
     event VotersPowerReduced(address voter);
-    event UserVoted(address voter, uint256 proposalId, uint256 choise, uint256 power);
+    event UserVoted(address voter, uint256 proposalId, uint256[] choises, uint256 power);
 
-    function vote(uint256 proposalId, uint256 choise) public {
+    function vote(uint256 proposalId, uint256[] memory choises) public {
         ProposalDescription storage prop = proposals[proposalId];
 
         require(prop.id == proposalId, "proposal with a given id doesnt exist");
@@ -89,14 +94,14 @@ contract Governance is GovernanceSettings {
 
         if (ownVotingPower != 0) {
             uint256 power = ownVotingPower + delegationVotingPower - reducedVotersPower[msg.sender][proposalId];
-            makeVote(proposalId, choise, power);
+            makeVote(proposalId, choises, power);
         }
 
         if (delegatedVotingPower != 0) {
             address delegatedTo = governableContract.delegatedVotesTo(msg.sender);
             recountVoter(proposalId, delegatedTo);
             reduceVotersPower(proposalId, delegatedTo, delegatedVotingPower);
-            makeVote(proposalId, choise, delegatedVotingPower);
+            makeVote(proposalId, choises, delegatedVotingPower);
             voters[msg.sender][proposalId].previousDelegation = delegatedTo;
         }
     }
@@ -174,8 +179,9 @@ contract Governance is GovernanceSettings {
         }
 
         if (statusVoting(prop.status)) {
-            if (proposalIsAccepted(prop.id)) {
-                resolveProposal(prop.id);
+            (bool proposalAccepted, uint256 winnerId) = calculateVotingResult(proposalId);
+            if (proposalAccepted) {
+                resolveProposal(prop.id, winnerId);
                 return;
             }
         }
@@ -195,19 +201,19 @@ contract Governance is GovernanceSettings {
         emit StartedProposalVoting(proposalId);
     }
 
-    function resolveProposal(uint256 proposalId) internal {
-        // todo: implement logic below
+    function resolveProposal(uint256 proposalId, uint256 winnerOptionId) internal {
         ProposalDescription storage prop = proposals[proposalId];
         require(statusVoting(prop.status), "proposal is not at voting period");
-        require(prop.votes >= prop.requiredVotes, "proposal has not enough votes to resolve");
+        require(prop.totalVotes >= prop.requiredVotes, "proposal has not enough votes to resolve");
         require(prop.deadlines.votingEndTime <= block.timestamp, "proposal voting deadline is not passed");
 
         if (prop.propType == typeExecutable()) {
             address propAddr = prop.proposalContract;
-            propAddr.delegatecall(abi.encodeWithSignature("execute()"));
+            propAddr.delegatecall(abi.encodeWithSignature("execute(uint256)"), winnerOptionId);
         }
 
         prop.status = setStatusAccepted(prop.status);
+        prop.electedOption = winnerOptionId;
         inactiveProposalIds.push(proposalId);
         emit ResolvedProposal(proposalId);
     }
@@ -216,31 +222,38 @@ contract Governance is GovernanceSettings {
         return governableContract.getTotalVotes(propType);
     }
 
-    function proposalIsAccepted(uint256 proposalId) internal returns(bool) {
+    function calculateVotingResult(uint256 proposalId) internal returns(bool, uint256) {
         ProposalDescription storage prop = proposals[proposalId];
-        if (prop.deposit < prop.requiredDeposit) {
-            return false;
+        uint256 leastResistance;
+        uint256 winnerId;
+        for (uint256 i = 0; i < prop.options.length; i++) {
+            prop.options[i].recalculate();
+            uint256 arc = prop.options[i].arc;
+
+            if (prop.options[i].dw > _maximumlPossibleDesignation) {
+                continue;
+            }
+
+            if (leastResistance == 0) {
+                leastResistance = arc;
+                winnerId = i;
+                continue;
+            }
+
+            if (arc <= _maximumlPossibleResistance && arc <= leastResistance) {
+                leastResistance = arc;
+                winnerId = i;
+                continue;
+            }
         }
 
-        if (prop.votes < prop.requiredVotes) {
-            return false;
-        }
-
-        return proposalSupported(proposalId);
-    }
-
-    // TODO: this function will be used to calculate all the LRC voting stuff
-    function proposalSupported(uint256 proposalId) internal returns(bool) {
-
+        return (leastResistance != 0, winnerId);
     }
 
     function increaseVotersPower(uint256 proposalId, address voter, uint256 power) internal {
-        uint256 choise = voters[voter][proposalId].choise;
-
-        ProposalDescription storage prop = proposals[proposalId];
-        prop.choises[choise] += power;
         voters[voter][proposalId].power += power;
-        reducedVotersPower[voter][proposalId] -= power;
+        // reducedVotersPower[voter][proposalId] -= power;
+        addChoisesToProp(proposalId, choises, power);
     }
 
     function _cancelVote(uint256 proposalId, address voterAddr) internal {
@@ -255,17 +268,26 @@ contract Governance is GovernanceSettings {
         delete voters[voterAddr][proposalId];
     }
 
-    function makeVote(uint256 proposalId, uint256 choise, uint256 power) internal {
-        ProposalDescription storage prop = proposals[proposalId];
+    function makeVote(uint256 proposalId, uint256[] memory choises, uint256 power) internal {
 
         Voter storage voter = voters[msg.sender][proposalId];
-        voter.choise = choise;
+        voter.choises = choises;
         voter.power = power;
+        addChoisesToProp(proposalId, choises, power);
 
-        prop.choises[choise] += power;
-        prop.votes += power;
+        emit UserVoted(msg.sender, proposalId, choises, power);
+    }
 
-        emit UserVoted(msg.sender, proposalId, choise, power);
+    function addChoisesToProp(uint256 proposalId, uint256[] memory choises, uint256 power) internal {
+        ProposalDescription storage prop = proposals[proposalId];
+
+        require(choises.length == prop.lrcOptions.length, "incorrect choises");
+
+        prop.totalVotes += power;
+
+        for (uint256 i = 0; i < prop.lrcOptions.length; i++) {
+            prop.lrcOptions[i].addVote(choises[i], power);
+        }
     }
 
     function recountVoter(uint256 proposalId, address voterAddr) internal {
@@ -303,10 +325,10 @@ contract Governance is GovernanceSettings {
     function failProposal(uint256 proposalId) internal {
         ProposalDescription storage prop = proposals[proposalId];
         if (statusDepositing(prop.status)) {
-            require(prop.deadlines.depositingEndTime < block.timestamp);
+            require(prop.deadlines.depositingEndTime < block.timestamp, "depositing period didnt end");
         }
         if (statusVoting(prop.status)) {
-            require(prop.deadlines.votingEndTime < block.timestamp);
+            require(prop.deadlines.votingEndTime < block.timestamp, "voting period didnt end");
         }
 
         prop.status = failStatus(prop.status);
