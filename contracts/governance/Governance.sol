@@ -81,6 +81,10 @@ contract Governance is GovernanceSettings {
     event VotersPowerReduced(address voter);
     event UserVoted(address voter, uint256 proposalId, uint256[] choises, uint256 power);
 
+    constructor (address _governableContract) public {
+        governableContract = Governable(_governableContract);
+    }
+
     function vote(uint256 proposalId, uint256[] memory choises) public {
         ProposalDescription storage prop = proposals[proposalId];
 

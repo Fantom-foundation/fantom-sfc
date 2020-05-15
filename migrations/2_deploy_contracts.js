@@ -6,5 +6,5 @@ module.exports = async(deployer, network) => {
   await deployer.deploy(TestStakers);
   await deployer.deploy(LRC);
   await deployer.link(LRC, Governance);
-  await deployer.deploy(Governance);
+  await deployer.deploy(Governance, TestStakers.address);
 };
