@@ -44,7 +44,7 @@ contract Governance is GovernanceSettings {
         uint256 totalVotes;
         uint8 propType;
         address proposalContract;
-        mapping(address voter => uint256[] choises);
+        // mapping(address => uint256[]);
     }
 
     Governable governableContract;
@@ -209,7 +209,7 @@ contract Governance is GovernanceSettings {
 
         if (prop.propType == typeExecutable()) {
             address propAddr = prop.proposalContract;
-            propAddr.delegatecall(abi.encodeWithSignature("execute(uint256)"), winnerOptionId);
+            propAddr.delegatecall(abi.encodeWithSignature("execute(uint256)", winnerOptionId));
         }
 
         prop.status = setStatusAccepted(prop.status);
@@ -250,21 +250,24 @@ contract Governance is GovernanceSettings {
         return (leastResistance != 0, winnerId);
     }
 
-    function increaseVotersPower(uint256 proposalId, address voter, uint256 power) internal {
-        voters[voter][proposalId].power += power;
+    function increaseVotersPower(uint256 proposalId, address voterAddr, uint256 power) internal {
+        voters[voterAddr][proposalId].power += power;
         // reducedVotersPower[voter][proposalId] -= power;
-        addChoisesToProp(proposalId, choises, power);
+        Voter storage voter = voters[msg.sender][proposalId];
+        voter.power += power;
+        addChoisesToProp(proposalId, voter.choises, power);
     }
 
     function _cancelVote(uint256 proposalId, address voterAddr) internal {
         Voter memory voter = voters[voterAddr][proposalId];
         ProposalDescription storage prop = proposals[proposalId];
 
-        prop.choises[voter.choise] -= voter.power;
+        // prop.choises[voter.choise] -= voter.power;
         if (voters[voterAddr][proposalId].previousDelegation != address(0)) {
             increaseVotersPower(proposalId, voterAddr, voter.power);
         }
 
+        removeChoisesFromProp(proposalId, voter.choises, voter.power);
         delete voters[voterAddr][proposalId];
     }
 
@@ -281,12 +284,24 @@ contract Governance is GovernanceSettings {
     function addChoisesToProp(uint256 proposalId, uint256[] memory choises, uint256 power) internal {
         ProposalDescription storage prop = proposals[proposalId];
 
-        require(choises.length == prop.lrcOptions.length, "incorrect choises");
+        require(choises.length == prop.options.length, "incorrect choises");
 
         prop.totalVotes += power;
 
-        for (uint256 i = 0; i < prop.lrcOptions.length; i++) {
-            prop.lrcOptions[i].addVote(choises[i], power);
+        for (uint256 i = 0; i < prop.options.length; i++) {
+            prop.options[i].addVote(choises[i], power);
+        }
+    }
+
+    function removeChoisesFromProp(uint256 proposalId, uint256[] memory choises, uint256 power) internal {
+        ProposalDescription storage prop = proposals[proposalId];
+
+        require(choises.length == prop.options.length, "incorrect choises");
+
+        prop.totalVotes -= power;
+
+        for (uint256 i = 0; i < prop.options.length; i++) {
+            prop.options[i].removeVote(choises[i], power);
         }
     }
 
@@ -304,14 +319,13 @@ contract Governance is GovernanceSettings {
             power = delegatedVotingPower + delegationVotingPower - reducedVotersPower[voterAddr][proposalId];
         }
 
-        makeVote(proposalId, voter.choise, power);
+        makeVote(proposalId, voter.choises, power);
     }
 
     function reduceVotersPower(uint256 proposalId, address voter, uint256 power) internal {
-        uint256 choise = voters[voter][proposalId].choise;
+        // uint256[] choises = voters[voter][proposalId].choises;
 
         ProposalDescription storage prop = proposals[proposalId];
-        prop.choises[choise] -= power;
         voters[voter][proposalId].power -= power;
         reducedVotersPower[voter][proposalId] += power;
         emit VotersPowerReduced(voter);

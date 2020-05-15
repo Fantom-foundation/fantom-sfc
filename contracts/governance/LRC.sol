@@ -74,4 +74,18 @@ library LRC {
         self.totalVotes += power;
         self.resistance += power * scale;
     }
+
+    function removeVote(LrcOption storage self, uint256 opinionId, uint256 power) public {
+        require(opinionId < OptionsNum, "inappropriate opinion id");
+        self.opinions[opinionId].totalVotes -= power;
+
+        uint256 scale;
+        if (opinionId == OptionsNum - 1) {
+            scale = OptionsNum;
+        }
+        scale = opinionId;
+
+        self.totalVotes -= power;
+        self.resistance -= power * scale;
+    }
 }
