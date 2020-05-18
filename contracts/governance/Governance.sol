@@ -10,7 +10,7 @@ import "./AbstractProposal.sol";
 import "./LRC.sol";
 import "../common/ImplementationValidator.sol";
 
-// TODO: 
+// TODO:
 // Add lib to prevent reentrance
 // Add more tests
 // Add LRC voting and calculation
@@ -85,6 +85,11 @@ contract Governance is GovernanceSettings {
         governableContract = Governable(_governableContract);
     }
 
+    function getProposalStatus(uint256 proposalId) public view returns (uint256) {
+        ProposalDescription storage prop = proposals[proposalId];
+        return (prop.status);
+    }
+
     function vote(uint256 proposalId, uint256[] memory choises) public {
         ProposalDescription storage prop = proposals[proposalId];
 
@@ -123,7 +128,7 @@ contract Governance is GovernanceSettings {
         emit ProposalDepositIncreased(msg.sender, proposalId, msg.value, prop.deposit);
     }
 
-    function createProposal(address proposalContract, uint256 requiredDeposit, bytes32[] memory choises) public payable {
+    function createProposal(address proposalContract,uint256 status, uint256 requiredDeposit, bytes32[] memory choises) public payable {
         validateProposalContract(proposalContract);
         require(msg.value >= minimumStartingDeposit(), "starting deposit is not enough");
 
@@ -138,6 +143,7 @@ contract Governance is GovernanceSettings {
         ProposalDescription storage prop = proposals[lastProposalId];
         prop.id = lastProposalId;
         prop.requiredDeposit = reqDeposit;
+        prop.status = setStatusVoting(status);
         prop.requiredVotes = minimumVotesRequired(totalVotes(prop.propType));
         prop.deposit = msg.value;
     }
