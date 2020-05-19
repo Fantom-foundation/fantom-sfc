@@ -58,7 +58,7 @@ library LRC {
     }
 
     function calculateRawCount(LrcOption storage self) public {
-        
+
     }
 
     function addVote(LrcOption storage self, uint256 opinionId, uint256 power) public {

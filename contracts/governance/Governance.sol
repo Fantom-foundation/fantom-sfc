@@ -39,7 +39,9 @@ contract Governance is GovernanceSettings {
         uint256 requiredVotes;
         uint256 deposit;
         uint256 status;
-        LRC.LrcOption[] options;
+        mapping(uint256 => LRC.LrcOption) options;
+        uint256[] optionIDs;
+        uint256 lastOptionID;
         uint256 electedOption;
         uint256 totalVotes;
         uint8 propType;
@@ -85,9 +87,9 @@ contract Governance is GovernanceSettings {
         governableContract = Governable(_governableContract);
     }
 
-    function getProposalStatus(uint256 proposalId) public view returns (uint256) {
+    function getProposalOptionLast(uint256 proposalId) public view returns (uint256) {
         ProposalDescription storage prop = proposals[proposalId];
-        return (prop.status);
+        return (prop.lastOptionID);
     }
 
     function vote(uint256 proposalId, uint256[] memory choises) public {
@@ -98,6 +100,7 @@ contract Governance is GovernanceSettings {
         require(voters[msg.sender][proposalId].power == 0, "this account has already voted. try to cancel a vote if you want to revote");
         require(prop.deposit != 0, "proposal didnt enter depositing period");
         require(prop.deposit >= prop.requiredDeposit, "proposal is not at voting period");
+        require(choises.length == prop.optionIDs.length, "incorrect choises");
 
         (uint256 ownVotingPower, uint256 delegationVotingPower, uint256 delegatedVotingPower) = accountVotingPower(msg.sender, prop.id);
 
@@ -128,9 +131,10 @@ contract Governance is GovernanceSettings {
         emit ProposalDepositIncreased(msg.sender, proposalId, msg.value, prop.deposit);
     }
 
-    function createProposal(address proposalContract,uint256 status, uint256 requiredDeposit, bytes32[] memory choises) public payable {
+    function createProposal(address proposalContract, uint256 status, uint256 requiredDeposit, bytes32[] memory choises) public payable {
         validateProposalContract(proposalContract);
         require(msg.value >= minimumStartingDeposit(), "starting deposit is not enough");
+        require(choises.length != 0, "choises is empty");
 
         uint256 reqDeposit;
         if (requiredDeposit >= minimumDeposit()) {
@@ -145,6 +149,12 @@ contract Governance is GovernanceSettings {
         prop.requiredDeposit = reqDeposit;
         prop.status = setStatusVoting(status);
         prop.requiredVotes = minimumVotesRequired(totalVotes(prop.propType));
+        for (uint256 i = 0; i < choises.length; i++) {
+            prop.lastOptionID++;
+            LRC.LrcOption storage option = prop.options[prop.lastOptionID];
+            option.description = bytes32ToString(choises[i]);
+            prop.optionIDs.push(prop.lastOptionID);
+        }
         prop.deposit = msg.value;
     }
 
@@ -236,11 +246,12 @@ contract Governance is GovernanceSettings {
         ProposalDescription storage prop = proposals[proposalId];
         uint256 leastResistance;
         uint256 winnerId;
-        for (uint256 i = 0; i < prop.options.length; i++) {
-            prop.options[i].recalculate();
-            uint256 arc = prop.options[i].arc;
+        for (uint256 i = 0; i < prop.optionIDs.length; i++) {
+            uint256 optionID = prop.optionIDs[i];
+            prop.options[optionID].recalculate();
+            uint256 arc = prop.options[optionID].arc;
 
-            if (prop.options[i].dw > _maximumlPossibleDesignation) {
+            if (prop.options[optionID].dw > _maximumlPossibleDesignation) {
                 continue;
             }
 
@@ -294,24 +305,26 @@ contract Governance is GovernanceSettings {
     function addChoisesToProp(uint256 proposalId, uint256[] memory choises, uint256 power) internal {
         ProposalDescription storage prop = proposals[proposalId];
 
-        require(choises.length == prop.options.length, "incorrect choises");
+        require(choises.length == prop.optionIDs.length, "incorrect choises");
 
         prop.totalVotes += power;
 
-        for (uint256 i = 0; i < prop.options.length; i++) {
-            prop.options[i].addVote(choises[i], power);
+        for (uint256 i = 0; i < prop.optionIDs.length; i++) {
+            uint256 optionID = prop.optionIDs[i];
+            prop.options[optionID].addVote(choises[i], power);
         }
     }
 
     function removeChoisesFromProp(uint256 proposalId, uint256[] memory choises, uint256 power) internal {
         ProposalDescription storage prop = proposals[proposalId];
 
-        require(choises.length == prop.options.length, "incorrect choises");
+        require(choises.length == prop.optionIDs.length, "incorrect choises");
 
         prop.totalVotes -= power;
 
-        for (uint256 i = 0; i < prop.options.length; i++) {
-            prop.options[i].removeVote(choises[i], power);
+        for (uint256 i = 0; i < prop.optionIDs.length; i++) {
+            uint256 optionID = prop.optionIDs[i];
+            prop.options[optionID].removeVote(choises[i], power);
         }
     }
 
