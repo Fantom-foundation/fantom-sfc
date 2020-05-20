@@ -20,6 +20,7 @@ const IS_ACTIVE = 0;
 const IS_FROSEN = 1;
 const IS_VOTING = 5;
 const IS_FAILED = 4;
+const stakerMetadata = "0x0001";
 
 contract('Governance test', async ([acc1, acc2, contractAddr]) => {
     beforeEach(async () => {
@@ -75,7 +76,6 @@ contract('Governance test', async ([acc1, acc2, contractAddr]) => {
         let createMsg = {from: acc1, value: ether('2.0')};
         let voteMsg = {from: acc1};
         const proposalID = 1;
-        const stakerMetadata = "0x0001";
 
         await this.stakers.createStake(stakerMetadata, {from: acc1, value: ether('3.0')});
         expect(await this.stakers.stakersNum.call()).to.be.bignumber.equal(new BN('1'));
@@ -102,13 +102,44 @@ contract('Governance test', async ([acc1, acc2, contractAddr]) => {
         await expectRevert(this.governance.vote(proposalID, [String("0x0000000000001").valueOf()], voteMsg), "incorrect choises");
     });
 
+    it('check vote - without staker create delegation', async () => {
+        let createMsg = {from: acc1, value: ether('1.0')};
+        let voteMsg = {from: acc1};
+        const proposalID = 1;
 
+        await this.stakers.createStake(stakerMetadata, {from: acc1, value: ether('3.0')});
+        expect(await this.stakers.stakersNum.call()).to.be.bignumber.equal(new BN('1'));
 
+        await this.governance.createProposal(this.proposal.address, IS_VOTING, 1,
+            [String("0x0000000000000").valueOf(), String("0x00000000000001").valueOf()], createMsg);
 
+        await this.governance.vote(proposalID,
+            [String("0x0000000000000").valueOf(), String("0x00000000000001").valueOf()], voteMsg);
 
+        let voter = await this.governance.voters.call(acc1, proposalID);
+        await expect(voter.power).to.be.bignumber.equal(new BN(ether('3.0')));
+    });
 
+    it('check vote - with staker create delegation', async () => {
+        const stakerID = 1;
 
+        let createMsg = {from: acc1, value: ether('1.0')};
+        let voteMsg = {from: acc1};
+        const proposalID = 1;
 
+        await this.stakers.createStake(stakerMetadata, {from: acc1, value: ether('3.0')});
+        expect(await this.stakers.stakersNum.call()).to.be.bignumber.equal(new BN('1'));
+        await this.stakers.createDelegation(stakerID, {from: acc2, value: ether('1.0')});
+
+        await this.governance.createProposal(this.proposal.address, IS_VOTING, 1,
+            [String("0x0000000000000").valueOf(), String("0x00000000000001").valueOf()], createMsg);
+
+        await this.governance.vote(proposalID,
+            [String("0x0000000000000").valueOf(), String("0x00000000000001").valueOf()], voteMsg);
+
+        let voter = await this.governance.voters.call(acc1, proposalID);
+        await expect(voter.power).to.be.bignumber.equal(new BN(ether('4.0')));
+    });
 
     it('check increase proposal deposit - proposal with a given id doesnt exist', async () => {
         let createMsg = {from: acc1, value: ether('2.0')};
@@ -137,15 +168,62 @@ contract('Governance test', async ([acc1, acc2, contractAddr]) => {
         await expectRevert(this.governance.increaseProposalDeposit(1, voteMsg), "msg.value is zero");
     });
 
-    it('check increase proposal deposit - cannot deposit to an overdue proposal', async () => {
+    it('check increase proposal deposit - correct', async () => {
         let createMsg = {from: acc1, value: ether('2.0')};
         let voteMsg = {from: acc1, value: ether('1.0')};
         const proposalID = 1;
 
         await this.governance.createProposal(this.proposal.address, IS_VOTING, 1, [String("0x0000000000000").valueOf(), String("0x00000000000001").valueOf()], createMsg);
+        await expect(await this.governance.depositors.call(acc1, proposalID)).to.be.bignumber.equal(ether('0.0'));
 
-        await this.governance.handleDeadlines(1, proposalID);
+        await this.governance.increaseProposalDeposit(proposalID, voteMsg);
+        await expect(await this.governance.depositors.call(acc1, proposalID)).to.be.bignumber.equal(ether('1.0'));
+    });
 
-        await expectRevert(this.governance.increaseProposalDeposit(proposalID, voteMsg), "cannot deposit to an overdue proposal");
+    it('check handle deadlines - incorrect indexes passed', async () => {
+        const proposalID = 1;
+
+        await this.stakers.createStake(stakerMetadata, {from: acc1, value: ether('3.0')});
+        expect(await this.stakers.stakersNum.call()).to.be.bignumber.equal(new BN('1'));
+        await this.stakers.createStake(stakerMetadata, {from: acc2, value: ether('4.0')});
+        expect(await this.stakers.stakersNum.call()).to.be.bignumber.equal(new BN('2'));
+
+        await this.governance.createProposal(this.proposal.address, IS_VOTING, 1,
+            [String("0x0000000000000").valueOf(), String("0x00000000000001").valueOf()], {from: acc1, value: ether('1.0')});
+
+        await this.governance.vote(proposalID,
+            [String("0x0000000000000").valueOf(), String("0x00000000000001").valueOf()], {from: acc1});
+
+        await this.governance.vote(proposalID,
+            [String("0x0000000000000").valueOf(), String("0x00000000000001").valueOf()], {from: acc2});
+
+        await expectRevert(this.governance.handleDeadlines(3, 1), "incorrect indexes passed");
+    });
+
+    it('check handle deadlines', async () => {
+        const proposalID = 1;
+
+        await this.stakers.createStake(stakerMetadata, {from: acc1, value: ether('3.0')});
+        expect(await this.stakers.stakersNum.call()).to.be.bignumber.equal(new BN('1'));
+        await this.stakers.createStake(stakerMetadata, {from: acc2, value: ether('4.0')});
+        expect(await this.stakers.stakersNum.call()).to.be.bignumber.equal(new BN('2'));
+
+        await this.governance.createProposal(this.proposal.address, IS_VOTING, 1,
+            [String("0x0000000000000").valueOf(), String("0x00000000000001").valueOf()], {from: acc1, value: ether('1.0')});
+
+        await this.governance.vote(proposalID,
+            [String("0x0000000000000").valueOf(), String("0x00000000000001").valueOf()], {from: acc1});
+
+        await this.governance.vote(proposalID,
+            [String("0x0000000000000").valueOf(), String("0x00000000000001").valueOf()], {from: acc2});
+
+        // let voter = await this.governance.voters.call(acc1, proposalID);
+        // await expect(voter.power).to.be.bignumber.equal(new BN(ether('3.0')));
+        // voter = await this.governance.voters.call(acc2, proposalID);
+        // await expect(voter.power).to.be.bignumber.equal(new BN(ether('4.0')));
+
+        let deadlinesCount = await this.governance.getDeadlinesCount();
+        await expect(deadlinesCount).to.be.bignumber.equal(new BN('2'));
+        await expectRevert(this.governance.handleDeadlines(0, 2), "end index");
     });
 })

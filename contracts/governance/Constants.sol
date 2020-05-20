@@ -96,8 +96,8 @@ contract Constants is StatusConstants {
     uint256 constant CANCEL_DELEGATION_FEE = 123;
 
     // temprorary timestamp constants
-    uint256 constant DEPOSITING_PERIOD = 100000;
-    uint256 constant VOTING_PERIOD = 100000;
+    uint256 constant DEPOSITING_PERIOD = 60 * 60 * 24 * 7;
+    uint256 constant VOTING_PERIOD = 60 * 60 * 24 * 7;
 
     function typeExecutable() public pure returns (uint8) {
         return TYPE_EXECUTABLE;
