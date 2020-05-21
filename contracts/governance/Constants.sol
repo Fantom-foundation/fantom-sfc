@@ -96,8 +96,8 @@ contract Constants is StatusConstants {
     uint256 constant CANCEL_DELEGATION_FEE = 123;
 
     // temprorary timestamp constants
-    uint256 constant DEPOSITING_PERIOD = 60 * 60 * 24 * 7;
-    uint256 constant VOTING_PERIOD = 60 * 60 * 24 * 7;
+    uint256 DEPOSITING_PERIOD = 1 weeks;
+    uint256 VOTING_PERIOD = 1 weeks;
 
     function typeExecutable() public pure returns (uint8) {
         return TYPE_EXECUTABLE;
@@ -111,11 +111,19 @@ contract Constants is StatusConstants {
         return CANCEL_DELEGATION_FEE;
     }
 
-    function votingPeriod() public pure returns (uint256) {
+    function setVotingPeriod(uint256 period) public {
+        VOTING_PERIOD = period;
+    }
+
+    function votingPeriod() public view returns (uint256) {
         return VOTING_PERIOD;
     }
 
-    function depositingPeriod() public pure returns (uint256) {
+    function setDepositingPeriod(uint256 period) public {
+        DEPOSITING_PERIOD = period;
+    }
+
+    function depositingPeriod() public view returns (uint256) {
         return DEPOSITING_PERIOD;
     }
 

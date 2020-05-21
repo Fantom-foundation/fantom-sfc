@@ -66,7 +66,7 @@ contract Governance is GovernanceSettings {
     mapping(address => mapping(uint256 => uint256)) public depositors; // sender address to proposal id to deposit
     mapping(address => mapping(uint256 => Voter)) public voters;
     mapping(uint256 => uint256[]) public proposalsAtDeadline; // deadline to proposal ids
-    mapping(uint256 => uint256) public deadlineIdxs; // deadline to index from deadlines
+//    mapping(uint256 => uint256) public idxToDeadlines; // index to deadline
 
     event ProposalIsCreated(uint256 proposalId);
     event ProposalIsResolved(uint256 proposalId);
@@ -170,33 +170,32 @@ contract Governance is GovernanceSettings {
         require(proposal.supportsInterface(abstractProposalInterfaceId), "address does not implement proposal interface");
     }
 
-    function handleDeadlines(uint256 startIdx, uint256 endIdx) public {
-        require(startIdx <= endIdx, "incorrect indexes passed");
+    function handleDeadlines(uint256 startIdx, uint256 howMany) public {
+        require(startIdx < deadlines.length, "incorrect indexes passed");
 
-        if (endIdx > deadlines.length) {
-            endIdx = deadlines.length;
+        uint256 length = howMany;
+        if (length > deadlines.length - startIdx) {
+            length = deadlines.length - startIdx;
         }
 
-        for (uint256 i = startIdx; i < endIdx; i++) {
-            handleDeadline(deadlines[i]);
+        for (uint256 i = 0; i < length; i++) {
+            handleDeadline(deadlines[startIdx+i]);
         }
 
-        emit DeadlinesResolved(startIdx, endIdx);
+        removeDeadlines(startIdx, length);
+
+        emit DeadlinesResolved(startIdx, length);
     }
 
     function handleDeadline(uint256 deadline) public {
+        require(block.timestamp >= deadline, "deadline is overdue");
+
         uint256[] memory proposalIds = proposalsAtDeadline[deadline];
         for (uint256 i = 0; i < proposalIds.length; i++) {
             uint256 proposalId = proposalIds[i];
             handleProposalDeadline(proposalId);
         }
 
-        uint256 idx = deadlineIdxs[deadline];
-        deadlines[idx] = deadlines[deadlines.length - 1];
-        deadlineIdxs[deadlines[idx]] = idx;
-        deadlines.length--;
-
-        delete deadlineIdxs[deadline];
         emit DeadlineRemoved(deadline);
     }
 
@@ -218,6 +217,29 @@ contract Governance is GovernanceSettings {
         }
 
         failProposal(prop.id);
+    }
+
+    function removeDeadlines(uint256 startIdx, uint256 length)  internal {
+        if (length == 1) {
+            delete proposalsAtDeadline[deadlines[0]];
+            delete deadlines[0];
+            deadlines.length = 0;
+            return;
+        }
+
+        for (uint i = 0; i < length; i++){
+            uint256 idx = startIdx+i;
+            if (idx >= deadlines.length-1) {
+                break;
+            }
+            delete proposalsAtDeadline[deadlines[idx]];
+            deadlines[idx] = deadlines[idx+1];
+        }
+
+        uint256 lastRemoveIdx = startIdx+length-1;
+        delete proposalsAtDeadline[deadlines[lastRemoveIdx]];
+        delete deadlines[lastRemoveIdx];
+        deadlines.length-=length;
     }
 
     function cancelVote(uint256 proposalId) public {
@@ -402,11 +424,9 @@ contract Governance is GovernanceSettings {
         proposalDeadlines[proposalId] = prop.deadlines;
 
         deadlines.push(prop.deadlines.votingEndTime);
-        deadlineIdxs[prop.deadlines.votingEndTime] = deadlines.length-1;
         proposalsAtDeadline[prop.deadlines.votingEndTime].push(proposalId);
 
         deadlines.push(prop.deadlines.depositingEndTime);
-        deadlineIdxs[prop.deadlines.depositingEndTime] = deadlines.length-1;
         proposalsAtDeadline[prop.deadlines.depositingEndTime].push(proposalId);
     }
 }
