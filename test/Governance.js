@@ -16,10 +16,7 @@ web3.setProvider(Web3.givenProvider || 'ws://localhost:9545')//..Web3.givenProvi
 const Governance = artifacts.require('Governance'); // UnitTestGovernance .sol
 const UnitTestStakers = artifacts.require('UnitTestStakers');
 const UnitTestProposal = artifacts.require('UnitTestProposal');
-const IS_ACTIVE = 0;
-const IS_FROSEN = 1;
 const IS_VOTING = 5;
-const IS_FAILED = 4;
 const stakerMetadata = "0x0001";
 
 contract('Governance test', async ([acc1, acc2, contractAddr]) => {
@@ -33,7 +30,7 @@ contract('Governance test', async ([acc1, acc2, contractAddr]) => {
     it('create proposal invalid - starting deposit is not enough', async () => {
         let validProposalMsg = {from: acc1, value: ether('0.0')}; //ether('2.0')
         await expectRevert(
-            this.governance.createProposal(this.proposal.address, IS_FROSEN, 1,
+            this.governance.createProposal(this.proposal.address, 1, 1,
                 [String("0x0000000000000").valueOf(), String("0x00000000000001").valueOf()], validProposalMsg),
             'starting deposit is not enough',
         );
@@ -56,23 +53,25 @@ contract('Governance test', async ([acc1, acc2, contractAddr]) => {
         let createMsg = {from: acc1, value: ether('2.0')};
         let voteMsg = {from: acc1};
 
-        await this.governance.createProposal(this.proposal.address, IS_ACTIVE, 1,
+        await this.governance.createProposal(this.proposal.address, 0, 1,
             [String("0x0000000000000").valueOf(), String("0x00000000000001").valueOf()], createMsg);
 
-        await expectRevert(this.governance.vote(2, [String("0x0000000000000").valueOf()], voteMsg), "proposal with a given id doesnt exist");
+        await expectRevert(this.governance.vote(2,
+            [String("0x0000000000000").valueOf()], voteMsg), "proposal with a given id doesnt exist");
     });
 
     it('check vote - proposal is not at voting period', async () => {
         let createMsg = {from: acc1, value: ether('2.0')};
         let voteMsg = {from: acc1};
 
-        await this.governance.createProposal(this.proposal.address, IS_FAILED, 1,
+        await this.governance.createProposal(this.proposal.address, 4, 1,
             [String("0x0000000000000").valueOf(), String("0x00000000000001").valueOf()], createMsg);
 
-        await expectRevert(this.governance.vote(1, [String("0x0000000000000").valueOf()], voteMsg), "proposal is not at voting period");
+        await expectRevert(this.governance.vote(1,
+            [String("0x0000000000000").valueOf()], voteMsg), "proposal is not at voting period");
     });
 
-    it('check vote - this account has already voted. try to cancel a vote if you want to revote', async () => {
+    it('check vote - this account has already voted', async () => {
         let createMsg = {from: acc1, value: ether('2.0')};
         let voteMsg = {from: acc1};
         const proposalID = 1;
@@ -85,9 +84,11 @@ contract('Governance test', async ([acc1, acc2, contractAddr]) => {
         let voter = await this.governance.voters.call(acc1, proposalID);
         await expect(voter.power).to.be.bignumber.equal(new BN('0'));
 
-        await this.governance.vote(proposalID, [String("0x0000000000000").valueOf(), String("0x00000000000001").valueOf()], voteMsg);
+        await this.governance.vote(proposalID,
+            [String("0x0000000000000").valueOf(), String("0x00000000000001").valueOf()], voteMsg);
 
-        await expectRevert(this.governance.vote(proposalID, [String("0x0000000000000").valueOf(), String("0x00000000000001").valueOf()], voteMsg),
+        await expectRevert(this.governance.vote(proposalID,
+            [String("0x0000000000000").valueOf(), String("0x00000000000001").valueOf()], voteMsg),
             "this account has already voted. try to cancel a vote if you want to revote");
     });
 
@@ -145,7 +146,8 @@ contract('Governance test', async ([acc1, acc2, contractAddr]) => {
         let createMsg = {from: acc1, value: ether('2.0')};
         let voteMsg = {from: acc1};
 
-        await this.governance.createProposal(this.proposal.address, IS_FAILED, 1, [String("0x0000000000000").valueOf(), String("0x00000000000001").valueOf()], createMsg);
+        await this.governance.createProposal(this.proposal.address, 4, 1,
+            [String("0x0000000000000").valueOf(), String("0x00000000000001").valueOf()], createMsg);
 
         await expectRevert(this.governance.increaseProposalDeposit(2, voteMsg), "proposal with a given id doesnt exist");
     });
@@ -154,7 +156,8 @@ contract('Governance test', async ([acc1, acc2, contractAddr]) => {
         let createMsg = {from: acc1, value: ether('2.0')};
         let voteMsg = {from: acc1};
 
-        await this.governance.createProposal(this.proposal.address, IS_FAILED, 1, [String("0x0000000000000").valueOf(), String("0x00000000000001").valueOf()], createMsg);
+        await this.governance.createProposal(this.proposal.address, 4, 1,
+            [String("0x0000000000000").valueOf(), String("0x00000000000001").valueOf()], createMsg);
 
         await expectRevert(this.governance.increaseProposalDeposit(1, voteMsg), "proposal is not depositing");
     });
@@ -163,7 +166,8 @@ contract('Governance test', async ([acc1, acc2, contractAddr]) => {
         let createMsg = {from: acc1, value: ether('2.0')};
         let voteMsg = {from: acc1};
 
-        await this.governance.createProposal(this.proposal.address, IS_VOTING, 1, [String("0x0000000000000").valueOf(), String("0x00000000000001").valueOf()], createMsg);
+        await this.governance.createProposal(this.proposal.address, IS_VOTING, 1,
+            [String("0x0000000000000").valueOf(), String("0x00000000000001").valueOf()], createMsg);
 
         await expectRevert(this.governance.increaseProposalDeposit(1, voteMsg), "msg.value is zero");
     });
@@ -173,7 +177,8 @@ contract('Governance test', async ([acc1, acc2, contractAddr]) => {
         let voteMsg = {from: acc1, value: ether('1.0')};
         const proposalID = 1;
 
-        await this.governance.createProposal(this.proposal.address, IS_VOTING, 1, [String("0x0000000000000").valueOf(), String("0x00000000000001").valueOf()], createMsg);
+        await this.governance.createProposal(this.proposal.address, IS_VOTING, 1,
+            [String("0x0000000000000").valueOf(), String("0x00000000000001").valueOf()], createMsg);
         await expect(await this.governance.depositors.call(acc1, proposalID)).to.be.bignumber.equal(ether('0.0'));
 
         await this.governance.increaseProposalDeposit(proposalID, voteMsg);
@@ -304,13 +309,10 @@ contract('Governance test', async ([acc1, acc2, contractAddr]) => {
 
         let voter = await this.governance.voters.call(acc1, proposalID);
         await expect(voter.power).to.be.bignumber.equal(new BN(ether('0.0')));
-        await expect(voter.choices).to.be.equal(undefined);
         await expect(voter.previousDelegation).to.be.equal("0x0000000000000000000000000000000000000000");
 
         voter = await this.governance.voters.call(acc2, proposalID);
         await expect(voter.power).to.be.bignumber.equal(new BN(ether('4.0')));
-        await expect(voter.choices).to.be.notEqual([]);
-        await expect(voter.choices).to.be.notEqual(undefined);
         await expect(voter.previousDelegation).to.be.equal("0x0000000000000000000000000000000000000000");
     });
 
@@ -326,12 +328,7 @@ contract('Governance test', async ([acc1, acc2, contractAddr]) => {
             [String("0x0000000000000").valueOf(), String("0x00000000000001").valueOf()], {from: acc1, value: ether('1.0')});
 
         await this.governance.vote(proposalID,
-            [String("0x0000000000000").valueOf(), String("0x00000000000001").valueOf()], {from: acc1});
-
-        await this.governance.vote(proposalID,
             [String("0x0000000000000").valueOf(), String("0x00000000000001").valueOf()], {from: acc2});
-
-        // let voter = await this.governance.voters.call(acc2, proposalID);
 
         await expectRevert(this.governance.cancelVote(proposalID, {from: acc1}), "incorrect choises");
     });
