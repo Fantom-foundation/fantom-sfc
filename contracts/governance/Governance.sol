@@ -92,8 +92,20 @@ contract Governance is GovernanceSettings {
         return (prop.deadlines.depositingEndTime);
     }
 
+    function getProposalStatus(uint256 proposalId) public view returns (uint256) {
+        ProposalDescription storage prop = proposals[proposalId];
+        return (prop.status);
+    }
+
     function getDeadlinesCount() public view returns (uint256) {
         return (deadlines.length);
+    }
+
+    function getProposalOption(uint256 proposalId, uint256 optionId)
+    public
+    view returns (string memory, uint256, uint256, uint256, uint256, uint256) {
+        LRC.LrcOption storage option = proposals[proposalId].options[optionId];
+        return (option.description, option.arc, option.dw, option.resistance, option.totalVotes, option.maxPossibleVotes);
     }
 
     function vote(uint256 proposalId, uint256[] memory choises) public {
@@ -151,7 +163,7 @@ contract Governance is GovernanceSettings {
         ProposalDescription storage prop = proposals[lastProposalId];
         prop.id = lastProposalId;
         prop.requiredDeposit = reqDeposit;
-        prop.status = setStatusVoting(status);
+        prop.status = status;
         prop.requiredVotes = minimumVotesRequired(totalVotes(prop.propType));
         for (uint256 i = 0; i < choises.length; i++) {
             prop.lastOptionID++;
@@ -188,8 +200,6 @@ contract Governance is GovernanceSettings {
     }
 
     function handleDeadline(uint256 deadline) public {
-        require(block.timestamp >= deadline, "deadline is overdue");
-
         uint256[] memory proposalIds = proposalsAtDeadline[deadline];
         for (uint256 i = 0; i < proposalIds.length; i++) {
             uint256 proposalId = proposalIds[i];

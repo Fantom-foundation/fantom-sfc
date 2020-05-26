@@ -52,19 +52,19 @@ contract StatusConstants {
     }
 
     function statusDepositing(uint256 status) internal view returns (bool) {
-        return status & STATUS_DEPOSITING == STATUS_DEPOSITING;
+        return status == STATUS_DEPOSITING;
     }
 
     function statusDepositingFailed(uint256 status) internal view returns (bool) {
-        return status & STATUS_DEPOSITING_FAILED == STATUS_DEPOSITING_FAILED;
+        return status == STATUS_DEPOSITING_FAILED;
     }
 
     function statusVoting(uint256 status) internal view returns (bool) {
-        return status & STATUS_VOTING == STATUS_VOTING;
+        return status == STATUS_VOTING;
     }
 
     function statusVotingFailed(uint256 status) internal view returns (bool) {
-        return status & STATUS_VOTING_FAILED == STATUS_VOTING_FAILED;
+        return status == STATUS_VOTING_FAILED;
     }
 
 }
@@ -96,8 +96,8 @@ contract Constants is StatusConstants {
     uint256 constant CANCEL_DELEGATION_FEE = 123;
 
     // temprorary timestamp constants
-    uint256 DEPOSITING_PERIOD = 1 weeks;
-    uint256 VOTING_PERIOD = 1 weeks;
+    uint256 constant DEPOSITING_PERIOD = 1 weeks;
+    uint256 constant VOTING_PERIOD = 1 weeks;
 
     function typeExecutable() public pure returns (uint8) {
         return TYPE_EXECUTABLE;
@@ -111,16 +111,8 @@ contract Constants is StatusConstants {
         return CANCEL_DELEGATION_FEE;
     }
 
-    function setVotingPeriod(uint256 period) public {
-        VOTING_PERIOD = period;
-    }
-
     function votingPeriod() public view returns (uint256) {
         return VOTING_PERIOD;
-    }
-
-    function setDepositingPeriod(uint256 period) public {
-        DEPOSITING_PERIOD = period;
     }
 
     function depositingPeriod() public view returns (uint256) {

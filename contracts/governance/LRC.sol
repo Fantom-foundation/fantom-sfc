@@ -68,8 +68,9 @@ library LRC {
         uint256 scale;
         if (opinionId == OptionsNum - 1) {
             scale = OptionsNum;
+        } else {
+            scale = opinionId;
         }
-        scale = opinionId;
 
         self.totalVotes += power;
         self.resistance += power * scale;
