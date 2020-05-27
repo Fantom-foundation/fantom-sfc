@@ -1,6 +1,10 @@
-pragma solidity >=0.5.0 <=0.5.3;
+pragma solidity ^0.5.0;
 
 import "./SafeMath.sol";
+
+interface ILiquidityPool {
+    function deposit(uint256 _value_native) external payable;
+}
 
 contract StakersConstants {
     uint256 public constant percentUnit = 1000000;
@@ -54,6 +58,8 @@ contract Stakers is StakersConstants {
     using SafeMath for uint256;
 
     struct Delegation {
+        bool rewardToFUSD; // transfer all rewards to LiquidityPool fUSD user balance
+
         uint256 createdEpoch;
         uint256 createdTime;
 
@@ -67,6 +73,7 @@ contract Stakers is StakersConstants {
 
     struct ValidationStake {
         bool isCheater; // written by consensus outside
+        bool rewardToFUSD; // transfer all rewards to LiquidityPool fUSD user balance
 
         uint256 createdEpoch;
         uint256 createdTime;
@@ -107,11 +114,31 @@ contract Stakers is StakersConstants {
     uint256 public delegationsNum;
     uint256 public delegationsTotalAmount;
 
+    address internal liquidityPool;
+
     mapping(address => Delegation) public delegations; // delegationID -> delegation
 
     /*
     Methods
     */
+
+    function setLiquidityPool(address pool) external {
+        liquidityPool = pool;
+    }
+    function setDelegationRewardToFUSD(address delegator, bool isRewardToFUSD) external returns(bool prevState) {
+        require(delegations[delegator].createdTime != 0, "delegator should by present in SFC contract");
+
+        prevState = delegations[delegator].rewardToFUSD;
+        delegations[delegator].rewardToFUSD = isRewardToFUSD;
+    }
+    function setStakerRewardToFUSD(address staker, bool isRewardToFUSD) external returns (bool prevState) {
+        uint256 stakerID = stakerIDs[staker];
+        require(stakerID != 0, "stakerID should by present in SFC contract");
+        require(stakers[stakerID].createdTime != 0, "staker should by present in SFC contract");
+
+        prevState = stakers[stakerID].rewardToFUSD;
+        stakers[stakerID].rewardToFUSD = isRewardToFUSD;
+    }
 
     function getEpochValidator(uint256 e, uint256 v) external view returns (uint256, uint256, uint256) {
         return (epochSnapshots[e].validators[v].validatingPower,
@@ -257,7 +284,11 @@ contract Stakers is StakersConstants {
         delegations[from].paidUntilEpoch = untilEpoch;
 
         // It's important that we transfer after updating paidUntilEpoch (protection against Re-Entrancy)
-        msg.sender.transfer(reward);
+        if (delegations[from].rewardToFUSD && liquidityPool != address(0)) {
+            ILiquidityPool(liquidityPool).deposit(reward);
+        } else {
+            msg.sender.transfer(reward);
+        }
 
         emit ClaimedDelegationReward(from, stakerID, reward, fromEpoch, untilEpoch);
     }
@@ -286,7 +317,11 @@ contract Stakers is StakersConstants {
         stakers[stakerID].paidUntilEpoch = untilEpoch;
 
         // It's important that we transfer after updating paidUntilEpoch (protection against Re-Entrancy)
-        staker.transfer(reward);
+        if (stakers[stakerID].rewardToFUSD && liquidityPool != address(0)) {
+            ILiquidityPool(liquidityPool).deposit(reward);
+        } else {
+            staker.transfer(reward);
+        }
 
         emit ClaimedValidatorReward(stakerID, reward, fromEpoch, untilEpoch);
     }

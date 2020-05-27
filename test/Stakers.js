@@ -8,11 +8,14 @@ const {
 const { expect } = require('chai');
 
 const UnitTestStakers = artifacts.require('UnitTestStakers');
+const TestLiquidityPool = artifacts.require('TestLiquidityPool');
 
 contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, secondDepositor]) => {
     beforeEach(async () => {
         this.firstEpoch = 0;
         this.stakers = await UnitTestStakers.new(this.firstEpoch);
+        this.liquidityPool = await TestLiquidityPool.new();
+        await this.stakers.setLiquidityPool(this.liquidityPool.address);
     });
 
     it('checking Staker parameters', async () => {
@@ -171,6 +174,29 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
         await expectRevert(this.stakers.claimDelegationReward(new BN('0'), new BN('0'), {from: firstDepositor}), "delegation shouldn't be deactivated yet");
     });
 
+    it('checking claimDelegationReward function with reward to fUSD', async () => {
+        await expectRevert(this.stakers.claimDelegationReward(new BN('0'), new BN('1'), {from: firstDepositor}), 'delegation doesn\'t exist');
+        await this.stakers._createStake({from: firstStaker, value: ether('1.0')});
+        let firstStakerID = await this.stakers.stakerIDs(firstStaker);
+        await this.stakers.createDelegation(firstStakerID, {from: firstDepositor, value: ether('5.0')});
+
+        await this.stakers.setDelegationRewardToFUSD(firstDepositor, true);
+
+        await this.stakers._makeEpochSnapshots(5);
+        await this.stakers.createDelegation(firstStakerID, {from: secondDepositor, value: ether('10.0')});
+        await this.stakers._makeEpochSnapshots(5);
+        await expectRevert(this.stakers.claimDelegationReward(new BN('3'), new BN('1'), {from: firstDepositor}), 'invalid fromEpoch');
+        await expectRevert(this.stakers.claimDelegationReward(new BN('0'), new BN('3'), {from: firstDepositor}), 'invalid untilEpoch');
+        expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('16.0'));
+        const balanceBefore = await balance.current(firstDepositor);
+        await this.stakers.claimDelegationReward(new BN('0'), new BN('0'), {from: firstDepositor});
+
+        expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('16')); // 16 and 1.363541667153645833 in fUSD
+        expect(await this.liquidityPool.lastDeposit > 0, 'should be deposit to fUSD');
+
+        await this.stakers.setDelegationRewardToFUSD(firstDepositor, false);
+    });
+
     it('checking claimValidatorReward function', async () => {
         await expectRevert(this.stakers.claimValidatorReward(new BN('0'), new BN('1'), {from: firstStaker}), 'staker doesn\'t exist');
         await this.stakers._createStake({from: firstStaker, value: ether('1.0')});
@@ -192,6 +218,27 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
         const balanceAfter = await balance.current(firstStaker);
         expect(balanceAfter.sub(balanceBefore)).to.be.bignumber.least(base.sub(fee));
         expect(balanceAfter.sub(balanceBefore)).to.be.bignumber.most(base);
+    });
+
+    it('checking claimValidatorReward function with reward to fUSD', async () => {
+        await expectRevert(this.stakers.claimValidatorReward(new BN('0'), new BN('1'), {from: firstStaker}), 'staker doesn\'t exist');
+        await this.stakers._createStake({from: firstStaker, value: ether('1.0')});
+        let firstStakerID = await this.stakers.stakerIDs(firstStaker);
+        await this.stakers.createDelegation(firstStakerID, {from: firstDepositor, value: ether('5.0')});
+        await this.stakers._makeEpochSnapshots(5);
+
+        await this.stakers.setStakerRewardToFUSD(firstStaker, true);
+
+        await expectRevert(this.stakers.claimValidatorReward(new BN('3'), new BN('1'), {from: firstStaker}), 'invalid fromEpoch');
+        await expectRevert(this.stakers.claimValidatorReward(new BN('0'), new BN('3'), {from: firstStaker}), 'invalid untilEpoch');
+        expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('6.0'));
+        const balanceBefore = await balance.current(firstStaker);
+        await this.stakers.claimValidatorReward(new BN('0'), new BN('0'), {from: firstStaker});
+
+        expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('6'));
+        expect(await this.liquidityPool.lastDeposit > 0, 'should be deposit to fUSD'); // reward to fUSD
+
+        await this.stakers.setStakerRewardToFUSD(firstStaker, false);
     });
 
     it('checking prepareToWithdrawStake function', async () => {
@@ -276,6 +323,7 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
 
     it('checking withdrawDelegation function', async () => {
         await this.stakers._createStake({from: firstStaker, value: ether('1.0')});
+
         let firstStakerID = await this.stakers.stakerIDs(firstStaker);
         await this.stakers.createDelegation(firstStakerID, {from: firstDepositor, value: ether('1.0')});
         await this.stakers.createDelegation(firstStakerID, {from: secondDepositor, value: ether('1.0')});
