@@ -1,8 +1,9 @@
 pragma solidity ^0.5.0;
 
 import "./SafeMath.sol";
+import "../version/Version.sol";
 
-contract StakersConstants {
+contract StakersConstants is Version {
     using SafeMath for uint256;
 
     uint256 internal constant OK_STATUS = 0;
