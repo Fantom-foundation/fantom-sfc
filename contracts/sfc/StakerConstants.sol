@@ -75,6 +75,13 @@ contract StakersConstants {
     }
 
     /**
+     * @dev The ratio of the reward rate at base rate (no lock), e.g., 30%
+     */
+    function unlockedRatio() public pure returns (uint256) {
+        return (30 * RATIO_UNIT) / 100; // 30%
+    }
+
+    /**
      * @dev the period of time that stake is locked
      */ 
     function stakeLockPeriodTime() public pure returns (uint256) {
