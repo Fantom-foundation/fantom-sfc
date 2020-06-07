@@ -191,8 +191,8 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
         let thirdStakerID = await this.stakers.getStakerID(thirdStaker);
         await this.stakers._makeEpochSnapshots(10000);
 
-        expect(await this.stakers._calcDelegationEpochReward(firstStakerID, new BN('1'), ether('15.0'), this.validatorComission)).to.be.bignumber.equal(ether('1.050000749999999937'));
-        expect(await this.stakers._calcDelegationEpochReward(thirdStakerID, new BN('1'), ether('0'), this.validatorComission)).to.be.bignumber.equal(ether('0'));
+        expect(await this.stakers._calcDelegationEpochReward(firstStakerID, new BN('1'), ether('15.0'), this.validatorComission, firstDepositor)).to.be.bignumber.equal(ether('1.050000749999999937'));
+        expect(await this.stakers._calcDelegationEpochReward(thirdStakerID, new BN('1'), ether('0'), this.validatorComission, firstDepositor)).to.be.bignumber.equal(ether('0'));
     });
 
     it('checking claimDelegationRewards function', async () => {
