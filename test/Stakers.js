@@ -75,7 +75,7 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
     });
 
     it('checking createDelegation function', async () => {
-        const getDeposition = async (depositor) => this.stakers.delegations.call(depositor);
+        const getDeposition = async (depositor, to) => this.stakers.delegations_v2.call(depositor, to);
         const getStaker = async (stakerID) => this.stakers.stakers.call(stakerID);
 
         await this.stakers._createStake({from: firstStaker, value: ether('2.0')});
@@ -104,14 +104,14 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
 
         const now = await time.latest();
 
-        const firstDepositionEntity = await getDeposition(firstDepositor);
+        const firstDepositionEntity = await getDeposition(firstDepositor, firstStakerID);
         const firstStakerEntity = await getStaker(firstStakerID);
         expect(firstDepositionEntity.amount).to.be.bignumber.equal(ether('1'));
         expect(firstDepositionEntity.createdEpoch).to.be.bignumber.equal(new BN('1'));
         expect(now.sub(firstDepositionEntity.createdTime)).to.be.bignumber.lessThan(new BN('5'));
         expect(firstDepositionEntity.toStakerID).to.be.bignumber.equal(firstStakerID);
 
-        const secondDepositionEntity = await getDeposition(secondDepositor);
+        const secondDepositionEntity = await getDeposition(secondDepositor, firstStakerID);
         expect(secondDepositionEntity.amount).to.be.bignumber.equal(ether('29'));
         expect(secondDepositionEntity.createdEpoch).to.be.bignumber.equal(new BN('1'));
         expect(now.sub(secondDepositionEntity.createdTime)).to.be.bignumber.lessThan(new BN('2'));
@@ -204,20 +204,20 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
         await this.stakers._makeEpochSnapshots(5);
         await this.stakers._makeEpochSnapshots(5);
 
-        await expectRevert(this.stakers.claimDelegationRewards(new BN('1'), {from: firstStaker}), "delegation doesn't exist");
-        await expectRevert(this.stakers.claimDelegationRewards(new BN('0'), {from: firstDepositor}), 'no epochs claimed');
+        await expectRevert(this.stakers.claimDelegationRewards(new BN('1'), firstStakerID, {from: firstStaker}), "delegation doesn't exist");
+        await expectRevert(this.stakers.claimDelegationRewards(new BN('0'), firstStakerID, {from: firstDepositor}), 'no epochs claimed');
 
         expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('16.0'));
         const balanceBefore = await balance.current(firstDepositor);
 
         // reward for epoch 1
-        await this.stakers.claimDelegationRewards(new BN('1'), {from: firstDepositor});
+        await this.stakers.claimDelegationRewards(new BN('1'), firstStakerID, {from: firstDepositor});
         expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('15.008333332979166667')); // 16 - 0.991666667020833333
         // reward for epochs 2, 3
-        await this.stakers.claimDelegationRewards(new BN('2'), {from: firstDepositor});
+        await this.stakers.claimDelegationRewards(new BN('2'), firstStakerID, {from: firstDepositor});
         expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('14.264583332713541667')); // 16 - 1.735416667286458333
 
-        await expectRevert(this.stakers.claimDelegationRewards(new BN('1'), {from: firstDepositor}), 'future epoch');
+        await expectRevert(this.stakers.claimDelegationRewards(new BN('1'), firstStakerID, {from: firstDepositor}), 'future epoch');
 
         let base = ether('1.735416667286458333');
         let fee = ether('0.005');
@@ -225,8 +225,8 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
         expect(balanceAfter.sub(balanceBefore)).to.be.bignumber.least(base.sub(fee));
         expect(balanceAfter.sub(balanceBefore)).to.be.bignumber.most(base);
 
-        await this.stakers.prepareToWithdrawDelegation({from: firstDepositor});
-        await expectRevert(this.stakers.claimDelegationRewards(new BN('100'), {from: firstDepositor}), "delegation is deactivated");
+        await this.stakers.prepareToWithdrawDelegation(firstStakerID, {from: firstDepositor});
+        await expectRevert(this.stakers.claimDelegationRewards(new BN('100'), firstStakerID, {from: firstDepositor}), "delegation is deactivated");
     });
 
     it('checking bonded ratio', async () => {
@@ -329,28 +329,28 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
 
     it('checking prepareToWithdrawDelegation function', async () => {
         const getStaker = async (stakerID) => this.stakers.stakers.call(stakerID);
-        const getDeposition = async (depositor) => this.stakers.delegations.call(depositor);
+      const getDeposition = async (depositor, to) => this.stakers.delegations_v2.call(depositor, to);
 
-        await expectRevert(this.stakers.prepareToWithdrawDelegation({from: firstDepositor}), 'delegation doesn\'t exist');
-        const firstDepositorEntityBefore = await getDeposition(firstDepositor);
+       await this.stakers._createStake({from: firstStaker, value: ether('1.0')});
+        let firstStakerID = await this.stakers.getStakerID(firstStaker);
+        await expectRevert(this.stakers.prepareToWithdrawDelegation(firstStakerID, {from: firstDepositor}), 'delegation doesn\'t exist');
+        const firstDepositorEntityBefore = await getDeposition(firstDepositor, firstStakerID);
         expect(firstDepositorEntityBefore.deactivatedEpoch).to.be.bignumber.equal(new BN('0'));
         expect(firstDepositorEntityBefore.deactivatedTime).to.be.bignumber.equal(new BN('0'));
 
-        await this.stakers._createStake({from: firstStaker, value: ether('1.0')});
-        let firstStakerID = await this.stakers.getStakerID(firstStaker);
         await this.stakers.createDelegation(firstStakerID, {from: firstDepositor, value: ether('5.0')});
 
         const firstStakerBefore = await getStaker(firstStakerID);
         expect(firstStakerBefore.delegatedMe).to.be.bignumber.equal(ether('5.0'));
         const now = await time.latest();
-        await this.stakers.prepareToWithdrawDelegation({from: firstDepositor});
+        await this.stakers.prepareToWithdrawDelegation(firstStakerID, {from: firstDepositor});
         const firstStakerAfter = await getStaker(firstStakerID);
         expect(firstStakerAfter.delegatedMe).to.be.bignumber.equal(ether('0.0'));
 
-        const firstDepositorEntityAfter = await getDeposition(firstDepositor);
+        const firstDepositorEntityAfter = await getDeposition(firstDepositor, firstStakerID);
         expect(firstDepositorEntityAfter.deactivatedEpoch).to.be.bignumber.equal(new BN('1'));
         expect(now.sub(firstDepositorEntityAfter.deactivatedTime)).to.be.bignumber.lessThan(new BN('2'));
-        await expectRevert(this.stakers.prepareToWithdrawDelegation({from: firstDepositor}), "delegation is deactivated");
+        await expectRevert(this.stakers.prepareToWithdrawDelegation(firstStakerID, {from: firstDepositor}), "delegation is deactivated");
     });
 
     it('checking withdrawDelegation function', async () => {
@@ -358,39 +358,39 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
         let firstStakerID = await this.stakers.getStakerID(firstStaker);
 
         // when delegator doesn't exist
-        await expectRevert(this.stakers.withdrawDelegation({from: firstDepositor}), 'delegation wasn\'t deactivated');
-        await expectRevert(this.stakers.prepareToWithdrawDelegation({from: firstDepositor}), 'delegation doesn\'t exist');
+        await expectRevert(this.stakers.withdrawDelegation(firstStakerID, {from: firstDepositor}), 'delegation wasn\'t deactivated');
+        await expectRevert(this.stakers.prepareToWithdrawDelegation(firstStakerID, {from: firstDepositor}), 'delegation doesn\'t exist');
 
         await this.stakers.createDelegation(firstStakerID, {from: firstDepositor, value: ether('1.0')});
         await this.stakers.createDelegation(firstStakerID, {from: secondDepositor, value: ether('1.0')});
         await this.stakers.createDelegation(firstStakerID, {from: thirdDepositor, value: ether('1.0')});
 
-        await expectRevert(this.stakers.withdrawDelegation({from: firstDepositor}), 'delegation wasn\'t deactivated');
+        await expectRevert(this.stakers.withdrawDelegation(firstStakerID, {from: firstDepositor}), 'delegation wasn\'t deactivated');
 
-        await this.stakers.prepareToWithdrawDelegation({from: firstDepositor});
-        await this.stakers.prepareToWithdrawDelegation({from: secondDepositor});
+        await this.stakers.prepareToWithdrawDelegation(firstStakerID, {from: firstDepositor});
+        await this.stakers.prepareToWithdrawDelegation(firstStakerID, {from: secondDepositor});
 
-        await expectRevert(this.stakers.withdrawDelegation({from: firstDepositor}), 'not enough time passed');
+        await expectRevert(this.stakers.withdrawDelegation(firstStakerID, {from: firstDepositor}), 'not enough time passed');
         time.increase(86400 * 7);
-        await expectRevert(this.stakers.withdrawDelegation({from: firstDepositor}), 'not enough epochs passed');
+        await expectRevert(this.stakers.withdrawDelegation(firstStakerID, {from: firstDepositor}), 'not enough epochs passed');
         await this.stakers._makeEpochSnapshots(10000);
         await this.stakers._makeEpochSnapshots(10000);
-        await expectRevert(this.stakers.withdrawDelegation({from: firstDepositor}), 'not enough epochs passed');
+        await expectRevert(this.stakers.withdrawDelegation(firstStakerID, {from: firstDepositor}), 'not enough epochs passed');
         await this.stakers._makeEpochSnapshots(10000);
 
         // check withdrawal after lock period has passed, and staker isn't a cheater
         expect(await this.stakers.delegationsNum.call()).to.be.bignumber.equal(new BN('3'));
         expect(await this.stakers.delegationsTotalAmount.call()).to.be.bignumber.equal(ether('3.0'));
         expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('4.0'));
-        await this.stakers.withdrawDelegation({from: firstDepositor});
+        await this.stakers.withdrawDelegation(firstStakerID, {from: firstDepositor});
         expect(await this.stakers.delegationsNum.call()).to.be.bignumber.equal(new BN('2'));
         expect(await this.stakers.slashedDelegationsTotalAmount.call()).to.be.bignumber.equal(ether('0.0'));
         expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('3.0'));
-        await expectRevert(this.stakers.withdrawDelegation({from: firstDepositor}), 'delegation wasn\'t deactivated');
+        await expectRevert(this.stakers.withdrawDelegation(firstStakerID, {from: firstDepositor}), 'delegation wasn\'t deactivated');
 
         // check withdraw with a cheater staker
         await this.stakers._markValidationStakeAsCheater(firstStakerID, true);
-        await this.stakers.withdrawDelegation({from: secondDepositor});
+        await this.stakers.withdrawDelegation(firstStakerID, {from: secondDepositor});
         expect(await this.stakers.delegationsNum.call()).to.be.bignumber.equal(new BN('1'));
         expect(await this.stakers.delegationsTotalAmount.call()).to.be.bignumber.equal(ether('1.0'));
         expect(await this.stakers.slashedDelegationsTotalAmount.call()).to.be.bignumber.equal(ether('1.0'));
@@ -406,12 +406,12 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
             await this.stakers._makeEpochSnapshots(10000);
             await this.stakers._makeEpochSnapshots(10000);
         }
-        await expectRevert(this.stakers.prepareToWithdrawDelegation({from: thirdDepositor}), 'not all rewards claimed');
-        await this.stakers.discardDelegationRewards({from: thirdDepositor});
-        await this.stakers.prepareToWithdrawDelegation({from: thirdDepositor});
-        await expectRevert(this.stakers.withdrawDelegation({from: thirdDepositor}), 'not enough time passed');
+        await expectRevert(this.stakers.prepareToWithdrawDelegation(firstStakerID, {from: thirdDepositor}), 'not all rewards claimed');
+        await this.stakers.discardDelegationRewards(firstStakerID, {from: thirdDepositor});
+        await this.stakers.prepareToWithdrawDelegation(firstStakerID, {from: thirdDepositor});
+        await expectRevert(this.stakers.withdrawDelegation(firstStakerID, {from: thirdDepositor}), 'not enough time passed');
         await this.stakers.withdrawStake({from: firstStaker});
-        await this.stakers.withdrawDelegation({from: thirdDepositor});
+        await this.stakers.withdrawDelegation(firstStakerID, {from: thirdDepositor});
 
         expect(await this.stakers.slashedDelegationsTotalAmount.call()).to.be.bignumber.equal(ether('2.0'));
         expect(await this.stakers.slashedStakeTotalAmount.call()).to.be.bignumber.equal(ether('1.0'));
