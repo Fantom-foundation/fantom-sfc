@@ -71,6 +71,13 @@ contract Stakers is Ownable, StakersConstants {
         uint256 stakeTotalAmount;
         uint256 delegationsTotalAmount;
         uint256 totalSupply;
+        uint256 totalLockedAmount;
+    }
+
+    struct LockedAmount {
+        uint256 fromEpoch;
+        uint256 startTime;
+        uint256 endTime;
     }
 
     uint256 private reserved1;
@@ -139,6 +146,10 @@ contract Stakers is Ownable, StakersConstants {
     }
 
     mapping(address => mapping(uint256 => WithdrawalRequest)) public withdrawalRequests;
+
+    uint256 public firstLockedUpEpoch;
+    mapping(uint256 => LockedAmount) public lockedStakes; // stakerID -> LockedAmount
+    mapping(address => LockedAmount) public lockedDelegations; // delegationID -> LockedAmount
 
     /*
     Getters
@@ -406,10 +417,20 @@ contract Stakers is Ownable, StakersConstants {
             return 0; // avoid division by zero
         }
         uint256 weightedTotalStake = stake.add((delegatedTotal.mul(commission)).div(RATIO_UNIT));
+
+        if (firstLockedUpEpoch > 0 && epoch >= firstLockedUpEpoch) {
+            if (lockedStakes[stakerID].fromEpoch >= epoch && epochSnapshots[epoch.sub(1)].endTime > lockedStakes[stakerID].endTime) {
+                uint256 lockedReward = rawReward.mul(RATIO_UNIT - unlockedRatio()).div(RATIO_UNIT).mul(weightedTotalStake).div(epochSnapshots[epoch].totalLockedAmount);
+                return (rawReward.mul(unlockedRatio()).div(RATIO_UNIT).mul(weightedTotalStake).div(totalStake)).add(lockedReward);
+            } else {
+                rawReward = rawReward.mul(unlockedRatio()).div(RATIO_UNIT);
+            }
+        }
+
         return (rawReward.mul(weightedTotalStake)).div(totalStake);
     }
 
-    function _calcDelegationEpochReward(uint256 stakerID, uint256 epoch, uint256 delegationAmount, uint256 commission) view public returns (uint256) {
+    function _calcDelegationEpochReward(uint256 stakerID, uint256 epoch, uint256 delegationAmount, uint256 commission, address delegator) view public returns (uint256) {
         uint256 rawReward = _calcRawValidatorEpochReward(stakerID, epoch);
 
         uint256 stake = epochSnapshots[epoch].validators[stakerID].stakeAmount;
@@ -419,6 +440,16 @@ contract Stakers is Ownable, StakersConstants {
             return 0; // avoid division by zero
         }
         uint256 weightedTotalStake = (delegationAmount.mul(RATIO_UNIT.sub(commission))).div(RATIO_UNIT);
+
+        if (firstLockedUpEpoch > 0 && epoch >= firstLockedUpEpoch) {
+            if (lockedDelegations[delegator].fromEpoch >= epoch && epochSnapshots[epoch.sub(1)].endTime > lockedDelegations[delegator].endTime) {
+                uint256 lockedReward = rawReward.mul(RATIO_UNIT - unlockedRatio()).div(RATIO_UNIT).mul(weightedTotalStake).div(epochSnapshots[epoch].totalLockedAmount);
+                return (rawReward.mul(unlockedRatio()).div(RATIO_UNIT).mul(weightedTotalStake).div(totalStake)).add(lockedReward);
+            } else {
+                rawReward = rawReward.mul(unlockedRatio()).div(RATIO_UNIT);
+            }
+        }
+
         return (rawReward.mul(weightedTotalStake)).div(totalStake);
     }
 
@@ -443,7 +474,7 @@ contract Stakers is Ownable, StakersConstants {
         uint256 pendingRewards = 0;
         uint256 lastEpoch = 0;
         for (uint256 e = fromEpoch; e <= currentSealedEpoch && e < fromEpoch + maxEpochs; e++) {
-            pendingRewards += _calcDelegationEpochReward(stakerID, e, delegations[delegator][stakerID].amount, validatorCommission());
+            pendingRewards += _calcDelegationEpochReward(stakerID, e, delegations[delegator][stakerID].amount, validatorCommission(), delegator);
             lastEpoch = e;
         }
         return (pendingRewards, fromEpoch, lastEpoch);
@@ -580,6 +611,7 @@ contract Stakers is Ownable, StakersConstants {
         require(stakers[stakerID].stakeAmount != 0, "staker doesn't exist");
         require(stakers[stakerID].deactivatedTime == 0, "staker is deactivated");
         require(stakers[stakerID].paidUntilEpoch == currentSealedEpoch, "not all rewards claimed"); // for rewards burning
+        require(lockedStakes[stakerID].fromEpoch == 0 || lockedStakes[stakerID].endTime > block.timestamp, "stake is locked");
 
         _mayBurnRewardsOnDeactivation(false, stakerID, stakerSfcAddr, stakers[stakerID].stakeAmount, stakers[stakerID].stakeAmount);
 
@@ -597,6 +629,7 @@ contract Stakers is Ownable, StakersConstants {
         require(stakers[stakerID].stakeAmount != 0, "staker doesn't exist");
         require(stakers[stakerID].deactivatedTime == 0, "staker is deactivated");
         require(stakers[stakerID].paidUntilEpoch == currentSealedEpoch, "not all rewards claimed"); // for rewards burning
+        require(lockedStakes[stakerID].fromEpoch == 0 || lockedStakes[stakerID].endTime > block.timestamp, "stake is locked");
         require(amount >= minStakeDecrease(), "too small amount"); // avoid confusing wrID and amount
 
         // don't allow to withdraw full as a request, because amount==0 originally meant "not existing"
@@ -796,6 +829,44 @@ contract Stakers is Ownable, StakersConstants {
 
     function updateBaseRewardPerSec(uint256 value) onlyOwner external {
         emit UpdatedBaseRewardPerSec(value);
+    }
+
+    function startLockedUp(uint256 epochNum) onlyOwner external {
+        if (epochNum > 0) {
+            firstLockedUpEpoch = epochNum;
+        }
+    }
+
+    function lockUpStake(uint256 lockDuration) external {
+        uint256 stakerID = _sfcAddressToStakerID(msg.sender);
+        require(stakers[stakerID].stakeAmount != 0, "staker doesn't exist");
+        require(stakers[stakerID].deactivatedTime == 0, "staker is deactivated");
+        require(lockDuration >= 86400 * 14 && lockDuration <= 86400 * 365, "incorrect duration");
+        require(lockedStakes[stakerID].endTime < block.timestamp.add(lockDuration), "already locked up");
+        require(firstLockedUpEpoch == 0 || firstLockedUpEpoch > currentSealedEpoch, "feature was not activated");
+//        require(stakers[stakerID].paidUntilEpoch == currentSealedEpoch, "not all rewards claimed"); // for rewards burning
+        LockedAmount memory lStake = LockedAmount(
+            currentSealedEpoch,
+            block.timestamp,
+            block.timestamp.add(lockDuration));
+        lockedStakes[stakerID] = lStake;
+    }
+
+    function lockUpDelegation(uint256 lockDuration, uint256 stakerID) external {
+        address delegator = msg.sender;
+        require(delegations[delegator][stakerID].amount != 0, "delegation doesn't exists");
+        require(stakers[stakerID].status == OK_STATUS, "staker should be active");
+        require(lockDuration >= 86400 * 14 && lockDuration <= 86400 * 365, "incorrect duration");
+        uint256 endTime = block.timestamp.add(lockDuration);
+        require(lockedStakes[stakerID].endTime > endTime, "staker's locked will finish first");
+        require(lockedDelegations[delegator].endTime < endTime, "already locked up");
+        require(firstLockedUpEpoch == 0 || firstLockedUpEpoch > currentSealedEpoch, "feature was not activated");
+//        require(stakers[stakerID].paidUntilEpoch == currentSealedEpoch, "not all rewards claimed"); // for rewards burning
+        LockedAmount memory lStake = LockedAmount(
+            currentSealedEpoch,
+            block.timestamp,
+            block.timestamp.add(lockDuration));
+        lockedDelegations[delegator] = lStake;
     }
 
     event UpdatedDelegation(address indexed delegator, uint256 indexed oldStakerID, uint256 indexed newStakerID, uint256 amount);

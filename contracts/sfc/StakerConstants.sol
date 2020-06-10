@@ -1,9 +1,8 @@
 pragma solidity ^0.5.0;
 
 import "./SafeMath.sol";
-import "../version/Version.sol";
 
-contract StakersConstants is Version {
+contract StakersConstants {
     using SafeMath for uint256;
 
     uint256 internal constant OK_STATUS = 0;
@@ -72,6 +71,13 @@ contract StakersConstants is Version {
      * @dev The commission fee in percentage a validator will get from a contract, e.g., 30%
      */ 
     function contractCommission() public pure returns (uint256) {
+        return (30 * RATIO_UNIT) / 100; // 30%
+    }
+
+    /**
+     * @dev The ratio of the reward rate at base rate (no lock), e.g., 30%
+     */
+    function unlockedRatio() public pure returns (uint256) {
         return (30 * RATIO_UNIT) / 100; // 30%
     }
 
