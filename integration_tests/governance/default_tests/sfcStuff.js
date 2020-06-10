@@ -24,7 +24,7 @@ async function updateContract(web3) {
     let upgradabilityProxy = new web3.eth.Contract(upgradabilityProxyAbi, contractAddress);
 
     let payer = {};
-    payer.address = config.payer.keyObject.address;
+    payer.address = `0x${config.payer.keyObject.address}`;
     payer.password = config.payer.password;
     payer.privateKey = config.payer.privateKey;
 
@@ -35,35 +35,17 @@ async function updateContract(web3) {
     let validator = await accounts.getPayer();
     let implementation = await lachesis.proxyImplementation(validator.address);
     console.log("implementation at start", implementation);
-    let tx = await lachesis.updateContract(validator, `0x${sfcBin}`);
-    if (tx != null && tx != undefined) {
-        console.log("contract tx!!!!!!", tx)
-    }
-
-    let depth = 100;
-    let lastTransactionsHashes = await lachesis.findLastTransaction(depth);
-    if (!lastTransactionsHashes)
-        throw('last tx hash is undefined');
-    if (lastTransactionsHashes.length > 1)
-        throw('cannot handle multiple transactions');
-
-    let updateContractTxHash = lastTransactionsHashes[0];
-    console.log("updateContract tx hash", updateContractTxHash);
-    let updateContractTxReceipt = await lachesis.rpc.getTransactionReceipt(updateContractTxHash);
-    console.log("updateContractTxReceipt", updateContractTxReceipt);
-    const newContractAddress = updateContractTxReceipt.result.contractAddress;
+    const newContractAddress = await deploySfc(web3, payer.address);
     if (!newContractAddress)
         throw("no contract address found")
 
-    await lachesis.upgradeTo(validator, newContractAddress);
+    await lachesis.unsignedUpgradeTo(validator, newContractAddress);
     implementation = await lachesis.proxyImplementation(validator.address);
     console.log("implementation at the end", implementation);
+    return implementation;
 };
 
-
 async function deploySfc(web3, from) {
-    updateContract(web3);
-    return;
     const nonce = await web3.eth.getTransactionCount(from);
     const gasPrice = await web3.eth.getGasPrice();
     const to = null;
@@ -88,7 +70,14 @@ async function deploySfc(web3, from) {
 
     let receipt = await web3.eth.getTransactionReceipt(txHash);
     let address = receipt.contractAddress;
+    console.log(address);
     return address;
 }
 
-module.exports.deploySfc = deploySfc;
+
+async function prepareSfc(web3) {
+    const newSfcAddress = await updateContract(web3);
+    return newSfcAddress;   
+}
+
+module.exports.deploySfc = prepareSfc;

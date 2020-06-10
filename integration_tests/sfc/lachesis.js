@@ -46,23 +46,62 @@ class lachesis {
     }
 
     async upgradeTo(accountFrom, address) {
-        // console.log("typeof accountFrom", typeof accountFrom);
         const nonce = await this.web3.eth.getTransactionCount(accountFrom.address);
         const gasPrice = await this.web3.eth.getGasPrice();
         const to = this.contractAddress;
         const memo = this.upgradabilityProxy.methods.upgradeTo(address).encodeABI();
+        const balance = await this.web3.eth.getBalance(accountFrom.address);
+        console.log(this.web3.utils.toHex(balance));
+        let chainId = await this.web3.eth.net.getId();
 
         const rawTx = {
             from: accountFrom.address,
             to: to,
             gasPrice: this.web3.utils.toHex(gasPrice),
+            // gas: this.web3.utils.toHex("2100000"),
             nonce: this.web3.utils.toHex(nonce),
+            chainId: chainId,
             data: memo
         };
+
         let estimatedGas = await this.estimateGas(rawTx);
-        rawTx.gasLimit = this.web3.utils.toHex(estimatedGas);
+        rawTx.gas = this.web3.utils.toHex(estimatedGas);
+        rawTx.gasLimit = this.web3.utils.toHex(estimatedGas + 2100);
+
+        const actualGasPrice = rawTx.gas * rawTx.gasPrice;
         let signedTx = await this.web3.eth.accounts.signTransaction(rawTx, accountFrom.privateKey);
         return this.web3.eth.sendSignedTransaction(signedTx.rawTransaction, function(err, hash) {
+            if (err)
+                throw(err);
+            console.log("tx sendSignedTransaction hash:", hash);    
+        });
+    }
+
+
+    async unsignedUpgradeTo(accountFrom, address) {
+        const nonce = await this.web3.eth.getTransactionCount(accountFrom.address);
+        const gasPrice = await this.web3.eth.getGasPrice();
+        const to = this.contractAddress;
+        const memo = this.upgradabilityProxy.methods.upgradeTo(address).encodeABI();
+        const balance = await this.web3.eth.getBalance(accountFrom.address);
+        console.log(this.web3.utils.toHex(balance));
+        let chainId = await this.web3.eth.net.getId();
+
+        const rawTx = {
+            from: accountFrom.address,
+            to: to,
+            gasPrice: this.web3.utils.toHex(gasPrice),
+            // gas: this.web3.utils.toHex("2100000"),
+            nonce: this.web3.utils.toHex(nonce),
+            chainId: chainId,
+            data: memo
+        };
+
+        let estimatedGas = await this.estimateGas(rawTx);
+        rawTx.gas = this.web3.utils.toHex(estimatedGas);
+        rawTx.gasLimit = this.web3.utils.toHex(estimatedGas + 2100);
+        
+        return this.web3.eth.sendTransaction(rawTx, function(err, hash) {
             if (err)
                 throw(err);
             console.log("tx sendSignedTransaction hash:", hash);    

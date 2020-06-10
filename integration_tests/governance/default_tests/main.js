@@ -1,4 +1,5 @@
 const {deploySfc} = require('./sfcStuff');
+const {deployLrc, linkGovBin} = require('./preDeployment');
 const GovContract = require('./governanceContract');
 const Web3 = require('web3');
 const config = require('../config');
@@ -14,10 +15,20 @@ async function runTests() {
         
         const coinbase = await govContract.accountHandler.getCoinbase();
         await deploySfc(web3, coinbase);
+        await deployLrc(web3, coinbase);
+    
+        const govBin = linkGovBin();
+        await govContract.deploy(govBin, coinbase);
+        
+        console.log('works');
     }
     catch(e) {
         console.log(`runTests error:\n${e}`)
     }
+}
+
+async function deployBins() {
+
 }
 
 module.exports = runTests;
