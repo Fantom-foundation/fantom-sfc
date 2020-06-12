@@ -8,6 +8,8 @@ const {
 const {expect} = require('chai');
 
 const UnitTestStakers = artifacts.require('UnitTestStakers');
+const getDeposition = async (depositor, to) => this.stakers.delegations_v2.call(depositor, to);
+const getStaker = async (stakerID) => this.stakers.stakers.call(stakerID);
 
 contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, secondDepositor, thirdDepositor]) => {
     beforeEach(async () => {
@@ -75,9 +77,6 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
     });
 
     it('checking createDelegation function', async () => {
-        const getDeposition = async (depositor, to) => this.stakers.delegations_v2.call(depositor, to);
-        const getStaker = async (stakerID) => this.stakers.stakers.call(stakerID);
-
         await this.stakers._createStake({from: firstStaker, value: ether('2.0')});
         let firstStakerID = await this.stakers.getStakerID(firstStaker);
         let secondStakerID = new BN('2');
@@ -120,6 +119,47 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
         expect(firstStakerEntity.delegatedMe).to.be.bignumber.equal(ether('30.0'));
         expect(await this.stakers.delegationsTotalAmount.call()).to.be.bignumber.equal(ether('30.0'));
         expect(await this.stakers.delegationsNum.call()).to.be.bignumber.equal(new BN('2'));
+    });
+
+    it('checking createDelegation function to several stakers', async () => {
+        const _createDelegation = async(depositor, stakerID, amount, epoch) => {
+            await this.stakers.createDelegation(stakerID, { from: depositor, value: amount});
+            const now = await time.latest();
+            const deposition = await getDeposition(depositor, stakerID);
+
+            expect(deposition.amount).to.be.bignumber.equal(amount);
+            expect(deposition.createdEpoch).to.be.bignumber.equal(epoch);
+            expect(now.sub(deposition.createdTime)).to.be.bignumber.lt(new BN('3'));
+            expect(deposition.toStakerID).to.be.bignumber.equal(stakerID);
+        }
+
+        await this.stakers._createStake({from: firstStaker, value: ether('2.0')});
+        await this.stakers._createStake({from: secondStaker, value: ether('2.0')});
+        await this.stakers._createStake({from: thirdStaker, value: ether('2.0')});
+        let firstStakerID = await this.stakers.getStakerID(firstStaker);
+        let secondStakerID = await this.stakers.getStakerID(secondStaker);
+        let thirdStakerID = await this.stakers.getStakerID(thirdStaker);
+
+        const currentEpoch = (await this.stakers.currentSealedEpoch()).add(new BN ('1'));
+        await _createDelegation(firstDepositor, firstStakerID, ether('1.0'), currentEpoch);
+        await _createDelegation(firstDepositor, secondStakerID, ether('2.0'), currentEpoch);
+        await _createDelegation(firstDepositor, thirdStakerID, ether('4.0'), currentEpoch);
+        await expectRevert(this.stakers.createDelegation(firstStakerID, {
+            from: firstDepositor,
+            value: ether('1.0')
+        }), 'delegation already exists');
+
+        const firstStakerEntity = await getStaker(firstStakerID);
+        expect(firstStakerEntity.delegatedMe).to.be.bignumber.equal(ether('1.0'));
+
+        const secondStakerEntity = await getStaker(secondStakerID);
+        expect(secondStakerEntity.delegatedMe).to.be.bignumber.equal(ether('2.0'));
+
+        const thirdStakerEntity = await getStaker(thirdStakerID);
+        expect(thirdStakerEntity.delegatedMe).to.be.bignumber.equal(ether('4.0'));
+
+        expect(await this.stakers.delegationsTotalAmount.call()).to.be.bignumber.equal(ether('7.0'));
+        expect(await this.stakers.delegationsNum.call()).to.be.bignumber.equal(new BN('3'));
     });
 
     it('checking calcRawValidatorEpochReward function', async () => {
@@ -328,9 +368,6 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
     });
 
     it('checking prepareToWithdrawDelegation function', async () => {
-        const getStaker = async (stakerID) => this.stakers.stakers.call(stakerID);
-        const getDeposition = async (depositor, to) => this.stakers.delegations_v2.call(depositor, to);
-
         await this.stakers._createStake({from: firstStaker, value: ether('1.0')});
         let firstStakerID = await this.stakers.getStakerID(firstStaker);
         await expectRevert(this.stakers.prepareToWithdrawDelegation(firstStakerID, {from: firstDepositor}), 'delegation doesn\'t exist');
