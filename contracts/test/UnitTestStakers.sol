@@ -1,6 +1,6 @@
 pragma solidity ^0.5.0;
 
-import "./Staker.sol";
+import "../sfc/Staker.sol";
 
 contract TestStakers is Stakers {
     function stakeLockPeriodTime() public pure returns (uint256) {
@@ -93,9 +93,13 @@ contract UnitTestStakers is Stakers {
     }
 
     function discardDelegationRewards(uint256 stakerID) public {
-        _checkAndUpgradeDelegateStorage(msg.sender);
-        require(delegations_v2[msg.sender][stakerID].amount != 0, "delegation doesn't exist");
-        delegations_v2[msg.sender][stakerID].paidUntilEpoch = currentSealedEpoch;
+        if (delegations[msg.sender].amount != 0) {
+            delegations[msg.sender].paidUntilEpoch = currentSealedEpoch;
+        } else if (delegations_v2[msg.sender][stakerID].amount != 0) {
+            delegations_v2[msg.sender][stakerID].paidUntilEpoch = currentSealedEpoch;
+        } else {
+            revert("delegation doesn't exist");
+        }
     }
 
     function rewardsAllowed() public view returns (bool) {

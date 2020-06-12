@@ -329,9 +329,9 @@ contract('Staker test', async ([firstStaker, secondStaker, thirdStaker, firstDep
 
     it('checking prepareToWithdrawDelegation function', async () => {
         const getStaker = async (stakerID) => this.stakers.stakers.call(stakerID);
-      const getDeposition = async (depositor, to) => this.stakers.delegations_v2.call(depositor, to);
+        const getDeposition = async (depositor, to) => this.stakers.delegations_v2.call(depositor, to);
 
-       await this.stakers._createStake({from: firstStaker, value: ether('1.0')});
+        await this.stakers._createStake({from: firstStaker, value: ether('1.0')});
         let firstStakerID = await this.stakers.getStakerID(firstStaker);
         await expectRevert(this.stakers.prepareToWithdrawDelegation(firstStakerID, {from: firstDepositor}), 'delegation doesn\'t exist');
         const firstDepositorEntityBefore = await getDeposition(firstDepositor, firstStakerID);
