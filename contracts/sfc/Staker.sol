@@ -124,7 +124,6 @@ contract Stakers is Ownable, StakersConstants {
     uint256 public slashedStakeTotalAmount;
 
     mapping(address => Delegation) public delegations; // DEPRECATED. delegationID -> delegation
-    mapping(address => mapping(uint256 => Delegation)) public delegations_v2; // delegator address, staker ID -> delegations
     
     uint256 private deleted0;
 
@@ -147,6 +146,8 @@ contract Stakers is Ownable, StakersConstants {
     }
 
     mapping(address => mapping(uint256 => WithdrawalRequest)) public withdrawalRequests;
+
+    mapping(address => mapping(uint256 => Delegation)) public delegations_v2; // delegator address, staker ID -> delegations
 
     uint256 public firstLockedUpEpoch;
     mapping(uint256 => LockedAmount) public lockedStakes; // stakerID -> LockedAmount
