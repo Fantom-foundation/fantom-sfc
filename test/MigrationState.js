@@ -29,12 +29,12 @@ const createLegacyDelegation = async(depositor, stakerID, amount, epoch) => {
   expect(deposition.toStakerID).to.be.bignumber.equal(stakerID);
 }
 
-contract('Migration tests', async ([firstStaker, secondStaker, firstDepositor, secondDepositor, thirdDepositor, fourthDepositor, fifthDepositor]) => {
-  describe ('migration delegate tests', async () => {
+contract('SFC', async ([firstStaker, secondStaker, firstDepositor, secondDepositor, thirdDepositor, fourthDepositor, fifthDepositor]) => {
+  describe ('Delegation migration tests', async () => {
     before(async () => {
        const factory = await Factory.new();
        const response = await factory.createLegacyStaker(0);
-       console.log('\tdeploying gas used:', response.receipt.gasUsed.toString(10));
+       console.log('\tgas used for sfc deploying:', response.receipt.gasUsed.toString(10));
     });
 
     beforeEach(async () => {
@@ -43,7 +43,7 @@ contract('Migration tests', async ([firstStaker, secondStaker, firstDepositor, s
       this.validatorComission = new BN('150000'); // 0.15
     });
 
-    it('auto migrate legacy deposition to new model', async () => {
+    it('should auto migrate legacy deposition to new model', async () => {
       // create 5 legacy delegation
       await this.stakers._createStake({ from: firstStaker, value: ether('2.0')});
       const firstStakerID = await this.stakers.getStakerID(firstStaker);
@@ -99,7 +99,7 @@ contract('Migration tests', async ([firstStaker, secondStaker, firstDepositor, s
       // expect((await getDeposition(fifthDepositor, firstStakerID)).toStakerID).to.be.bignumber.equal(firstStakerID); // can't check because withdrawDelegation removes delegation entity
     });
 
-    it('manually migrate legacy deposition to new model', async () => {
+    it('should manually migrate legacy deposition to new model', async () => {
       // create legacy delegation
       await this.stakers._createStake({ from: firstStaker, value: ether('2.0')});
       const firstStakerID = await this.stakers.getStakerID(firstStaker);
@@ -116,7 +116,7 @@ contract('Migration tests', async ([firstStaker, secondStaker, firstDepositor, s
       expect((await getDeposition(firstDepositor, firstStakerID)).toStakerID).to.be.bignumber.equal(firstStakerID);
     });
 
-    it('can\'t call calcDelegationRewards while delegation is in the legacy model', async () => {
+    it('should not call calcDelegationRewards while delegation is in the legacy model', async () => {
       // create legacy delegation
       await this.stakers._createStake({ from: firstStaker, value: ether('2.0')});
       const firstStakerID = await this.stakers.getStakerID(firstStaker);
@@ -136,6 +136,6 @@ contract('Migration tests', async ([firstStaker, secondStaker, firstDepositor, s
       expect(rewards[0]).to.be.bignumber.equal(new BN('595000000212500000'));
       expect(rewards[1]).to.be.bignumber.equal(new BN('1'));
       expect(rewards[2]).to.be.bignumber.equal(new BN('1'));
-  })
+    });
   });
 });
