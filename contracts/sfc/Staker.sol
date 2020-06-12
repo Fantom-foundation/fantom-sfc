@@ -151,7 +151,7 @@ contract Stakers is Ownable, StakersConstants {
 
     uint256 public firstLockedUpEpoch;
     mapping(uint256 => LockedAmount) public lockedStakes; // stakerID -> LockedAmount
-    mapping(address => LockedAmount) public lockedDelegations; // delegationID -> LockedAmount
+    mapping(address => mapping(uint256 => LockedAmount)) public lockedDelegations; // delegator address, staker ID -> LockedAmount
 
     /*
     Getters
@@ -331,7 +331,7 @@ contract Stakers is Ownable, StakersConstants {
 
     // Create new delegation to a given staker
     // Delegated amount is msg.value
-    function createDelegation(uint256 to) external payable {
+    function createDelegation(uint256 to) public payable {
         address delegator = msg.sender;
 
         _checkActiveStaker(to);
@@ -441,7 +441,7 @@ contract Stakers is Ownable, StakersConstants {
         uint256 weightedTotalStake = (delegationAmount.mul(RATIO_UNIT.sub(commission))).div(RATIO_UNIT);
 
         if (firstLockedUpEpoch > 0 && epoch >= firstLockedUpEpoch) {
-            if (lockedDelegations[delegator].fromEpoch >= epoch && epochSnapshots[epoch.sub(1)].endTime > lockedDelegations[delegator].endTime) {
+            if (lockedDelegations[delegator][stakerID].fromEpoch >= epoch && epochSnapshots[epoch.sub(1)].endTime > lockedDelegations[delegator][stakerID].endTime) {
                 uint256 lockedReward = rawReward.mul(RATIO_UNIT - unlockedRatio()).div(RATIO_UNIT).mul(weightedTotalStake).div(epochSnapshots[epoch].totalLockedAmount);
                 return (rawReward.mul(unlockedRatio()).div(RATIO_UNIT).mul(weightedTotalStake).div(totalStake)).add(lockedReward);
             } else {
@@ -849,14 +849,14 @@ contract Stakers is Ownable, StakersConstants {
         require(lockDuration >= 86400 * 14 && lockDuration <= 86400 * 365, "incorrect duration");
         uint256 endTime = block.timestamp.add(lockDuration);
         require(lockedStakes[stakerID].endTime > endTime, "staker's locked will finish first");
-        require(lockedDelegations[delegator].endTime < endTime, "already locked up");
+        require(lockedDelegations[delegator][stakerID].endTime < endTime, "already locked up");
         require(firstLockedUpEpoch == 0 || firstLockedUpEpoch > currentSealedEpoch, "feature was not activated");
 //        require(stakers[stakerID].paidUntilEpoch == currentSealedEpoch, "not all rewards claimed"); // for rewards burning
         LockedAmount memory lStake = LockedAmount(
             currentSealedEpoch,
             block.timestamp,
             block.timestamp.add(lockDuration));
-        lockedDelegations[delegator] = lStake;
+        lockedDelegations[delegator][stakerID] = lStake;
     }
 
     event UpdatedDelegation(address indexed delegator, uint256 indexed oldStakerID, uint256 indexed newStakerID, uint256 amount);

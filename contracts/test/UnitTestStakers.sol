@@ -13,7 +13,12 @@ contract TestStakers is Stakers {
 }
 
 contract UnitTestStakers is Stakers {
+    struct DelegationID {
+        address delegator;
+        uint256 stakerID;
+    }
     uint256[] public stakerIDsArr;
+    DelegationID[] public delegationIDsArr;
 
     function _baseRewardPerSecond() public pure returns (uint256) {
         return 0.0000000001 * 1e18;
@@ -46,8 +51,13 @@ contract UnitTestStakers is Stakers {
     }
 
     function _createStake() external payable {
-        stakerIDsArr.push(stakersLastID + 1); // SS Check existing?
+        stakerIDsArr.push(stakersLastID + 1);
         super.createStake("");
+    }
+
+    function createDelegation(uint256 to) public payable {
+        delegationIDsArr.push(DelegationID(msg.sender, to));
+        super.createDelegation(to);
     }
 
     function _makeEpochSnapshots(uint256 optionalDuration) external returns(uint256) {
@@ -64,22 +74,42 @@ contract UnitTestStakers is Stakers {
         epochPay += newSnapshot.duration * _baseRewardPerSecond();
 
         for (uint256 i = 0; i < stakerIDsArr.length; i++) {
-            uint256 deactivatedTime = stakers[stakerIDsArr[i]].deactivatedTime;
+            uint256 stakerID = stakerIDsArr[i];
+            uint256 deactivatedTime = stakers[stakerID].deactivatedTime;
             if (deactivatedTime == 0 || block.timestamp < deactivatedTime) {
-                uint256 basePower = stakers[stakerIDsArr[i]].stakeAmount + stakers[stakerIDsArr[i]].delegatedMe;
+                uint256 basePower = stakers[stakerID].stakeAmount + stakers[stakerID].delegatedMe;
                 uint256 txPower = 1000 * i + basePower;
                 newSnapshot.totalBaseRewardWeight += basePower;
                 newSnapshot.totalTxRewardWeight += txPower;
-                newSnapshot.baseRewardPerSecond = _baseRewardPerSecond();
-                newSnapshot.validators[stakerIDsArr[i]] = ValidatorMerit(
-                    stakers[stakerIDsArr[i]].stakeAmount,
-                    stakers[stakerIDsArr[i]].delegatedMe,
+                // newSnapshot.stakeTotalAmount += stakers[stakerID].stakeAmount; // or += basePower ?
+                // newSnapshot.delegationsTotalAmount += stakers[stakerID].delegatedMe;
+                // newSnapshot.totalSupply += (basePower + txPower);
+                if (firstLockedUpEpoch > 0 &&
+                    lockedStakes[stakerID].fromEpoch >= currentSealedEpoch &&
+                    lockedStakes[stakerID].endTime >= newSnapshot.endTime) {
+                    newSnapshot.totalLockedAmount += stakers[stakerID].stakeAmount;
+                }
+                newSnapshot.validators[stakerID] = ValidatorMerit(
+                    stakers[stakerID].stakeAmount,
+                    stakers[stakerID].delegatedMe,
                     basePower,
                     txPower
                 );
             }
         }
 
+        if (firstLockedUpEpoch > 0) {
+            for (uint256 i = 0; i < delegationIDsArr.length; i++) {
+                address delegator = delegationIDsArr[i].delegator;
+                uint256 stakerID = delegationIDsArr[i].stakerID;
+                if (lockedDelegations[delegator][stakerID].fromEpoch >= currentSealedEpoch &&
+                    lockedDelegations[delegator][stakerID].endTime >= newSnapshot.endTime) {
+                    newSnapshot.totalLockedAmount += delegations_v2[delegator][stakerID].amount;
+                }
+            }
+        }
+
+        newSnapshot.baseRewardPerSecond = _baseRewardPerSecond();
         newSnapshot.epochFee = 2 * 1e18;
         epochPay += newSnapshot.epochFee;
 
