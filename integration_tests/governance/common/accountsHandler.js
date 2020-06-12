@@ -24,7 +24,7 @@ class AccountsHandler {
     }
 
     // sender is an account that will send founds to a new acc
-    async createAccountWithBalance(sender, value) {
+    async createAccountWithBalance(sender, value, unsigned) {
         let newAcc = await this.getNewAccount();
 
         let gasPrice = 2; // or get with web3.eth.gasPrice
@@ -43,6 +43,15 @@ class AccountsHandler {
           value: this.web3.utils.toHex(this.web3.utils.toWei(value, 'ether')),
           chainId: chainId //remember to change this
         };
+
+        if (unsigned) {
+            await this.web3.eth.sendTransaction(rawTx, function(err, hash) {
+                if (err)
+                    throw(err);
+                console.log("tx createAccountWithBalance hash:", hash);  
+            });
+            return newAcc;
+        }
         
         let tx = await this.web3.eth.accounts.signTransaction(rawTx, sender.privateKey);
         await this.web3.eth.sendSignedTransaction(tx.rawTransaction, function(err, hash) {

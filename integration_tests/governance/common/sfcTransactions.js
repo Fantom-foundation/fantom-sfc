@@ -6,11 +6,10 @@ const Web3 = require('web3');
 
 
 class TransactionHandler {
-    constructor(web3, sfc, contractAddr, txStorage) {
+    constructor(web3, sfc, contractAddr) {
         this.web3 = web3;
         this.sfc = sfc;
         this.contractAddr = contractAddr;
-        this.txStorage = txStorage;
     }
 
     advanceEpoch(from) {
@@ -437,4 +436,4 @@ class TransactionHandler {
 
 
 
-module.exports.TransactionHandler = TransactionHandler;
+module.exports = TransactionHandler;

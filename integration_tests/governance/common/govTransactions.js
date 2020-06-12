@@ -40,6 +40,19 @@ class TransactionHandler {
             });
         });
     };
+
+    getTotalVotes(from, propType) {
+        return new Promise(resolve => {
+            this.governance.methods.totalVotes(propType).call({from}, function (error, result) {
+                if (!error) {
+                    resolve(result);
+                    return;
+                } else {
+                    console.log('getStakersNum err', error);
+                }
+            });
+        });
+    };
     
     async estimateGas(rawTx) {
         let estimateGas;

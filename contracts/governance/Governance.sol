@@ -256,6 +256,10 @@ contract Governance is GovernanceSettings {
         _cancelVote(proposalId, msg.sender);
     }
 
+    function totalVotes(uint256 propType) public view returns (uint256) {
+        return governableContract.getTotalVotes(propType);
+    }
+
     function proceedToVoting(uint256 proposalId) internal {
         ProposalDescription storage prop = proposals[proposalId];
         prop.deadlines.votingStartTime = block.timestamp;
@@ -279,10 +283,6 @@ contract Governance is GovernanceSettings {
         prop.electedOption = winnerOptionId;
         inactiveProposalIds.push(proposalId);
         emit ResolvedProposal(proposalId);
-    }
-
-    function totalVotes(uint256 propType) internal view returns (uint256) {
-        return governableContract.getTotalVotes(propType);
     }
 
     function calculateVotingResult(uint256 proposalId) internal returns(bool, uint256) {

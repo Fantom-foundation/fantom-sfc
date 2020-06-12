@@ -42,7 +42,7 @@ async function updateContract(web3) {
     await lachesis.unsignedUpgradeTo(validator, newContractAddress);
     implementation = await lachesis.proxyImplementation(validator.address);
     console.log("implementation at the end", implementation);
-    return implementation;
+    return _sfc;
 };
 
 async function deploySfc(web3, from) {
@@ -76,8 +76,8 @@ async function deploySfc(web3, from) {
 
 
 async function prepareSfc(web3) {
-    const newSfcAddress = await updateContract(web3);
-    return newSfcAddress;   
+    const sfcContract = await updateContract(web3);
+    return sfcContract;   
 }
 
 module.exports.deploySfc = prepareSfc;
