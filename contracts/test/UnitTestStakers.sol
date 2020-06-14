@@ -60,7 +60,14 @@ contract UnitTestStakers is Stakers {
         super.createDelegation(to);
     }
 
-    function _makeEpochSnapshots(uint256 optionalDuration) external returns(uint256) {
+    function makeEpochSnapshots(uint256 optionalDuration) external returns(uint256) {
+        return _makeEpochSnapshots(optionalDuration, true);
+    }
+
+    function makeEpochSnapshots(uint256 optionalDuration, bool addTxPower) external returns(uint256) {
+        return _makeEpochSnapshots(optionalDuration, addTxPower);
+    }
+    function _makeEpochSnapshots(uint256 optionalDuration, bool addTxPower) internal returns(uint256) {
         currentSealedEpoch++;
         EpochSnapshot storage newSnapshot = epochSnapshots[currentSealedEpoch];
         uint256 epochPay = 0;
@@ -78,14 +85,18 @@ contract UnitTestStakers is Stakers {
             uint256 deactivatedTime = stakers[stakerID].deactivatedTime;
             if (deactivatedTime == 0 || block.timestamp < deactivatedTime) {
                 uint256 basePower = stakers[stakerID].stakeAmount + stakers[stakerID].delegatedMe;
-                uint256 txPower = 1000 * i + basePower;
+                uint256 txPower = 0;
+                if (addTxPower) {
+                    txPower = 1000 * i + basePower;
+                }
                 newSnapshot.totalBaseRewardWeight += basePower;
                 newSnapshot.totalTxRewardWeight += txPower;
                 // newSnapshot.stakeTotalAmount += stakers[stakerID].stakeAmount; // or += basePower ?
                 // newSnapshot.delegationsTotalAmount += stakers[stakerID].delegatedMe;
                 // newSnapshot.totalSupply += (basePower + txPower);
                 if (firstLockedUpEpoch > 0 &&
-                    lockedStakes[stakerID].fromEpoch >= currentSealedEpoch &&
+                    firstLockedUpEpoch <= currentSealedEpoch &&
+                    lockedStakes[stakerID].fromEpoch <= currentSealedEpoch &&
                     lockedStakes[stakerID].endTime >= newSnapshot.endTime) {
                     newSnapshot.totalLockedAmount += stakers[stakerID].stakeAmount;
                 }
@@ -114,6 +125,22 @@ contract UnitTestStakers is Stakers {
         epochPay += newSnapshot.epochFee;
 
         return epochPay;
+    }
+
+    function calcRawValidatorEpochReward(uint256 stakerID, uint256 epoch) external view returns (uint256) {
+        return _calcRawValidatorEpochReward(stakerID, epoch);
+    }
+
+    function calcLockedUpReward(uint256 amount, uint256 epoch) external view returns (uint256) {
+        return _calcLockedUpReward(amount, epoch);
+    }
+
+    function calcValidatorEpochReward(uint256 stakerID, uint256 epoch, uint256 commission) external view returns (uint256) {
+        return _calcValidatorEpochReward(stakerID, epoch, commission);
+    }
+
+    function calcDelegationEpochReward(uint256 stakerID, uint256 epoch, uint256 delegationAmount, uint256 commission, address delegator) external view returns (uint256) {
+        return _calcDelegationEpochReward(stakerID, epoch, delegationAmount, commission, delegator);
     }
 
     function discardValidatorRewards() public {

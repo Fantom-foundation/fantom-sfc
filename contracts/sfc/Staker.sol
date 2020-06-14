@@ -384,7 +384,7 @@ contract Stakers is Ownable, StakersConstants {
         _syncStaker(to);
     }
 
-    function _calcRawValidatorEpochReward(uint256 stakerID, uint256 epoch) view public returns (uint256) {
+    function _calcRawValidatorEpochReward(uint256 stakerID, uint256 epoch) internal view returns (uint256) {
         uint256 totalBaseRewardWeight = epochSnapshots[epoch].totalBaseRewardWeight;
         uint256 baseRewardWeight = epochSnapshots[epoch].validators[stakerID].baseRewardWeight;
         uint256 totalTxRewardWeight = epochSnapshots[epoch].totalTxRewardWeight;
@@ -393,7 +393,11 @@ contract Stakers is Ownable, StakersConstants {
         // base reward
         uint256 baseReward = 0;
         if (baseRewardWeight != 0) {
-            baseReward = epochSnapshots[epoch].duration.mul(epochSnapshots[epoch].baseRewardPerSecond).mul(baseRewardWeight).div(totalBaseRewardWeight);
+            uint256 totalReward = epochSnapshots[epoch].duration.mul(epochSnapshots[epoch].baseRewardPerSecond);
+            if (firstLockedUpEpoch > 0 && epoch >= firstLockedUpEpoch) {
+                totalReward = totalReward.mul(unlockedRatio()).div(RATIO_UNIT);
+            }
+            baseReward = totalReward.mul(baseRewardWeight).div(totalBaseRewardWeight);
         }
         // fee reward
         uint256 txReward = 0;
@@ -406,7 +410,15 @@ contract Stakers is Ownable, StakersConstants {
         return baseReward.add(txReward);
     }
 
-    function _calcValidatorEpochReward(uint256 stakerID, uint256 epoch, uint256 commission) view public returns (uint256) {
+    function _calcLockedUpReward(uint256 amount, uint256 epoch) internal view returns (uint256) {
+        if (epochSnapshots[epoch].totalLockedAmount != 0) {
+            uint256 totalReward = epochSnapshots[epoch].duration.mul(epochSnapshots[epoch].baseRewardPerSecond);
+            return totalReward.mul(RATIO_UNIT - unlockedRatio()).div(RATIO_UNIT).mul(amount).div(epochSnapshots[epoch].totalLockedAmount);
+        }
+        return 0;
+    }
+
+    function _calcValidatorEpochReward(uint256 stakerID, uint256 epoch, uint256 commission) internal view returns (uint256 validatorReward) {
         uint256 rawReward = _calcRawValidatorEpochReward(stakerID, epoch);
 
         uint256 stake = epochSnapshots[epoch].validators[stakerID].stakeAmount;
@@ -417,19 +429,16 @@ contract Stakers is Ownable, StakersConstants {
         }
         uint256 weightedTotalStake = stake.add((delegatedTotal.mul(commission)).div(RATIO_UNIT));
 
+        validatorReward = rawReward.mul(weightedTotalStake).div(totalStake);
         if (firstLockedUpEpoch > 0 && epoch >= firstLockedUpEpoch) {
-            if (lockedStakes[stakerID].fromEpoch >= epoch && epochSnapshots[epoch.sub(1)].endTime > lockedStakes[stakerID].endTime) {
-                uint256 lockedReward = rawReward.mul(RATIO_UNIT - unlockedRatio()).div(RATIO_UNIT).mul(weightedTotalStake).div(epochSnapshots[epoch].totalLockedAmount);
-                return (rawReward.mul(unlockedRatio()).div(RATIO_UNIT).mul(weightedTotalStake).div(totalStake)).add(lockedReward);
-            } else {
-                rawReward = rawReward.mul(unlockedRatio()).div(RATIO_UNIT);
+            if (lockedStakes[stakerID].fromEpoch <= epoch && lockedStakes[stakerID].endTime > epochSnapshots[epoch.sub(1)].endTime) {
+                validatorReward = validatorReward.add(_calcLockedUpReward(stake, epoch));
             }
         }
-
-        return (rawReward.mul(weightedTotalStake)).div(totalStake);
+        return validatorReward;
     }
 
-    function _calcDelegationEpochReward(uint256 stakerID, uint256 epoch, uint256 delegationAmount, uint256 commission, address delegator) view public returns (uint256) {
+    function _calcDelegationEpochReward(uint256 stakerID, uint256 epoch, uint256 delegationAmount, uint256 commission, address delegator) internal view returns (uint256 delegationReward) {
         uint256 rawReward = _calcRawValidatorEpochReward(stakerID, epoch);
 
         uint256 stake = epochSnapshots[epoch].validators[stakerID].stakeAmount;
@@ -439,17 +448,13 @@ contract Stakers is Ownable, StakersConstants {
             return 0; // avoid division by zero
         }
         uint256 weightedTotalStake = (delegationAmount.mul(RATIO_UNIT.sub(commission))).div(RATIO_UNIT);
-
+        delegationReward = rawReward.mul(weightedTotalStake).div(totalStake);
         if (firstLockedUpEpoch > 0 && epoch >= firstLockedUpEpoch) {
-            if (lockedDelegations[delegator][stakerID].fromEpoch >= epoch && epochSnapshots[epoch.sub(1)].endTime > lockedDelegations[delegator][stakerID].endTime) {
-                uint256 lockedReward = rawReward.mul(RATIO_UNIT - unlockedRatio()).div(RATIO_UNIT).mul(weightedTotalStake).div(epochSnapshots[epoch].totalLockedAmount);
-                return (rawReward.mul(unlockedRatio()).div(RATIO_UNIT).mul(weightedTotalStake).div(totalStake)).add(lockedReward);
-            } else {
-                rawReward = rawReward.mul(unlockedRatio()).div(RATIO_UNIT);
+            if (lockedDelegations[delegator][stakerID].fromEpoch <= epoch && lockedDelegations[delegator][stakerID].endTime > epochSnapshots[epoch.sub(1)].endTime) {
+                delegationReward = delegationReward.add(_calcLockedUpReward(delegationAmount, epoch));
             }
         }
-
-        return (rawReward.mul(weightedTotalStake)).div(totalStake);
+        return delegationReward;
     }
 
     function withDefault(uint256 a, uint256 defaultA) pure private returns(uint256) {
@@ -823,26 +828,27 @@ contract Stakers is Ownable, StakersConstants {
     }
 
     function startLockedUp(uint256 epochNum) onlyOwner external {
-        if (epochNum > 0) {
-            firstLockedUpEpoch = epochNum;
-        }
+        require(epochNum > currentSealedEpoch, "can't start in the past");
+        require(firstLockedUpEpoch == 0 || firstLockedUpEpoch > currentSealedEpoch, "feature was started");
+        firstLockedUpEpoch = epochNum;
     }
 
     function lockUpStake(uint256 lockDuration) external {
+        require(firstLockedUpEpoch != 0 && firstLockedUpEpoch <= currentSealedEpoch.add(1), "feature was not activated");
         uint256 stakerID = _sfcAddressToStakerID(msg.sender);
         _checkDeactivatedStaker(stakerID);
         require(lockDuration >= 86400 * 14 && lockDuration <= 86400 * 365, "incorrect duration");
         require(lockedStakes[stakerID].endTime < block.timestamp.add(lockDuration), "already locked up");
-        require(firstLockedUpEpoch == 0 || firstLockedUpEpoch > currentSealedEpoch, "feature was not activated");
 //        require(stakers[stakerID].paidUntilEpoch == currentSealedEpoch, "not all rewards claimed"); // for rewards burning
         LockedAmount memory lStake = LockedAmount(
-            currentSealedEpoch,
+            currentSealedEpoch.add(1),
             block.timestamp,
             block.timestamp.add(lockDuration));
         lockedStakes[stakerID] = lStake;
     }
 
     function lockUpDelegation(uint256 lockDuration, uint256 stakerID) external {
+        require(firstLockedUpEpoch != 0 && firstLockedUpEpoch <= currentSealedEpoch.add(1), "feature was not activated");
         address delegator = msg.sender;
         _checkExistDelegation(delegator, stakerID);
         require(stakers[stakerID].status == OK_STATUS, "staker should be active");
@@ -850,10 +856,9 @@ contract Stakers is Ownable, StakersConstants {
         uint256 endTime = block.timestamp.add(lockDuration);
         require(lockedStakes[stakerID].endTime > endTime, "staker's locked will finish first");
         require(lockedDelegations[delegator][stakerID].endTime < endTime, "already locked up");
-        require(firstLockedUpEpoch == 0 || firstLockedUpEpoch > currentSealedEpoch, "feature was not activated");
 //        require(stakers[stakerID].paidUntilEpoch == currentSealedEpoch, "not all rewards claimed"); // for rewards burning
         LockedAmount memory lStake = LockedAmount(
-            currentSealedEpoch,
+            currentSealedEpoch.add(1),
             block.timestamp,
             block.timestamp.add(lockDuration));
         lockedDelegations[delegator][stakerID] = lStake;
