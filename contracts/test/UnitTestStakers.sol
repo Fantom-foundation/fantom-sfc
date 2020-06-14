@@ -60,6 +60,10 @@ contract UnitTestStakers is Stakers {
         super.createDelegation(to);
     }
 
+    function makeEpochSnapshots() external returns(uint256) {
+        return _makeEpochSnapshots(0, true);
+    }
+
     function makeEpochSnapshots(uint256 optionalDuration) external returns(uint256) {
         return _makeEpochSnapshots(optionalDuration, true);
     }

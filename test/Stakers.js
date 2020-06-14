@@ -526,7 +526,7 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       expect(await this.stakers.calcRawValidatorEpochReward(thirdStakerID, epoch)).to.be.bignumber.equal(ether('0.000000031578947368'));
     });
 
-    it('should locked stake', async () => {
+    it('should lock stake', async () => {
       await this.stakers._createStake({from: firstStaker, value: ether('1.0')});
       let firstStakerID = await this.stakers.getStakerID(firstStaker);
       await this.stakers.createDelegation(firstStakerID, {from: firstDepositor, value: ether('5.0')});
@@ -569,15 +569,14 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
 
       await this.stakers.makeEpochSnapshots(10000, false); // epoch #4
       epoch = new BN('4');
-      await this.stakers.lockUpStake(duration, { from: firstStaker });
       // last epoch without LockedUp
       expect(await this.stakers.calcValidatorEpochReward(firstStakerID, epoch, this.validatorComission)).to.be.bignumber.equal(ether('0.000000171052631578'));
       expect(await this.stakers.calcValidatorEpochReward(secondStakerID, epoch, this.validatorComission)).to.be.bignumber.equal(ether('0.000000052631578947'));
       expect(await this.stakers.calcValidatorEpochReward(thirdStakerID, epoch, this.validatorComission)).to.be.bignumber.equal(ether('0.000000105263157894'));
 
+      await this.stakers.lockUpStake(duration, { from: firstStaker });
       await this.stakers.makeEpochSnapshots(10000, false); // epoch #5
       epoch = new BN('5');
-      await this.stakers.lockUpStake(duration, { from: secondStaker });
 
       // add 70% reward for first staker
       expect(await this.stakers.calcValidatorEpochReward(firstStakerID, epoch, this.validatorComission)).to.be.bignumber.equal(ether('0.000000751315789473'));
@@ -587,6 +586,8 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       expect(await this.stakers.calcDelegationEpochReward(firstStakerID, epoch, ether('5.0'), this.validatorComission, firstDepositor)).to.be.bignumber.equal(ether('0.000000067105263157'));
       expect(await this.stakers.calcDelegationEpochReward(firstStakerID, epoch, ether('10.0'), this.validatorComission, thirdDepositor)).to.be.bignumber.equal(ether('0.000000134210526315'));
 
+      time.increase(10000);
+      await this.stakers.lockUpStake(duration, { from: secondStaker });
       await this.stakers.makeEpochSnapshots(10000, false); // epoch #6
       epoch = new BN('6');
       // split 70% reward between first and second stakers
@@ -602,6 +603,99 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       expect(await this.stakers.calcValidatorEpochReward(secondStakerID, epoch, this.validatorComission)).to.be.bignumber.equal(ether('0.000000365789473684'));
       // reduce unlock stake by 70%
       expect(await this.stakers.calcValidatorEpochReward(thirdStakerID, epoch, this.validatorComission)).to.be.bignumber.equal(ether('0.000000031578947368'));
+      // first locking is end
+      time.increase(86400 * 14 - 9999);
+      await this.stakers.makeEpochSnapshots(); // epoch #8
+      epoch = new BN('9');
+      await this.stakers.makeEpochSnapshots(10000, false); // epoch #9
+      // reduce unlock stake by 70%
+      expect(await this.stakers.calcValidatorEpochReward(firstStakerID, epoch, this.validatorComission)).to.be.bignumber.equal(ether('0.000000051315789473'));
+      // add 70% reward for second staker
+      expect(await this.stakers.calcValidatorEpochReward(secondStakerID, epoch, this.validatorComission)).to.be.bignumber.equal(ether('0.000000715789473684'));
+      // reduce unlock stake by 70%
+      expect(await this.stakers.calcValidatorEpochReward(thirdStakerID, epoch, this.validatorComission)).to.be.bignumber.equal(ether('0.000000031578947368'));
+      // second locking is end
+      epoch = new BN('10');
+      time.increase(10002);
+      await this.stakers.makeEpochSnapshots(10000, false); // epoch #10
+      // reduce unlock stake by 70%
+      expect(await this.stakers.calcValidatorEpochReward(firstStakerID, epoch, this.validatorComission)).to.be.bignumber.equal(ether('0.000000051315789473'));
+      expect(await this.stakers.calcValidatorEpochReward(secondStakerID, epoch, this.validatorComission)).to.be.bignumber.equal(ether('0.000000015789473684'));
+      expect(await this.stakers.calcValidatorEpochReward(thirdStakerID, epoch, this.validatorComission)).to.be.bignumber.equal(ether('0.000000031578947368'));
+
+      epoch = new BN('11');
+      await this.stakers.makeEpochSnapshots(10000, false); // epoch #11
+      // reduce unlock stake by 70%
+      expect(await this.stakers.calcValidatorEpochReward(firstStakerID, epoch, this.validatorComission)).to.be.bignumber.equal(ether('0.000000051315789473'));
+      expect(await this.stakers.calcValidatorEpochReward(secondStakerID, epoch, this.validatorComission)).to.be.bignumber.equal(ether('0.000000015789473684'));
+      expect(await this.stakers.calcValidatorEpochReward(thirdStakerID, epoch, this.validatorComission)).to.be.bignumber.equal(ether('0.000000031578947368'));
+    });
+
+    it('should lock stake with right duration', async () => {
+      await this.stakers._createStake({from: firstStaker, value: ether('1.0')});
+      await this.stakers._createStake({from: secondStaker, value: ether('1.0')});
+      await this.stakers.makeEpochSnapshots(10000, false); // epoch #1
+
+      const minDuration = (new BN('86400')).mul(new BN('14'));
+      const maxDuration = (new BN('86400')).mul(new BN('365'));
+      // start LockedUp
+      const sfc_owner = firstStaker;
+      const startLockedUpEpoch = new BN("2");
+      await this.stakers.startLockedUp(startLockedUpEpoch, { from: sfc_owner });
+
+      await this.stakers.makeEpochSnapshots(10000, false); // epoch #2
+
+      await expectRevert(this.stakers.lockUpStake(minDuration.sub(new BN("1")), { from: firstStaker }), "incorrect duration");
+      await this.stakers.lockUpStake(minDuration, { from: firstStaker });
+      await expectRevert(this.stakers.lockUpStake(maxDuration.add(new BN("1")), { from: secondStaker }), "incorrect duration");
+      await this.stakers.lockUpStake(maxDuration, { from: secondStaker });
+      await expectRevert(this.stakers.lockUpStake(minDuration, { from: secondStaker }), "already locked up");
+      await this.stakers.lockUpStake(maxDuration, { from: firstStaker });
+    });
+
+    it('should not call prepareToWithdrawStake, until locked time is pass', async () => {
+      await this.stakers._createStake({from: firstStaker, value: ether('1.0')});
+      await this.stakers.makeEpochSnapshots(10000, false); // epoch #1
+
+      const duration = (new BN('86400')).mul(new BN('14'));
+      // start LockedUp
+      const sfc_owner = firstStaker;
+      const startLockedUpEpoch = new BN("2");
+      await this.stakers.startLockedUp(startLockedUpEpoch, { from: sfc_owner });
+
+      await this.stakers.makeEpochSnapshots(10000, false); // epoch #2
+
+      await this.stakers.lockUpStake(duration, { from: firstStaker });
+      await this.stakers.makeEpochSnapshots(10000, false); // epoch #3
+      await this.stakers.discardValidatorRewards({from: firstStaker});
+      await expectRevert(this.stakers.prepareToWithdrawStake({ from: firstStaker }), "stake is locked");
+      time.increase(86400 * 14 - 2);
+      await expectRevert(this.stakers.prepareToWithdrawStake({ from: firstStaker }), "stake is locked");
+      time.increase(3);
+      await this.stakers.prepareToWithdrawStake({ from: firstStaker });
+    });
+
+    it('should not call prepareToWithdrawStakePartial, until locked time is pass', async () => {
+      await this.stakers._createStake({from: firstStaker, value: ether('2.0')});
+      await this.stakers.makeEpochSnapshots(10000, false); // epoch #1
+
+      const duration = (new BN('86400')).mul(new BN('14'));
+      // start LockedUp
+      const sfc_owner = firstStaker;
+      const startLockedUpEpoch = new BN("2");
+      await this.stakers.startLockedUp(startLockedUpEpoch, { from: sfc_owner });
+
+      await this.stakers.makeEpochSnapshots(10000, false); // epoch #2
+
+      await this.stakers.lockUpStake(duration, { from: firstStaker });
+      await this.stakers.makeEpochSnapshots(10000, false); // epoch #3
+      await this.stakers.discardValidatorRewards({from: firstStaker});
+      const wrID = new BN('1');
+      await expectRevert(this.stakers.prepareToWithdrawStakePartial(wrID, ether('1.0'), { from: firstStaker }), "stake is locked");
+      time.increase(86400 * 14 - 2);
+      await expectRevert(this.stakers.prepareToWithdrawStakePartial(wrID, ether('1.0'), { from: firstStaker }), "stake is locked");
+      time.increase(3);
+      await this.stakers.prepareToWithdrawStakePartial(wrID, ether('1.0'), { from: firstStaker });
     });
   });
 });
