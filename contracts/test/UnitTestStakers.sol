@@ -113,11 +113,12 @@ contract UnitTestStakers is Stakers {
             }
         }
 
-        if (firstLockedUpEpoch > 0) {
+        if (firstLockedUpEpoch > 0 &&
+            firstLockedUpEpoch <= currentSealedEpoch) {
             for (uint256 i = 0; i < delegationIDsArr.length; i++) {
                 address delegator = delegationIDsArr[i].delegator;
                 uint256 stakerID = delegationIDsArr[i].stakerID;
-                if (lockedDelegations[delegator][stakerID].fromEpoch >= currentSealedEpoch &&
+                if (lockedDelegations[delegator][stakerID].fromEpoch <= currentSealedEpoch &&
                     lockedDelegations[delegator][stakerID].endTime >= newSnapshot.endTime) {
                     newSnapshot.totalLockedAmount += delegations_v2[delegator][stakerID].amount;
                 }
