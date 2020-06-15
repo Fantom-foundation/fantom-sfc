@@ -76,7 +76,6 @@ contract Stakers is Ownable, StakersConstants {
 
     struct LockedAmount {
         uint256 fromEpoch;
-        uint256 startTime;
         uint256 endTime;
     }
 
@@ -833,18 +832,21 @@ contract Stakers is Ownable, StakersConstants {
         firstLockedUpEpoch = epochNum;
     }
 
+    event LockingStake(uint256 indexed stakerID, uint256 fromEpoch, uint256 endTime);
+
     function lockUpStake(uint256 lockDuration) external {
         require(firstLockedUpEpoch != 0 && firstLockedUpEpoch <= currentSealedEpoch.add(1), "feature was not activated");
         uint256 stakerID = _sfcAddressToStakerID(msg.sender);
         _checkDeactivatedStaker(stakerID);
         require(lockDuration >= 86400 * 14 && lockDuration <= 86400 * 365, "incorrect duration");
         require(lockedStakes[stakerID].endTime < block.timestamp.add(lockDuration), "already locked up");
-        LockedAmount memory lStake = LockedAmount(
-            currentSealedEpoch.add(1),
-            block.timestamp,
-            block.timestamp.add(lockDuration));
-        lockedStakes[stakerID] = lStake;
+        uint256 currentEpoch = currentSealedEpoch.add(1);
+        uint256 endTime = block.timestamp.add(lockDuration);
+        lockedStakes[stakerID] = LockedAmount(currentEpoch, endTime);
+        emit LockingStake(stakerID, currentEpoch, endTime);
     }
+
+    event LockingDelegation(address indexed delegator, uint256 indexed stakerID, uint256 fromEpoch, uint256 endTime);
 
     function lockUpDelegation(uint256 lockDuration, uint256 stakerID) external {
         require(firstLockedUpEpoch != 0 && firstLockedUpEpoch <= currentSealedEpoch.add(1), "feature was not activated");
@@ -855,11 +857,9 @@ contract Stakers is Ownable, StakersConstants {
         uint256 endTime = block.timestamp.add(lockDuration);
         require(lockedStakes[stakerID].endTime >= endTime, "staker's locking will finish first");
         require(lockedDelegations[delegator][stakerID].endTime < endTime, "already locked up");
-        LockedAmount memory lStake = LockedAmount(
-            currentSealedEpoch.add(1),
-            block.timestamp,
-            endTime);
-        lockedDelegations[delegator][stakerID] = lStake;
+        uint256 currentEpoch = currentSealedEpoch.add(1);
+        lockedDelegations[delegator][stakerID] = LockedAmount(currentEpoch, endTime);
+        emit LockingDelegation(delegator, stakerID, currentEpoch, endTime);
     }
 
     event UpdatedDelegation(address indexed delegator, uint256 indexed oldStakerID, uint256 indexed newStakerID, uint256 amount);

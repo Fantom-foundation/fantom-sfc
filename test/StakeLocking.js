@@ -354,7 +354,7 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       // reduce unlock stake by 70%
       expect(await this.stakers.calcValidatorEpochReward(thirdStakerID, epoch, this.validatorComission)).to.be.bignumber.equal(ether('0.000000031578947368'));
       // first delegation locking has ended
-      time.increase(86400 * 14 - 10005);
+      time.increase(86400 * 14 - 10002);
       await this.stakers.makeEpochSnapshots(); // epoch #8
 
       epoch = new BN('9');
