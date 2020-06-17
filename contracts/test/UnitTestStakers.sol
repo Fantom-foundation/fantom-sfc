@@ -133,7 +133,7 @@ contract UnitTestStakers is Stakers {
     }
 
     function calcRawValidatorEpochReward(uint256 stakerID, uint256 epoch) external view returns (uint256) {
-        return _calcRawValidatorEpochReward(stakerID, epoch);
+        return _calcRawValidatorEpochReward(stakerID, epoch, unlockedRatio());
     }
 
     function calcLockedUpReward(uint256 amount, uint256 epoch) external view returns (uint256) {
@@ -144,8 +144,8 @@ contract UnitTestStakers is Stakers {
         return _calcValidatorEpochReward(stakerID, epoch, commission);
     }
 
-    function calcDelegationEpochReward(uint256 stakerID, uint256 epoch, uint256 delegationAmount, uint256 commission, address delegator) external view returns (uint256) {
-        return _calcDelegationEpochReward(stakerID, epoch, delegationAmount, commission, delegator);
+    function calcDelegationEpochReward(address delegator, uint256 stakerID, uint256 epoch, uint256 delegationAmount, uint256 commission) external view returns (uint256) {
+        return _calcDelegationEpochReward(delegator, stakerID, epoch, delegationAmount, commission, unlockedRatio());
     }
 
     function discardValidatorRewards() public {
