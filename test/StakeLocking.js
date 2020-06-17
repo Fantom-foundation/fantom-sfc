@@ -431,5 +431,72 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       await expectRevert(this.stakers.lockUpDelegation(minDuration.mul(new BN("3")), secondStakerID, { from: firstDepositor }), "staker's locking will finish first");
       await this.stakers.lockUpDelegation(minDuration.add(new BN("2")), secondStakerID, { from: firstDepositor });
     });
+
+    it('should subtract penalty if prepareToWithdrawDelegation will call earlier than locked time is pass', async () => {
+      await this.stakers._createStake({from: firstStaker, value: ether('10.0')});
+      let firstStakerID = await this.stakers.getStakerID(firstStaker);
+      await this.stakers.createDelegation(firstStakerID, {from: firstDepositor, value: ether('1.0')});
+      await this.stakers.createDelegation(firstStakerID, {from: secondDepositor, value: ether('1.0')});
+      await this.stakers.makeEpochSnapshots(10000, false); // epoch #1
+
+      const duration = (new BN('86400')).mul(new BN('14'));
+      // start LockedUp
+      const sfc_owner = firstStaker;
+      const startLockedUpEpoch = new BN("2");
+      await this.stakers.startLockedUp(startLockedUpEpoch, { from: sfc_owner });
+
+      await this.stakers.makeEpochSnapshots(10000, false); // epoch #2
+
+      await this.stakers.lockUpStake(duration.add(new BN('5')), { from: firstStaker });
+      await this.stakers.lockUpDelegation(duration, firstStakerID, { from: firstDepositor });
+      await this.stakers.lockUpDelegation(duration, firstStakerID, { from: secondDepositor });
+      await this.stakers.makeEpochSnapshots(10000, false); // epoch #3
+      await this.stakers.discardDelegationRewards(firstStakerID, {from: firstDepositor});
+      await this.stakers.discardDelegationRewards(firstStakerID, {from: secondDepositor});
+      time.increase(86400 * 14 - 2);
+      const penalty = await this.stakers.calcDelegationPenalty(firstDepositor, firstStakerID, ether('1.0'));
+      expect(penalty).to.be.bignumber.equal(ether('0.000000068958333333'));
+      await this.stakers.prepareToWithdrawDelegation(firstStakerID, { from: firstDepositor });
+      const firstDeposition = await getDeposition(firstDepositor, firstStakerID);
+      expect(firstDeposition.amount).to.be.bignumber.equal(ether('1.0').sub(penalty));
+      time.increase(3);
+      await this.stakers.prepareToWithdrawDelegation(firstStakerID, { from: secondDepositor });
+      const secondDeposition = await getDeposition(secondDepositor, firstStakerID);
+      expect(secondDeposition.amount).to.be.bignumber.equal(ether('1.0'));
+    });
+
+    it('should subtract penalty if prepareToWithdrawDelegationPartial will call earlier than locked time is pass', async () => {
+      await this.stakers._createStake({from: firstStaker, value: ether('20.0')});
+      let firstStakerID = await this.stakers.getStakerID(firstStaker);
+      await this.stakers.createDelegation(firstStakerID, {from: firstDepositor, value: ether('2.0')});
+      await this.stakers.createDelegation(firstStakerID, {from: secondDepositor, value: ether('2.0')});
+      await this.stakers.makeEpochSnapshots(10000, false); // epoch #1
+
+      const duration = (new BN('86400')).mul(new BN('14'));
+      // start LockedUp
+      const sfc_owner = firstStaker;
+      const startLockedUpEpoch = new BN("2");
+      await this.stakers.startLockedUp(startLockedUpEpoch, { from: sfc_owner });
+
+      await this.stakers.makeEpochSnapshots(10000, false); // epoch #2
+
+      await this.stakers.lockUpStake(duration.add(new BN('5')), { from: firstStaker });
+      await this.stakers.lockUpDelegation(duration, firstStakerID, { from: firstDepositor });
+      await this.stakers.lockUpDelegation(duration, firstStakerID, { from: secondDepositor });
+      await this.stakers.makeEpochSnapshots(10000, false); // epoch #3
+      await this.stakers.discardDelegationRewards(firstStakerID, {from: firstDepositor});
+      await this.stakers.discardDelegationRewards(firstStakerID, {from: secondDepositor});
+      time.increase(86400 * 14 - 2);
+      const penalty = await this.stakers.calcDelegationPenalty(firstDepositor, firstStakerID, ether('1.0'));
+      expect(penalty).to.be.bignumber.equal(ether('0.000000034479166666')); // 50% for reward
+      const wrID = new BN('1');
+      await this.stakers.prepareToWithdrawDelegationPartial(wrID, firstStakerID, ether('1.0'), { from: firstDepositor });
+      const firstDeposition = await getDeposition(firstDepositor, firstStakerID);
+      expect(firstDeposition.amount).to.be.bignumber.equal(ether('1.0').sub(penalty));
+      time.increase(3);
+      await this.stakers.prepareToWithdrawDelegationPartial(wrID.add(new BN('1')), firstStakerID, ether('1.0'), { from: secondDepositor });
+      const secondDeposition = await getDeposition(secondDepositor, firstStakerID);
+      expect(secondDeposition.amount).to.be.bignumber.equal(ether('1.0'));
+    });
   });
 });
