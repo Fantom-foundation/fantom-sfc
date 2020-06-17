@@ -148,6 +148,10 @@ contract UnitTestStakers is Stakers {
         return _calcDelegationEpochReward(delegator, stakerID, epoch, delegationAmount, commission, unlockedRatio());
     }
 
+    function calcDelegationPenalty(address delegator, uint256 stakerID, uint256 withdrawalAmount) external view returns (uint256) {
+        return _calcDelegationPenalty(delegator, stakerID, withdrawalAmount);
+    }
+
     function discardValidatorRewards() public {
         uint256 stakerID = _sfcAddressToStakerID(msg.sender);
         require(stakers[stakerID].stakeAmount != 0, "staker doesn't exist");

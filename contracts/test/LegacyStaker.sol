@@ -9,11 +9,6 @@ contract LegacyStaker is UnitTestStakers {
 
     function createLegacyDelegation(uint256 to) external payable {
         address delegator = msg.sender;
-        _checkActiveStaker(to);
-        require(msg.value >= minDelegation(), "insufficient amount");
-        require(delegations[delegator].amount == 0, "delegation already exists");
-        require(stakerIDs[delegator] == 0, "already staking");
-        require(maxDelegatedLimit(stakers[to].stakeAmount) >= stakers[to].delegatedMe.add(msg.value), "staker's limit is exceeded");
 
         Delegation memory newDelegation;
         newDelegation.createdEpoch = currentEpoch();
@@ -32,9 +27,6 @@ contract LegacyStaker is UnitTestStakers {
 
     function prepareToWithdrawLegacyDelegation() external {
         address delegator = msg.sender;
-        require(delegations[delegator].amount != 0, "delegation doesn't exist");
-        require(delegations[delegator].deactivatedTime == 0, "delegation is deactivated");
-        require(delegations[delegator].paidUntilEpoch == currentSealedEpoch, "not all rewards claimed"); // for rewards burning
 
         uint256 stakerID = delegations[delegator].toStakerID;
         _mayBurnRewardsOnDeactivation(true, stakerID, delegator, delegations[delegator].amount, delegations[delegator].amount);

@@ -363,7 +363,7 @@ contract Stakers is Ownable, StakersConstants {
         _checkAndUpgradeDelegateStorage(delegator);
         _checkActiveDelegation(delegator, to);
         // previous rewards must be claimed because rewards calculation depends on current delegation amount
-        require(delegations_v2[delegator][to].paidUntilEpoch == currentSealedEpoch, "not all rewards claimed");
+        _checkClaimedDelegation(delegator, to);
 
         delegations_v2[delegator][to].toStakerID;
 
@@ -617,7 +617,7 @@ contract Stakers is Ownable, StakersConstants {
         address stakerSfcAddr = msg.sender;
         uint256 stakerID = _sfcAddressToStakerID(stakerSfcAddr);
         _checkDeactivatedStaker(stakerID);
-        require(stakers[stakerID].paidUntilEpoch == currentSealedEpoch, "not all rewards claimed"); // for rewards burning
+        _checkClaimedStaker(stakerID);
         require(lockedStakes[stakerID].fromEpoch == 0 || lockedStakes[stakerID].endTime < block.timestamp, "stake is locked");
 
         _mayBurnRewardsOnDeactivation(false, stakerID, stakerSfcAddr, stakers[stakerID].stakeAmount, stakers[stakerID].stakeAmount);
@@ -634,7 +634,7 @@ contract Stakers is Ownable, StakersConstants {
         address payable stakerSfcAddr = msg.sender;
         uint256 stakerID = _sfcAddressToStakerID(stakerSfcAddr);
         _checkDeactivatedStaker(stakerID);
-        require(stakers[stakerID].paidUntilEpoch == currentSealedEpoch, "not all rewards claimed"); // for rewards burning
+        _checkClaimedStaker(stakerID);
         require(lockedStakes[stakerID].fromEpoch == 0 || lockedStakes[stakerID].endTime < block.timestamp, "stake is locked");
         require(amount >= minStakeDecrease(), "too small amount"); // avoid confusing wrID and amount
 
@@ -703,7 +703,7 @@ contract Stakers is Ownable, StakersConstants {
         _checkAndUpgradeDelegateStorage(delegator);
         _checkActiveDelegation(delegator, stakerID);
         Delegation storage delegation = delegations_v2[delegator][stakerID];
-        require(delegation.paidUntilEpoch == currentSealedEpoch, "not all rewards claimed"); // for rewards burning
+        _checkClaimedDelegation(delegator, stakerID);
 
         _mayBurnRewardsOnDeactivation(true, stakerID, delegator, delegation.amount, delegation.amount);
 
@@ -738,7 +738,7 @@ contract Stakers is Ownable, StakersConstants {
         _checkActiveDelegation(delegator, stakerID);
         Delegation storage delegation = delegations_v2[delegator][stakerID];
         // previous rewards must be claimed because rewards calculation depends on current delegation amount
-        require(delegation.paidUntilEpoch == currentSealedEpoch, "not all rewards claimed");
+        _checkClaimedDelegation(delegator, stakerID);
         require(amount >= minDelegationDecrease(), "too small amount"); // avoid confusing wrID and amount
 
         // don't allow to withdraw full as a request, because amount==0 originally meant "not existing"
@@ -749,6 +749,7 @@ contract Stakers is Ownable, StakersConstants {
 
         _mayBurnRewardsOnDeactivation(true, stakerID, delegator, amount, totalAmount);
 
+        bool oldBehavore = false;
         if (firstLockedUpEpoch > 0 && currentSealedEpoch >= firstLockedUpEpoch) {
             if (lockedDelegations[delegator][stakerID].endTime > block.timestamp) {
                 uint256 penalty = _calcDelegationPenalty(delegator, stakerID, amount);
@@ -778,6 +779,18 @@ contract Stakers is Ownable, StakersConstants {
                         return ;
                     }
                 }
+            } else {
+                oldBehavore = true;
+            }
+        } else {
+            oldBehavore = true;
+        }
+
+        if (oldBehavore) {
+            delegation.amount -= amount;
+            if (stakers[stakerID].stakeAmount != 0) {
+                // if staker haven't withdrawn
+                stakers[stakerID].delegatedMe = stakers[stakerID].delegatedMe.sub(amount);
             }
         }
 
@@ -955,6 +968,14 @@ contract Stakers is Ownable, StakersConstants {
 
     function _checkExistDelegation(address delegator, uint256 toStaker) view internal {
         require(delegations_v2[delegator][toStaker].amount != 0, "delegation doesn't exist");
+    }
+
+    function _checkClaimedDelegation(address delegator, uint256 toStaker) view internal {
+        require(delegations_v2[delegator][toStaker].paidUntilEpoch == currentSealedEpoch, "not all rewards claimed");
+    }
+
+    function _checkClaimedStaker(uint256 toStaker) view internal {
+        require(stakers[toStaker].paidUntilEpoch == currentSealedEpoch, "not all rewards claimed");
     }
 
     function _checkActiveDelegation(address delegator, uint256 toStaker) view internal {
