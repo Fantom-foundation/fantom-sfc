@@ -9,7 +9,7 @@
     "build": "truffle build",
     "test": "truffle test",
     "truffle": "truffle",
-    "flatten": "rm -rf contracts/Flattened.sol && truffle-flattener contracts/Staker.sol >> contracts/Flattened.sol"
+    "flatten": "rm -rf contracts/Flattened.sol && truffle-flattener contracts/sfc/Staker.sol >> contracts/Flattened.sol"
   },
   "dependencies": {
     "@openzeppelin/contracts": "^2.3.0"
