@@ -40,21 +40,40 @@ Compiling your contracts...
 
 
 
-  Contract: Staker test
-    ✓ checking Staker parameters (221ms)
-    ✓ checking createStake function (522ms)
-    ✓ checking increaseStake function (287ms)
-    ✓ checking createDelegation function (472ms)
-    ✓ checking calcTotalReward function (349ms)
-    ✓ checking calcValidatorReward function (328ms)
-    ✓ checking calcDelegationReward function (277ms)
-    ✓ checking claimDelegationRewards function (592ms)
-    ✓ checking claimValidatorRewards function (376ms)
-    ✓ checking prepareToWithdrawStake function (180ms)
-    ✓ checking withdrawStake function (791ms)
-    ✓ checking prepareToWithdrawDelegation function (246ms)
-    ✓ checking withdrawDelegation function (616ms)
+  Contract: SFC
+    Delegation migration tests
+        gas used for sfc deploying: 4915131
+      ✓ should auto migrate legacy deposition to new model (1699ms)
+      ✓ should manually migrate legacy deposition to new model (272ms)
+      ✓ should not call calcDelegationRewards while delegation is in the legacy model (404ms)
+
+  Contract: SFC
+    Methods tests
+      ✓ checking Staker parameters (127ms)
+      ✓ checking createStake function (521ms)
+      ✓ checking increaseStake function (316ms)
+      ✓ checking createDelegation function (473ms)
+      ✓ checking createDelegation function to several stakers (581ms)
+      ✓ checking calcRawValidatorEpochReward function (385ms)
+      ✓ checking epoch snapshot logic (148ms)
+      ✓ checking calcValidatorEpochReward function (484ms)
+      ✓ checking calcDelegationEpochReward function (462ms)
+      ✓ checking claimDelegationRewards function (703ms)
+      ✓ checking bonded ratio (107ms)
+      ✓ checking claimValidatorRewards function (419ms)
+      ✓ checking prepareToWithdrawStake function (272ms)
+      ✓ checking withdrawStake function (903ms)
+      ✓ checking prepareToWithdrawDelegation function (364ms)
+      ✓ checking withdrawDelegation function (1498ms)
+    Locked stake tests
+      ✓ should start "locked stake" feature (352ms)
+      ✓ should calc raw ValidatorEpochReward correctly after locked up started (980ms)
+      ✓ should lock stake (2200ms)
+      ✓ should lock stake with right duration (505ms)
+      ✓ should not call prepareToWithdrawStake, until locked time is pass (441ms)
+      ✓ should not call prepareToWithdrawStakePartial, until locked time is pass (447ms)
 
 
-  13 passing (6s)
+  25 passing (18s)
+
 ```
