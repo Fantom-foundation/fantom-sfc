@@ -34,7 +34,7 @@
     "lodash": "^4.17.15",
     "openzeppelin-test-helpers": "^0.4.3",
     "solidity-coverage": "^0.7.1",
-    "truffle-flattener": "^1.4.0",
+    "truffle-flattener": "^1.4.4",
     "web3-utils": "^1.2.1"
   },
   "repository": {
