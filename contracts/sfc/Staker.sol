@@ -217,38 +217,38 @@ contract Stakers is Ownable, StakersConstants {
     // Create new staker
     // Stake amount is msg.value
     function createStakeWithAddresses(address dagAdrress, address sfcAddress, bytes memory metadata) public payable {
-        require(dagAdrress != address(0) || sfcAddress != address(0), "invalid address");
+        require(dagAdrress != address(0) && sfcAddress != address(0), "invalid address");
         _createStake(dagAdrress, sfcAddress, msg.value, metadata);
     }
 
     // Create new staker
     // Stake amount is msg.value
-    function _createStake(address dagAdrress, address sfcAddress, uint256 amount, bytes memory metadata) internal {
-        require(stakerIDs[dagAdrress] == 0 || stakerIDs[sfcAddress] == 0, "staker already exists");
+    function _createStake(address dagAddress, address sfcAddress, uint256 amount, bytes memory metadata) internal {
+        require(stakerIDs[dagAddress] == 0 && stakerIDs[sfcAddress] == 0, "staker already exists");
 //        require(delegations[dagAdrress].amount == 0, "already delegating"); // TODO: check it
 //        require(delegations[sfcAddress].amount == 0, "already delegating");
         require(amount >= minStake(), "insufficient amount");
 
         uint256 stakerID = ++stakersLastID;
-        stakerIDs[dagAdrress] = stakerID;
+        stakerIDs[dagAddress] = stakerID;
         stakerIDs[sfcAddress] = stakerID;
         stakers[stakerID].stakeAmount = amount;
         stakers[stakerID].createdEpoch = currentEpoch();
         stakers[stakerID].createdTime = block.timestamp;
-        stakers[stakerID].dagAddress = dagAdrress;
+        stakers[stakerID].dagAddress = dagAddress;
         stakers[stakerID].sfcAddress = sfcAddress;
         stakers[stakerID].paidUntilEpoch = currentSealedEpoch;
 
         stakersNum++;
         stakeTotalAmount = stakeTotalAmount.add(amount);
-        emit CreatedStake(stakerID, dagAdrress, amount);
+        emit CreatedStake(stakerID, dagAddress, amount);
 
         if (metadata.length != 0) {
             updateStakerMetadata(metadata);
         }
 
-        if (dagAdrress != sfcAddress) {
-            emit UpdatedStakerSfcAddress(stakerID, dagAdrress, sfcAddress);
+        if (dagAddress != sfcAddress) {
+            emit UpdatedStakerSfcAddress(stakerID, dagAddress, sfcAddress);
         }
     }
 
@@ -361,7 +361,7 @@ contract Stakers is Ownable, StakersConstants {
     function increaseDelegation(uint256 to) external payable {
         address delegator = msg.sender;
         _checkAndUpgradeDelegateStorage(delegator);
-        _checkActiveDelegation(delegator, to);
+        _checkNotDeactivatedDelegation(delegator, to);
         // previous rewards must be claimed because rewards calculation depends on current delegation amount
         _checkClaimedDelegation(delegator, to);
 
@@ -533,7 +533,7 @@ contract Stakers is Ownable, StakersConstants {
     function claimDelegationRewards(uint256 maxEpochs, uint256 stakerID) external {
         address payable delegator = msg.sender;
         _checkAndUpgradeDelegateStorage(delegator);
-        _checkActiveDelegation(delegator, stakerID);
+        _checkNotDeactivatedDelegation(delegator, stakerID);
         (uint256 pendingRewards, uint256 fromEpoch, uint256 untilEpoch) = calcDelegationRewards(delegator, stakerID, 0, maxEpochs);
 
         _checkPaidEpoch(delegations_v2[delegator][stakerID].paidUntilEpoch, fromEpoch, untilEpoch);
@@ -616,7 +616,7 @@ contract Stakers is Ownable, StakersConstants {
     function prepareToWithdrawStake() external {
         address stakerSfcAddr = msg.sender;
         uint256 stakerID = _sfcAddressToStakerID(stakerSfcAddr);
-        _checkDeactivatedStaker(stakerID);
+        _checkNotDeactivatedStaker(stakerID);
         _checkClaimedStaker(stakerID);
         require(lockedStakes[stakerID].fromEpoch == 0 || lockedStakes[stakerID].endTime < block.timestamp, "stake is locked");
 
@@ -633,7 +633,7 @@ contract Stakers is Ownable, StakersConstants {
     function prepareToWithdrawStakePartial(uint256 wrID, uint256 amount) external {
         address payable stakerSfcAddr = msg.sender;
         uint256 stakerID = _sfcAddressToStakerID(stakerSfcAddr);
-        _checkDeactivatedStaker(stakerID);
+        _checkNotDeactivatedStaker(stakerID);
         _checkClaimedStaker(stakerID);
         require(lockedStakes[stakerID].fromEpoch == 0 || lockedStakes[stakerID].endTime < block.timestamp, "stake is locked");
         require(amount >= minStakeDecrease(), "too small amount"); // avoid confusing wrID and amount
@@ -701,7 +701,7 @@ contract Stakers is Ownable, StakersConstants {
     function prepareToWithdrawDelegation(uint256 stakerID) external {
         address delegator = msg.sender;
         _checkAndUpgradeDelegateStorage(delegator);
-        _checkActiveDelegation(delegator, stakerID);
+        _checkNotDeactivatedDelegation(delegator, stakerID);
         Delegation storage delegation = delegations_v2[delegator][stakerID];
         _checkClaimedDelegation(delegator, stakerID);
 
@@ -735,7 +735,7 @@ contract Stakers is Ownable, StakersConstants {
     function prepareToWithdrawDelegationPartial(uint256 wrID, uint256 stakerID, uint256 amount) external {
         address payable delegator = msg.sender;
         _checkAndUpgradeDelegateStorage(delegator);
-        _checkActiveDelegation(delegator, stakerID);
+        _checkNotDeactivatedDelegation(delegator, stakerID);
         Delegation storage delegation = delegations_v2[delegator][stakerID];
         // previous rewards must be claimed because rewards calculation depends on current delegation amount
         _checkClaimedDelegation(delegator, stakerID);
@@ -903,7 +903,7 @@ contract Stakers is Ownable, StakersConstants {
     function lockUpStake(uint256 lockDuration) external {
         require(firstLockedUpEpoch != 0 && firstLockedUpEpoch <= currentSealedEpoch.add(1), "feature was not activated");
         uint256 stakerID = _sfcAddressToStakerID(msg.sender);
-        _checkDeactivatedStaker(stakerID);
+        _checkNotDeactivatedStaker(stakerID);
         require(lockDuration >= 86400 * 14 && lockDuration <= 86400 * 365, "incorrect duration");
         require(lockedStakes[stakerID].endTime < block.timestamp.add(lockDuration), "already locked up");
         uint256 endTime = block.timestamp.add(lockDuration);
@@ -947,7 +947,7 @@ contract Stakers is Ownable, StakersConstants {
 
     // _upgradeStakerStorage after stakerAddress is divided into sfcAddress and dagAddress
     function _upgradeStakerStorage(uint256 stakerID) external {
-        require(stakers[stakerID].sfcAddress == address(0), "not updated");
+        require(stakers[stakerID].sfcAddress == address(0), "already updated");
         _checkExistStaker(stakerID);
         stakers[stakerID].sfcAddress = stakers[stakerID].dagAddress;
     }
@@ -956,13 +956,13 @@ contract Stakers is Ownable, StakersConstants {
         require(stakers[to].stakeAmount != 0, "staker doesn't exist");
     }
 
-    function _checkDeactivatedStaker(uint256 to) view internal {
+    function _checkNotDeactivatedStaker(uint256 to) view internal {
         _checkExistStaker(to);
         require(stakers[to].deactivatedTime == 0, "staker is deactivated");
     }
 
     function _checkActiveStaker(uint256 to) view internal {
-        _checkDeactivatedStaker(to);
+        _checkNotDeactivatedStaker(to);
         require(stakers[to].status == OK_STATUS, "staker should be active");
     }
 
@@ -970,17 +970,17 @@ contract Stakers is Ownable, StakersConstants {
         require(delegations_v2[delegator][toStaker].amount != 0, "delegation doesn't exist");
     }
 
-    function _checkClaimedDelegation(address delegator, uint256 toStaker) view internal {
-        require(delegations_v2[delegator][toStaker].paidUntilEpoch == currentSealedEpoch, "not all rewards claimed");
+    function _checkNotDeactivatedDelegation(address delegator, uint256 toStaker) view internal {
+        _checkExistDelegation(delegator, toStaker);
+        require(delegations_v2[delegator][toStaker].deactivatedTime == 0, "delegation is deactivated");
     }
 
     function _checkClaimedStaker(uint256 toStaker) view internal {
         require(stakers[toStaker].paidUntilEpoch == currentSealedEpoch, "not all rewards claimed");
     }
 
-    function _checkActiveDelegation(address delegator, uint256 toStaker) view internal {
-        _checkExistDelegation(delegator, toStaker);
-        require(delegations_v2[delegator][toStaker].deactivatedTime == 0, "delegation is deactivated");
+    function _checkClaimedDelegation(address delegator, uint256 toStaker) view internal {
+        require(delegations_v2[delegator][toStaker].paidUntilEpoch == currentSealedEpoch, "not all rewards claimed");
     }
 
     function _checkPaidEpoch(uint256 paidUntilEpoch, uint256 fromEpoch, uint256 untilEpoch) view internal {
