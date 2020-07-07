@@ -1,6 +1,6 @@
 {
   "name": "fantom-sfc",
-  "version": "1.0.0",
+  "version": "2.0.1-rc2",
   "description": "Special Fee Contract",
   "scripts": {
     "lint": "npm run eslint && npm run solium",

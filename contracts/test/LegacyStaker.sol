@@ -3,6 +3,9 @@ pragma solidity ^0.5.0;
 import "./UnitTestStakers.sol";
 
 
+/**
+ * @dev LegacyStaker contract defines delegations data structure of sfc contract v1.1.0
+ */
 contract LegacyStaker is UnitTestStakers {
     constructor (uint256 firstEpoch) public UnitTestStakers(firstEpoch) {
     }
