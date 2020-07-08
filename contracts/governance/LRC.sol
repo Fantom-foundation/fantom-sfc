@@ -13,12 +13,12 @@ library LRC {
     // mapping(uint256 => uint256) scales;
 
     struct Opinion {
-        string description;
+        bytes32 description;
         uint256 totalVotes;
     }
 
     struct LrcOption {
-        string description;
+        bytes32 description;
         uint256 arc;
         uint256 dw;
         Opinion[OptionsNum] opinions;
@@ -28,7 +28,7 @@ library LRC {
     }
 
     struct LRCChoise {
-        string[] choises;
+        bytes32[] choises;
         uint256 power;
     }
 
@@ -42,6 +42,7 @@ library LRC {
     }
 
     function calculateARC(LrcOption storage self) public {
+
         uint256 maxPossibleResistance = self.totalVotes * maxScale;
         uint256 rebasedActualResistance = self.resistance * rebaseScale;
         self.arc = rebasedActualResistance / maxPossibleResistance;
@@ -83,8 +84,9 @@ library LRC {
         uint256 scale;
         if (opinionId == OptionsNum - 1) {
             scale = OptionsNum;
+        } else {
+            scale = opinionId;
         }
-        scale = opinionId;
 
         self.totalVotes -= power;
         self.resistance -= power * scale;

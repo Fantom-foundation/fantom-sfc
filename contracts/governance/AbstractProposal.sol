@@ -34,12 +34,14 @@ contract AbstractProposal {
 
     string public title;
     string public description;
+    // string[] public options;
     string public proposalName;
     bytes public proposalSpecialData;
     bool public votesCanBeCanceled;
 
     function validateProposal(bytes32) external;
     function execute(uint256 optionId) external;
+    function getOptions() external returns (bytes32[] memory);
 
     function supportsInterface(bytes4 interfaceID) external view returns (bool) {
         return interfaceID == INTERFACE_ID;

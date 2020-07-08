@@ -27,9 +27,12 @@ contract StatusConstants {
     }
 
     function failStatus(uint256 status) public pure returns (uint256) {
-        status &= ~(1 << BIT_IS_ACTIVE);
-        status &= ~(1 << BIT_IS_ACCEPTED);
-        status &= ~(1 << BIT_IS_IMPLEMENTED);
+        status = 1 << BIT_IS_FAILED;
+        return status;
+    }
+
+    function setStatusDepositing(uint256 status) public pure returns (uint256) {
+        status |= 1 << BIT_IS_ACTIVE;
         return status;
     }
 
@@ -96,8 +99,8 @@ contract Constants is StatusConstants {
     uint256 constant CANCEL_DELEGATION_FEE = 123;
 
     // temprorary timestamp constants
-    uint256 constant DEPOSITING_PERIOD = 1 weeks;
-    uint256 constant VOTING_PERIOD = 1 weeks;
+    uint256 constant DEPOSITING_PERIOD = 2 weeks;
+    uint256 constant VOTING_PERIOD = 2 weeks;
 
     function typeExecutable() public pure returns (uint8) {
         return TYPE_EXECUTABLE;
@@ -121,7 +124,7 @@ contract Constants is StatusConstants {
 
     function minVotesRequired(uint256 totalVotersNum, uint256 proposalType) public pure returns (uint256) {
         // default (temprorary?) response is that 2/3 of a voters should vote fore a quorum
-        return totalVotersNum * 2 / 3;
+        return (totalVotersNum / 3) * 2;
     }
 
     function bytes32ToString(bytes32 _bytes32) public pure returns (string memory) {

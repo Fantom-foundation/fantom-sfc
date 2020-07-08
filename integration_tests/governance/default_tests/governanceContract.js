@@ -38,7 +38,7 @@ class GovernanceContract {
         this.contractConstructor =  new this.web3.eth.Contract(govAbi);
     }
 
-    async deploy(govBin, from) {
+    async deploy(govBin, from, proposalFactoryAddress) {
         const bin = `0x${govBin}`;
         const governableContractAddr = config.defaultTestsConfig.sfcContractAddress;
         const gasPrice = await this.web3.eth.getGasPrice();
@@ -47,7 +47,7 @@ class GovernanceContract {
             data: bin,
             // You can omit the asciiToHex calls, as the contstructor takes strings. 
             // Web3 will do the conversion for you.
-            arguments: [governableContractAddr] 
+            arguments: [governableContractAddr, proposalFactoryAddress] 
         }).encodeABI();
         const rawTx = {
             data: memo,

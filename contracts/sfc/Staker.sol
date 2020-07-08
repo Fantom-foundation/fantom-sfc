@@ -3,6 +3,7 @@ pragma solidity ^0.5.0;
 import "./SafeMath.sol";
 import "../ownership/Ownable.sol";
 import "../governance/Governable.sol";
+import "../governance/GovernanceCallbacks.sol";
 
 contract StakersConstants {
     using SafeMath for uint256;
@@ -142,6 +143,7 @@ contract Stakers is Ownable, StakersConstants, Governable {
         uint256 totalSupply;
     }
 
+    GovernanceCallbacks governanceCallbacks;
     uint256 private reserved1;
     uint256 private reserved2;
     uint256 private reserved3;
@@ -227,10 +229,23 @@ contract Stakers is Ownable, StakersConstants, Governable {
     function getVotingPower(address addr, uint256 propType) external view returns(uint256, uint256, uint256) {
         uint256 id = stakerIDs[addr];
         if (id == 0) {
+            if (delegations[addr].deactivatedTime != 0) {
+                return (0, 0, 0);
+            }
             return (0, 0, delegations[addr].amount);
         }
 
+        if (stakers[id].deactivatedTime != 0) {
+            // staker is deactivated
+            return (0, 0, 0);
+        }
+
         return (stakers[id].stakeAmount, stakers[id].delegatedMe, 0);
+    }
+
+
+    function registerGovernanceContract(address gc) onlyOwner external {
+        governanceCallbacks = GovernanceCallbacks(gc);
     }
 
     function delegatedVotesTo(address addr) external view returns(address) {
@@ -397,6 +412,8 @@ contract Stakers is Ownable, StakersConstants, Governable {
         uint256 newAmount = stakers[stakerID].stakeAmount.add(msg.value);
         stakers[stakerID].stakeAmount = newAmount;
         stakeTotalAmount = stakeTotalAmount.add(msg.value);
+
+        governanceCallbacks.refreshVoterData(msg.sender);
         emit IncreasedStake(stakerID, newAmount, msg.value);
     }
 
@@ -463,6 +480,8 @@ contract Stakers is Ownable, StakersConstants, Governable {
 
         _syncDelegator(delegator);
         _syncStaker(to);
+        governanceCallbacks.refreshVoterData(delegator);
+        governanceCallbacks.refreshVoterData(stakers[to].sfcAddress);
     }
 
     function _calcRawValidatorEpochReward(uint256 stakerID, uint256 epoch) view public returns (uint256) {
@@ -678,6 +697,7 @@ contract Stakers is Ownable, StakersConstants, Governable {
 
         stakers[stakerID].deactivatedEpoch = currentEpoch();
         stakers[stakerID].deactivatedTime = block.timestamp;
+        governanceCallbacks.refreshVoterData(stakerSfcAddr);
 
         emit DeactivatedStake(stakerID);
     }
@@ -709,8 +729,9 @@ contract Stakers is Ownable, StakersConstants, Governable {
         withdrawalRequests[stakerSfcAddr][wrID].time = block.timestamp;
 
         emit CreatedWithdrawRequest(stakerSfcAddr, stakerSfcAddr, stakerID, wrID, false, amount);
-
         _syncStaker(stakerID);
+
+        governanceCallbacks.refreshVoterData(stakerSfcAddr);
     }
 
     event WithdrawnStake(uint256 indexed stakerID, uint256 penalty);
@@ -771,6 +792,8 @@ contract Stakers is Ownable, StakersConstants, Governable {
             stakers[stakerID].delegatedMe = stakers[stakerID].delegatedMe.sub(delegationAmount);
         }
 
+        governanceCallbacks.refreshVoterData(delegator);
+        governanceCallbacks.refreshVoterData(stakers[stakerID].sfcAddress);
         emit DeactivatedDelegation(delegator, stakerID);
     }
 
@@ -808,6 +831,8 @@ contract Stakers is Ownable, StakersConstants, Governable {
 
         _syncDelegator(delegator);
         _syncStaker(stakerID);
+        governanceCallbacks.refreshVoterData(delegator);
+        governanceCallbacks.refreshVoterData(stakers[stakerID].sfcAddress);
     }
 
     event WithdrawnDelegation(address indexed delegator, uint256 indexed stakerID, uint256 penalty);

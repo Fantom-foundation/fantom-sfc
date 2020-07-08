@@ -7,7 +7,7 @@ import "./Upgradability.sol";
 import "./AbstractProposal.sol";
 
 
-contract SoftwareUpgradeProposal is AbstractProposal {
+contract DummySoftwareUpgradeProposal is AbstractProposal {
 
     Upgradability upgradableContract;
     address newContractAddress;
@@ -35,7 +35,6 @@ contract SoftwareUpgradeProposal is AbstractProposal {
     }
 
     function execute(uint256 optionId) public {
-        upgradableContract.upgradeTo(newContractAddress);
         emit SoftwareUpgradeIsDone();
     }
 }

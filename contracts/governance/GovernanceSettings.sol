@@ -3,15 +3,15 @@ pragma solidity ^0.5.0;
 import "./SafeMath.sol";
 import "./Constants.sol";
 import "./Governable.sol";
-import "./Proposal.sol";
 import "./SoftwareUpgradeProposal.sol";
 import "../common/ImplementationValidator.sol";
 
 
 contract GovernanceSettings is Constants {
-    uint256 _minimumDeposit = 1500; // minimum deposit
-    uint256 _minimumStartingDeposit = 150;
-    uint256 _minimumVotesRequiredNum = 67;
+    uint256 ftm = 1e18;
+    uint256 _minimumDeposit = 500000 * ftm; // minimum deposit
+    uint256 _minimumStartingDeposit = 100000 * ftm;
+    uint256 _minimumVotesRequiredNum = 20;
     uint256 _minimumVotesRequiredDenum = 100;
     uint256 _maximumlPossibleResistance = 4000;
     uint256 _maximumlPossibleDesignation = 4000;
