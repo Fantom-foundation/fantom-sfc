@@ -780,6 +780,9 @@ contract Stakers is Ownable, StakersConstants {
         delegationsTotalAmount -= penalty;
 
         emit DeactivatedDelegation(delegator, stakerID);
+
+        _syncDelegator(delegator, stakerID);
+        _syncStaker(stakerID);
     }
 
     function prepareToWithdrawDelegationPartial(uint256 wrID, uint256 amount) external {
