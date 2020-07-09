@@ -427,17 +427,20 @@ contract Stakers is Ownable, StakersConstants {
     }
 
     function _calcValidatorEpochReward(uint256 stakerID, uint256 epoch, uint256 commission) public view returns (uint256, uint256)  {
-        uint256 rawReward = _calcRawValidatorEpochReward(stakerID, epoch);
+        uint256 fullReward = 0;
+        {
+            uint256 rawReward = _calcRawValidatorEpochReward(stakerID, epoch);
 
-        uint256 stake = epochSnapshots[epoch].validators[stakerID].stakeAmount;
-        uint256 delegatedTotal = epochSnapshots[epoch].validators[stakerID].delegatedMe;
-        uint256 totalStake = stake.add(delegatedTotal);
-        if (totalStake == 0) {
-            return (0, 0); // avoid division by zero
+            uint256 stake = epochSnapshots[epoch].validators[stakerID].stakeAmount;
+            uint256 delegatedTotal = epochSnapshots[epoch].validators[stakerID].delegatedMe;
+            uint256 totalStake = stake.add(delegatedTotal);
+            if (totalStake == 0) {
+                return (0, 0); // avoid division by zero
+            }
+            uint256 weightedTotalStake = stake.add((delegatedTotal.mul(commission)).div(RATIO_UNIT));
+
+            fullReward = rawReward.mul(weightedTotalStake).div(totalStake);
         }
-        uint256 weightedTotalStake = stake.add((delegatedTotal.mul(commission)).div(RATIO_UNIT));
-
-        uint256 fullReward = rawReward.mul(weightedTotalStake).div(totalStake);
         bool isLockingFeatureActive = firstLockedUpEpoch > 0 && epoch >= firstLockedUpEpoch;
         bool isLockedUp = lockedStakes[stakerID].fromEpoch <= epoch && lockedStakes[stakerID].endTime > epochSnapshots[epoch - 1].endTime;
 
@@ -445,18 +448,21 @@ contract Stakers is Ownable, StakersConstants {
     }
 
     function _calcDelegationEpochReward(address delegator, uint256 stakerID, uint256 epoch, uint256 commission) public view returns (uint256, uint256) {
-        uint256 rawReward = _calcRawValidatorEpochReward(stakerID, epoch);
+        uint256 fullReward = 0;
+        {
+            uint256 rawReward = _calcRawValidatorEpochReward(stakerID, epoch);
 
-        uint256 stake = epochSnapshots[epoch].validators[stakerID].stakeAmount;
-        uint256 delegatedTotal = epochSnapshots[epoch].validators[stakerID].delegatedMe;
-        uint256 totalStake = stake.add(delegatedTotal);
-        if (totalStake == 0) {
-            return (0, 0); // avoid division by zero
+            uint256 stake = epochSnapshots[epoch].validators[stakerID].stakeAmount;
+            uint256 delegatedTotal = epochSnapshots[epoch].validators[stakerID].delegatedMe;
+            uint256 totalStake = stake.add(delegatedTotal);
+            if (totalStake == 0) {
+                return (0, 0); // avoid division by zero
+            }
+            uint256 delegationAmount = delegations_v2[delegator][stakerID].amount;
+            uint256 weightedTotalStake = (delegationAmount.mul(RATIO_UNIT.sub(commission))).div(RATIO_UNIT);
+
+            fullReward = rawReward.mul(weightedTotalStake).div(totalStake);
         }
-        uint256 delegationAmount = delegations_v2[delegator][stakerID].amount;
-        uint256 weightedTotalStake = (delegationAmount.mul(RATIO_UNIT.sub(commission))).div(RATIO_UNIT);
-
-        uint256 fullReward = rawReward.mul(weightedTotalStake).div(totalStake);
         bool isLockingFeatureActive = firstLockedUpEpoch > 0 && epoch >= firstLockedUpEpoch;
         bool isLockedUp = lockedDelegations[delegator][stakerID].fromEpoch <= epoch && lockedDelegations[delegator][stakerID].endTime > epochSnapshots[epoch - 1].endTime;
 
