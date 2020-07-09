@@ -978,11 +978,11 @@ contract Stakers is Ownable, StakersConstants {
     }
 
     function _isLockedDelegation(address delegator, uint256 toStaker) view internal returns (bool) {
-        return lockedDelegations[delegator][toStaker].endTime != 0 && lockedDelegations[delegator][toStaker].endTime < block.timestamp;
+        return lockedDelegations[delegator][toStaker].endTime != 0 && block.timestamp <= lockedDelegations[delegator][toStaker].endTime;
     }
 
     function _isLockedStake(uint256 staker) view internal returns (bool) {
-        return lockedStakes[staker].endTime != 0 && lockedStakes[staker].endTime < block.timestamp;
+        return lockedStakes[staker].endTime != 0 && block.timestamp <= lockedStakes[staker].endTime;
     }
 
     function _checkPaidEpoch(uint256 paidUntilEpoch, uint256 fromEpoch, uint256 untilEpoch) view internal {

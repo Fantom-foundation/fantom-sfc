@@ -133,11 +133,7 @@ contract UnitTestStakers is Stakers {
     }
 
     function calcRawValidatorEpochReward(uint256 stakerID, uint256 epoch) external view returns (uint256) {
-        return _calcRawValidatorEpochReward(stakerID, epoch, unlockedRewardRatio());
-    }
-
-    function calcLockedUpReward(uint256 amount, uint256 epoch) external view returns (uint256) {
-        return _calcLockedUpReward(amount, epoch);
+        return _calcRawValidatorEpochReward(stakerID, epoch);
     }
 
     function calcValidatorEpochReward(uint256 stakerID, uint256 epoch, uint256 commission) external view returns (uint256) {
