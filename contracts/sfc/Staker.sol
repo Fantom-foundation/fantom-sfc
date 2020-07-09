@@ -216,7 +216,7 @@ contract Stakers is Ownable, StakersConstants {
 
     // Create new staker
     // Stake amount is msg.value
-    // dagAdrress is msg.sender
+    // dagAddress is msg.sender
     // sfcAdrress is msg.sender
     function createStake(bytes memory metadata) public payable {
         _createStake(msg.sender, msg.sender, msg.value, metadata);
@@ -224,9 +224,9 @@ contract Stakers is Ownable, StakersConstants {
 
     // Create new staker
     // Stake amount is msg.value
-    function createStakeWithAddresses(address dagAdrress, address sfcAddress, bytes memory metadata) public payable {
-        require(dagAdrress != address(0) && sfcAddress != address(0), "invalid address");
-        _createStake(dagAdrress, sfcAddress, msg.value, metadata);
+    function createStakeWithAddresses(address dagAddress, address sfcAddress, bytes memory metadata) public payable {
+        require(dagAddress != address(0) && sfcAddress != address(0), "invalid address");
+        _createStake(dagAddress, sfcAddress, msg.value, metadata);
     }
 
     // Create new staker
