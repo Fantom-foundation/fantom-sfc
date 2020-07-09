@@ -4,7 +4,6 @@ import "./SafeMath.sol";
 import "./StakerConstants.sol";
 import "../ownership/Ownable.sol";
 
-
 /**
  * @dev Stakers contract defines data structure and methods for validators / stakers.
  */ 
@@ -121,8 +120,8 @@ contract Stakers is Ownable, StakersConstants {
     uint256 public slashedDelegationsTotalAmount;
     uint256 public slashedStakeTotalAmount;
 
-    mapping(address => Delegation) public delegations; // DEPRECATED. delegationID -> delegation
-    
+    mapping(address => Delegation) public delegations; // delegator address -> delegation
+
     uint256 private deleted0;
 
     mapping(uint256 => bytes) public stakerMetadata;
@@ -145,7 +144,7 @@ contract Stakers is Ownable, StakersConstants {
 
     mapping(address => mapping(uint256 => WithdrawalRequest)) public withdrawalRequests;
 
-    mapping(address => mapping(uint256 => Delegation)) public delegations_v2; // delegator address, staker ID -> delegations
+    mapping(address => mapping(uint256 => Delegation)) private _delegations_v2; // delegator address, staker ID -> delegation
 
     uint256 public firstLockedUpEpoch;
     mapping(uint256 => LockedAmount) public lockedStakes; // stakerID -> LockedAmount
@@ -225,8 +224,8 @@ contract Stakers is Ownable, StakersConstants {
     // Stake amount is msg.value
     function _createStake(address dagAddress, address sfcAddress, uint256 amount, bytes memory metadata) internal {
         require(stakerIDs[dagAddress] == 0 && stakerIDs[sfcAddress] == 0, "staker already exists");
-//        require(delegations[dagAdrress].amount == 0, "already delegating"); // TODO: check it
-//        require(delegations[sfcAddress].amount == 0, "already delegating");
+        require(delegations[dagAddress].amount == 0, "already delegating");
+        require(delegations[sfcAddress].amount == 0, "already delegating");
         require(amount >= minStake(), "insufficient amount");
 
         uint256 stakerID = ++stakersLastID;
@@ -269,9 +268,7 @@ contract Stakers is Ownable, StakersConstants {
     function updateStakerSfcAddress(address newSfcAddress) external {
         address oldSfcAddress = msg.sender;
 
-       // require(delegations[newSfcAddress].amount == 0, "already delegating"); // <-- TODO: check it
-        _checkAndUpgradeDelegateStorage(newSfcAddress);                          // <--
-        _checkAndUpgradeDelegateStorage(oldSfcAddress);                          // <--
+        require(delegations[newSfcAddress].amount == 0, "already delegating");
         require(oldSfcAddress != newSfcAddress, "the same address");
 
         uint256 stakerID = _sfcAddressToStakerID(oldSfcAddress);
@@ -330,12 +327,12 @@ contract Stakers is Ownable, StakersConstants {
 
     // Create new delegation to a given staker
     // Delegated amount is msg.value
-    function createDelegation(uint256 to) public payable {
+    function createDelegation(uint256 to) external payable {
         address delegator = msg.sender;
 
         _checkActiveStaker(to);
         require(msg.value >= minDelegation(), "insufficient amount");
-        require(delegations_v2[delegator][to].amount == 0, "delegation already exists");
+        require(delegations[delegator].amount == 0, "delegation already exists");
         require(stakerIDs[delegator] == 0, "already staking");
 
         require(maxDelegatedLimit(stakers[to].stakeAmount) >= stakers[to].delegatedMe.add(msg.value), "staker's limit is exceeded");
@@ -346,7 +343,7 @@ contract Stakers is Ownable, StakersConstants {
         newDelegation.amount = msg.value;
         newDelegation.toStakerID = to;
         newDelegation.paidUntilEpoch = currentSealedEpoch;
-        delegations_v2[delegator][to] = newDelegation;
+        delegations[delegator] = newDelegation;
 
         stakers[to].delegatedMe = stakers[to].delegatedMe.add(msg.value);
         delegationsNum++;
@@ -358,22 +355,20 @@ contract Stakers is Ownable, StakersConstants {
     event IncreasedDelegation(address indexed delegator, uint256 indexed stakerID, uint256 newAmount, uint256 diff);
 
     // Increase msg.sender's delegation by msg.value
-    function increaseDelegation(uint256 to) external payable {
+    function increaseDelegation() external payable {
         address delegator = msg.sender;
-        _checkAndUpgradeDelegateStorage(delegator);
+        uint256 to = delegations[delegator].toStakerID;
         _checkNotDeactivatedDelegation(delegator, to);
         // previous rewards must be claimed because rewards calculation depends on current delegation amount
         _checkClaimedDelegation(delegator, to);
-
-        delegations_v2[delegator][to].toStakerID;
 
         require(msg.value >= minDelegationIncrease(), "insufficient amount");
         require(maxDelegatedLimit(stakers[to].stakeAmount) >= stakers[to].delegatedMe.add(msg.value), "staker's limit is exceeded");
         _checkActiveStaker(to);
 
-        uint256 newAmount = delegations_v2[delegator][to].amount.add(msg.value);
+        uint256 newAmount = delegations[delegator].amount.add(msg.value);
 
-        delegations_v2[delegator][to].amount = newAmount;
+        delegations[delegator].amount = newAmount;
         stakers[to].delegatedMe = stakers[to].delegatedMe.add(msg.value);
         delegationsTotalAmount = delegationsTotalAmount.add(msg.value);
 
@@ -407,7 +402,7 @@ contract Stakers is Ownable, StakersConstants {
     }
 
     function _calcDelegationPenalty(address delegator, uint256 stakerID, uint256 withdrawalAmount) internal view returns (uint256) {
-        uint256 delegationAmount = delegations_v2[delegator][stakerID].amount;
+        uint256 delegationAmount = delegations[delegator].amount;
         return delegationEarlyWithdrawalPenalty[delegator][stakerID].mul(withdrawalAmount).div(delegationAmount);
     }
 
@@ -458,7 +453,7 @@ contract Stakers is Ownable, StakersConstants {
             if (totalStake == 0) {
                 return (0, 0); // avoid division by zero
             }
-            uint256 delegationAmount = delegations_v2[delegator][stakerID].amount;
+            uint256 delegationAmount = delegations[delegator].amount;
             uint256 weightedTotalStake = (delegationAmount.mul(RATIO_UNIT.sub(commission))).div(RATIO_UNIT);
 
             fullReward = rawReward.mul(weightedTotalStake).div(totalStake);
@@ -476,9 +471,10 @@ contract Stakers is Ownable, StakersConstants {
         return a;
     }
 
-    function _calcDelegationLockupRewards(address delegator, uint256 stakerID, uint256 fromEpoch, uint256 maxEpochs) public view returns (uint256, uint256, uint256, uint256) {
-        require(delegations[delegator].amount == 0, "old version delegation, please update");
-        Delegation memory delegation = delegations_v2[delegator][stakerID];
+    function _calcDelegationLockupRewards(address delegator, uint256 fromEpoch, uint256 maxEpochs) public view returns (uint256, uint256, uint256, uint256) {
+        uint256 stakerID = delegations[delegator].toStakerID;
+        Delegation memory delegation = delegations[delegator];
+        uint256 stakerID = delegation.toStakerID;
         fromEpoch = withDefault(fromEpoch, delegation.paidUntilEpoch + 1);
         assert(delegation.deactivatedTime == 0);
 
@@ -502,8 +498,8 @@ contract Stakers is Ownable, StakersConstants {
     // Returns the pending rewards for a given delegator, first calculated epoch, last calculated epoch
     // _fromEpoch is starting epoch which rewards are calculated (including). If 0, then it's lowest not claimed epoch
     // maxEpochs is maximum number of epoch to calc rewards for. Set it to your chunk size.
-    function calcDelegationRewards(address delegator, uint256 stakerID, uint256 _fromEpoch, uint256 maxEpochs) public view returns (uint256, uint256, uint256) {
-        (uint256 pendingUnlockedRewards, uint256 pendingLockedUpRewards, uint256 fromEpoch, uint256 untilEpoch) = _calcDelegationLockupRewards(delegator, stakerID, _fromEpoch, maxEpochs);
+    function calcDelegationRewards(address delegator, uint256 _fromEpoch, uint256 maxEpochs) public view returns (uint256, uint256, uint256) {
+        (uint256 pendingUnlockedRewards, uint256 pendingLockedUpRewards, uint256 fromEpoch, uint256 untilEpoch) = _calcDelegationLockupRewards(delegator, _fromEpoch, maxEpochs);
         return (pendingUnlockedRewards + pendingLockedUpRewards, fromEpoch, untilEpoch);
     }
 
@@ -550,15 +546,16 @@ contract Stakers is Ownable, StakersConstants {
 
     // Claim the pending rewards for a given delegator (sender)
     // maxEpochs is maximum number of epoch to calc rewards for. Set it to your chunk size.
-    function claimDelegationRewards(uint256 maxEpochs, uint256 stakerID) external {
+    function claimDelegationRewards(uint256 maxEpochs) external {
         address payable delegator = msg.sender;
-        _checkAndUpgradeDelegateStorage(delegator);
+        Delegation storage delegation = delegations[delegator];
+        uint256 stakerID = delegation.toStakerID;
         _checkNotDeactivatedDelegation(delegator, stakerID);
-        (uint256 pendingUnlockedRewards, uint256 pendingLockedUpRewards, uint256 fromEpoch, uint256 untilEpoch) = _calcDelegationLockupRewards(delegator, stakerID, 0, maxEpochs);
+        (uint256 pendingUnlockedRewards, uint256 pendingLockedUpRewards, uint256 fromEpoch, uint256 untilEpoch) = _calcDelegationLockupRewards(delegator, 0, maxEpochs);
 
-        _checkPaidEpoch(delegations_v2[delegator][stakerID].paidUntilEpoch, fromEpoch, untilEpoch);
+        _checkPaidEpoch(delegation.paidUntilEpoch, fromEpoch, untilEpoch);
 
-        delegations_v2[delegator][stakerID].paidUntilEpoch = untilEpoch;
+        delegation.paidUntilEpoch = untilEpoch;
         delegationEarlyWithdrawalPenalty[delegator][stakerID] += pendingUnlockedRewards / 2 + pendingLockedUpRewards;
         // It's important that we transfer after updating paidUntilEpoch (protection against Re-Entrancy)
         _claimRewards(delegator, pendingUnlockedRewards + pendingLockedUpRewards);
@@ -719,11 +716,11 @@ contract Stakers is Ownable, StakersConstants {
     event DeactivatedDelegation(address indexed delegator, uint256 indexed stakerID);
 
     // deactivate delegation, to be able to withdraw later
-    function prepareToWithdrawDelegation(uint256 stakerID) external {
+    function prepareToWithdrawDelegation() external {
         address delegator = msg.sender;
-        _checkAndUpgradeDelegateStorage(delegator);
+        Delegation storage delegation = delegations[delegator];
+        uint256 stakerID = delegation.toStakerID;
         _checkNotDeactivatedDelegation(delegator, stakerID);
-        Delegation storage delegation = delegations_v2[delegator][stakerID];
         _checkClaimedDelegation(delegator, stakerID);
 
         _mayBurnRewardsOnDeactivation(true, stakerID, delegator, delegation.amount, delegation.amount);
@@ -751,11 +748,11 @@ contract Stakers is Ownable, StakersConstants {
         emit DeactivatedDelegation(delegator, stakerID);
     }
 
-    function prepareToWithdrawDelegationPartial(uint256 wrID, uint256 stakerID, uint256 amount) external {
+    function prepareToWithdrawDelegationPartial(uint256 wrID, uint256 amount) external {
         address payable delegator = msg.sender;
-        _checkAndUpgradeDelegateStorage(delegator);
+        Delegation storage delegation = delegations[delegator];
+        uint256 stakerID = delegation.toStakerID;
         _checkNotDeactivatedDelegation(delegator, stakerID);
-        Delegation storage delegation = delegations_v2[delegator][stakerID];
         // previous rewards must be claimed because rewards calculation depends on current delegation amount
         _checkClaimedDelegation(delegator, stakerID);
         require(amount >= minDelegationDecrease(), "too small amount"); // avoid confusing wrID and amount
@@ -796,10 +793,10 @@ contract Stakers is Ownable, StakersConstants {
 
     event WithdrawnDelegation(address indexed delegator, uint256 indexed stakerID, uint256 penalty);
 
-    function withdrawDelegation(uint256 stakerID) external {
+    function withdrawDelegation() external {
         address payable delegator = msg.sender;
-        _checkAndUpgradeDelegateStorage(delegator);
-        Delegation memory delegation = delegations_v2[delegator][stakerID];
+        Delegation memory delegation = delegations[delegator];
+        uint256 stakerID = delegation.toStakerID;
         require(delegation.deactivatedTime != 0, "delegation wasn't deactivated");
         if (stakers[stakerID].stakeAmount != 0) {
             // if validator hasn't withdrawn already, then don't allow to withdraw delegation right away
@@ -809,7 +806,7 @@ contract Stakers is Ownable, StakersConstants {
         uint256 penalty = 0;
         bool isCheater = stakers[stakerID].status & CHEATER_MASK != 0;
         uint256 delegationAmount = delegation.amount;
-        delete delegations_v2[delegator][stakerID];
+        delete delegations[delegator];
         delete lockedDelegations[delegator][stakerID];
         delete delegationEarlyWithdrawalPenalty[delegator][stakerID];
 
@@ -908,6 +905,7 @@ contract Stakers is Ownable, StakersConstants {
         address delegator = msg.sender;
         _checkExistDelegation(delegator, stakerID);
         _checkActiveStaker(stakerID);
+        require(delegations[delegator].toStakerID == stakerID, "wrong stakerID");
         require(lockDuration >= 86400 * 14 && lockDuration <= 86400 * 365, "incorrect duration");
         uint256 endTime = block.timestamp.add(lockDuration);
         require(lockedStakes[stakerID].endTime >= endTime, "staker's locking will finish first");
@@ -924,10 +922,9 @@ contract Stakers is Ownable, StakersConstants {
 
     // syncDelegator updates the delegator data on node, if it differs for some reason
     function _syncDelegator(address delegator, uint256 stakerID) public {
-        _checkAndUpgradeDelegateStorage(delegator);
         _checkExistDelegation(delegator, stakerID);
         // emit special log for node
-        emit UpdatedDelegation(delegator, stakerID, stakerID, delegations_v2[delegator][stakerID].amount);
+        emit UpdatedDelegation(delegator, stakerID, stakerID, delegations[delegator].amount);
     }
 
     event UpdatedStake(uint256 indexed stakerID, uint256 amount, uint256 delegatedMe);
@@ -960,21 +957,21 @@ contract Stakers is Ownable, StakersConstants {
         require(stakers[to].status == OK_STATUS, "staker should be active");
     }
 
-    function _checkExistDelegation(address delegator, uint256 toStaker) view internal {
-        require(delegations_v2[delegator][toStaker].amount != 0, "delegation doesn't exist");
+    function _checkExistDelegation(address delegator, uint256 /*toStaker*/) view internal {
+        require(delegations[delegator].amount != 0, "delegation doesn't exist");
     }
 
     function _checkNotDeactivatedDelegation(address delegator, uint256 toStaker) view internal {
         _checkExistDelegation(delegator, toStaker);
-        require(delegations_v2[delegator][toStaker].deactivatedTime == 0, "delegation is deactivated");
+        require(delegations[delegator].deactivatedTime == 0, "delegation is deactivated");
     }
 
     function _checkClaimedStaker(uint256 toStaker) view internal {
         require(stakers[toStaker].paidUntilEpoch == currentSealedEpoch, "not all rewards claimed");
     }
 
-    function _checkClaimedDelegation(address delegator, uint256 toStaker) view internal {
-        require(delegations_v2[delegator][toStaker].paidUntilEpoch == currentSealedEpoch, "not all rewards claimed");
+    function _checkClaimedDelegation(address delegator, uint256 /*toStaker*/) view internal {
+        require(delegations[delegator].paidUntilEpoch == currentSealedEpoch, "not all rewards claimed");
     }
 
     function _isLockedDelegation(address delegator, uint256 toStaker) view internal returns (bool) {
@@ -989,12 +986,5 @@ contract Stakers is Ownable, StakersConstants {
         require(paidUntilEpoch < fromEpoch, "epoch is already paid");
         require(fromEpoch <= currentSealedEpoch, "future epoch");
         require(untilEpoch >= fromEpoch, "no epochs claimed");
-    }
-
-    function _checkAndUpgradeDelegateStorage(address delegator) internal {
-        if (delegations[delegator].amount != 0) {
-            delegations_v2[delegator][delegations[delegator].toStakerID] = delegations[delegator];
-            delete delegations[delegator];
-        }
     }
 }
