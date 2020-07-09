@@ -57,7 +57,7 @@ contract UnitTestStakers is Stakers {
 
     function createDelegation(uint256 to) public payable {
         delegationIDsArr.push(DelegationID(msg.sender, to));
-        super.createDelegation(to);
+        super._createDelegation(msg.sender, to);
     }
 
     function makeEpochSnapshots() external returns(uint256) {
@@ -159,9 +159,9 @@ contract UnitTestStakers is Stakers {
     function discardDelegationRewards(uint256 stakerID) public {
         if (delegations[msg.sender].amount != 0) {
             delegations[msg.sender].paidUntilEpoch = currentSealedEpoch;
-        } else if (delegations_v2[msg.sender][stakerID].amount != 0) {
+        }/* else if (delegations_v2[msg.sender][stakerID].amount != 0) {
             delegations_v2[msg.sender][stakerID].paidUntilEpoch = currentSealedEpoch;
-        } else {
+        } */else {
             revert("delegation doesn't exist");
         }
     }

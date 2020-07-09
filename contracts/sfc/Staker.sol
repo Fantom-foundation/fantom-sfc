@@ -325,11 +325,7 @@ contract Stakers is Ownable, StakersConstants {
 
     event CreatedDelegation(address indexed delegator, uint256 indexed toStakerID, uint256 amount);
 
-    // Create new delegation to a given staker
-    // Delegated amount is msg.value
-    function createDelegation(uint256 to) external payable {
-        address delegator = msg.sender;
-
+    function _createDelegation(address delegator, uint256 to) internal {
         _checkActiveStaker(to);
         require(msg.value >= minDelegation(), "insufficient amount");
         require(delegations[delegator].amount == 0, "delegation already exists");
@@ -350,6 +346,12 @@ contract Stakers is Ownable, StakersConstants {
         delegationsTotalAmount = delegationsTotalAmount.add(msg.value);
 
         emit CreatedDelegation(delegator, to, msg.value);
+    }
+
+    // Create new delegation to a given staker
+    // Delegated amount is msg.value
+    function createDelegation(uint256 to) external payable {
+        _createDelegation(msg.sender, to);
     }
 
     event IncreasedDelegation(address indexed delegator, uint256 indexed stakerID, uint256 newAmount, uint256 diff);
