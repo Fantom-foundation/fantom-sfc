@@ -102,7 +102,7 @@ contract UnitTestStakers is Stakers {
                     firstLockedUpEpoch <= currentSealedEpoch &&
                     lockedStakes[stakerID].fromEpoch <= currentSealedEpoch &&
                     lockedStakes[stakerID].endTime >= newSnapshot.endTime) {
-                    newSnapshot.totalLockedAmount += stakers[stakerID].stakeAmount;
+                    //newSnapshot.totalLockedAmount += stakers[stakerID].stakeAmount;
                 }
                 newSnapshot.validators[stakerID] = ValidatorMerit(
                     stakers[stakerID].stakeAmount,
@@ -120,7 +120,7 @@ contract UnitTestStakers is Stakers {
                 uint256 stakerID = delegationIDsArr[i].stakerID;
                 if (lockedDelegations[delegator][stakerID].fromEpoch <= currentSealedEpoch &&
                     lockedDelegations[delegator][stakerID].endTime >= newSnapshot.endTime) {
-                    newSnapshot.totalLockedAmount += delegations_v2[delegator][stakerID].amount;
+                    //newSnapshot.totalLockedAmount += delegations_v2[delegator][stakerID].amount;
                 }
             }
         }
@@ -133,7 +133,7 @@ contract UnitTestStakers is Stakers {
     }
 
     function calcRawValidatorEpochReward(uint256 stakerID, uint256 epoch) external view returns (uint256) {
-        return _calcRawValidatorEpochReward(stakerID, epoch, unlockedRatio());
+        return _calcRawValidatorEpochReward(stakerID, epoch, unlockedRewardRatio());
     }
 
     function calcLockedUpReward(uint256 amount, uint256 epoch) external view returns (uint256) {

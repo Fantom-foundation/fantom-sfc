@@ -71,7 +71,6 @@ contract Stakers is Ownable, StakersConstants {
         uint256 stakeTotalAmount;
         uint256 delegationsTotalAmount;
         uint256 totalSupply;
-        uint256 totalLockedAmount;
     }
 
     struct LockedAmount {
@@ -384,7 +383,7 @@ contract Stakers is Ownable, StakersConstants {
         _syncStaker(to);
     }
 
-    function _calcRawValidatorEpochReward(uint256 stakerID, uint256 epoch, uint256 unlockedRatio) internal view returns (uint256) {
+    function _calcRawValidatorEpochReward(uint256 stakerID, uint256 epoch) internal view returns (uint256) {
         uint256 totalBaseRewardWeight = epochSnapshots[epoch].totalBaseRewardWeight;
         uint256 baseRewardWeight = epochSnapshots[epoch].validators[stakerID].baseRewardWeight;
         uint256 totalTxRewardWeight = epochSnapshots[epoch].totalTxRewardWeight;
@@ -394,9 +393,6 @@ contract Stakers is Ownable, StakersConstants {
         uint256 baseReward = 0;
         if (baseRewardWeight != 0) {
             uint256 totalReward = epochSnapshots[epoch].duration.mul(epochSnapshots[epoch].baseRewardPerSecond);
-            if (firstLockedUpEpoch > 0 && epoch >= firstLockedUpEpoch) {
-                totalReward = totalReward.mul(unlockedRatio).div(RATIO_UNIT);
-            }
             baseReward = totalReward.mul(baseRewardWeight).div(totalBaseRewardWeight);
         }
         // fee reward
@@ -410,21 +406,28 @@ contract Stakers is Ownable, StakersConstants {
         return baseReward.add(txReward);
     }
 
-    function _calcLockedUpReward(uint256 amount, uint256 epoch) internal view returns (uint256) {
-        if (epochSnapshots[epoch].totalLockedAmount != 0) {
-            uint256 totalReward = epochSnapshots[epoch].duration.mul(epochSnapshots[epoch].baseRewardPerSecond);
-            return totalReward.mul(RATIO_UNIT - unlockedRatio()).div(RATIO_UNIT).mul(amount).div(epochSnapshots[epoch].totalLockedAmount);
-        }
-        return 0;
-    }
-
     function _calcDelegationPenalty(address delegator, uint256 stakerID, uint256 withdrawalAmount) internal view returns (uint256) {
         uint256 delegationAmount = delegations_v2[delegator][stakerID].amount;
         return delegationEarlyWithdrawalPenalty[delegator][stakerID].mul(withdrawalAmount).div(delegationAmount);
     }
 
-    function _calcValidatorEpochReward(uint256 stakerID, uint256 epoch, uint256 commission) internal view returns (uint256 unlockedReward, uint256 lockedUpReward)  {
-        uint256 rawReward = _calcRawValidatorEpochReward(stakerID, epoch, unlockedRatio());
+    function _calcLockingReward(uint256 fullReward, bool isLockingFeatureActive, bool isLockedUp) private pure returns (uint256 unlockedReward, uint256 lockedUpReward) {
+        if (isLockingFeatureActive) {
+            unlockedReward = fullReward.mul(unlockedRewardRatio()).div(RATIO_UNIT);
+            if (isLockedUp) {
+                lockedUpReward = fullReward - unlockedReward;
+            } else {
+                lockedUpReward = 0;
+            }
+        } else {
+            unlockedReward = fullReward;
+            lockedUpReward = 0;
+        }
+        return (unlockedReward, lockedUpReward);
+    }
+
+    function _calcValidatorEpochReward(uint256 stakerID, uint256 epoch, uint256 commission) public view returns (uint256, uint256)  {
+        uint256 rawReward = _calcRawValidatorEpochReward(stakerID, epoch);
 
         uint256 stake = epochSnapshots[epoch].validators[stakerID].stakeAmount;
         uint256 delegatedTotal = epochSnapshots[epoch].validators[stakerID].delegatedMe;
@@ -434,17 +437,15 @@ contract Stakers is Ownable, StakersConstants {
         }
         uint256 weightedTotalStake = stake.add((delegatedTotal.mul(commission)).div(RATIO_UNIT));
 
-        unlockedReward = rawReward.mul(weightedTotalStake).div(totalStake);
-        if (firstLockedUpEpoch > 0 && epoch >= firstLockedUpEpoch) {
-            if (lockedStakes[stakerID].fromEpoch <= epoch && lockedStakes[stakerID].endTime > epochSnapshots[epoch.sub(1)].endTime) {
-                lockedUpReward = _calcLockedUpReward(stake, epoch);
-            }
-        }
-        return (unlockedReward, lockedUpReward);
+        uint256 fullReward = rawReward.mul(weightedTotalStake).div(totalStake);
+        bool isLockingFeatureActive = firstLockedUpEpoch > 0 && epoch >= firstLockedUpEpoch;
+        bool isLockedUp = lockedStakes[stakerID].fromEpoch <= epoch && lockedStakes[stakerID].endTime > epochSnapshots[epoch - 1].endTime;
+
+        return _calcLockingReward(fullReward, isLockingFeatureActive, isLockedUp);
     }
 
-    function _calcDelegationEpochReward(address delegator, uint256 stakerID, uint256 epoch, uint256 commission) internal view returns (uint256 unlockedReward, uint256 lockedUpReward) {
-        uint256 rawReward = _calcRawValidatorEpochReward(stakerID, epoch, unlockedRatio());
+    function _calcDelegationEpochReward(address delegator, uint256 stakerID, uint256 epoch, uint256 commission) public view returns (uint256, uint256) {
+        uint256 rawReward = _calcRawValidatorEpochReward(stakerID, epoch);
 
         uint256 stake = epochSnapshots[epoch].validators[stakerID].stakeAmount;
         uint256 delegatedTotal = epochSnapshots[epoch].validators[stakerID].delegatedMe;
@@ -454,13 +455,12 @@ contract Stakers is Ownable, StakersConstants {
         }
         uint256 delegationAmount = delegations_v2[delegator][stakerID].amount;
         uint256 weightedTotalStake = (delegationAmount.mul(RATIO_UNIT.sub(commission))).div(RATIO_UNIT);
-        unlockedReward = rawReward.mul(weightedTotalStake).div(totalStake);
-        if (firstLockedUpEpoch > 0 && epoch >= firstLockedUpEpoch) {
-            if (lockedDelegations[delegator][stakerID].fromEpoch <= epoch && lockedDelegations[delegator][stakerID].endTime > epochSnapshots[epoch.sub(1)].endTime) {
-                lockedUpReward = _calcLockedUpReward(delegationAmount, epoch);
-            }
-        }
-        return (unlockedReward, lockedUpReward);
+
+        uint256 fullReward = rawReward.mul(weightedTotalStake).div(totalStake);
+        bool isLockingFeatureActive = firstLockedUpEpoch > 0 && epoch >= firstLockedUpEpoch;
+        bool isLockedUp = lockedDelegations[delegator][stakerID].fromEpoch <= epoch && lockedDelegations[delegator][stakerID].endTime > epochSnapshots[epoch - 1].endTime;
+
+        return _calcLockingReward(fullReward, isLockingFeatureActive, isLockedUp);
     }
 
     function withDefault(uint256 a, uint256 defaultA) pure private returns(uint256) {
