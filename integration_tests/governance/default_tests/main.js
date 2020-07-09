@@ -48,7 +48,6 @@ async function resolveProposal(web3, govContract, proposalFactory, dummySfcAddr)
     txHash = await govContract.transactions.increaseProposalDeposit(coinbase, deposit, newProposalId);
 
     // sleep
-    // Я НЕ ПОНИМАЮ ЧТО ТУТ ПРОИСХОДИТ!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     await new Promise(r => setTimeout(r, 60000));
     txHash = await govContract.transactions.handleDeadlines(coinbase, "0", "40");
 

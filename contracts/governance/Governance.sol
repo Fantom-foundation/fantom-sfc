@@ -451,7 +451,6 @@ contract Governance is GovernanceSettings {
         delete voters[voterAddr][proposalId];
     }
 
-    // НАШЁЛ АШИБАЧКУ
     function makeVote(uint256 proposalId, uint256[] memory choises, uint256 power, address voterAddr) internal {
         Voter storage voter = voters[voterAddr][proposalId];
         voter.choises = choises;
