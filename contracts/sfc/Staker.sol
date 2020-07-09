@@ -153,6 +153,13 @@ contract Stakers is Ownable, StakersConstants {
 
     uint256 public totalBurntLockupRewards;
 
+    struct _RewardsSet {
+        uint256 unlockedReward;
+        uint256 lockupBaseReward;
+        uint256 lockupExtraReward;
+        uint256 burntReward;
+    }
+
     /*
     Getters
     */
@@ -410,23 +417,28 @@ contract Stakers is Ownable, StakersConstants {
         return delegationEarlyWithdrawalPenalty[delegator][stakerID].mul(withdrawalAmount).div(delegationAmount);
     }
 
-    function _calcLockupReward(uint256 fullReward, bool isLockingFeatureActive, bool isLockedUp) private pure returns (uint256 unlockedReward, uint256 lockedUpReward, uint256 burntReward) {
+    function _calcLockupReward(uint256 fullReward, bool isLockingFeatureActive, bool isLockedUp) private pure returns (_RewardsSet memory rewards) {
+        rewards = _RewardsSet(0, 0, 0, 0);
         if (isLockingFeatureActive) {
-            unlockedReward = fullReward.mul(unlockedRewardRatio()).div(RATIO_UNIT);
             if (isLockedUp) {
-                lockedUpReward = fullReward - unlockedReward;
+                rewards.unlockedReward = 0;
+                rewards.lockupBaseReward = fullReward.mul(unlockedRewardRatio()).div(RATIO_UNIT);
+                rewards.lockupExtraReward = fullReward - rewards.lockupBaseReward;
             } else {
-                lockedUpReward = 0;
+                rewards.unlockedReward = fullReward.mul(unlockedRewardRatio()).div(RATIO_UNIT);
+                rewards.lockupBaseReward = 0;
+                rewards.lockupExtraReward = 0;
             }
         } else {
-            unlockedReward = fullReward;
-            lockedUpReward = 0;
+            rewards.unlockedReward = fullReward;
+            rewards.lockupBaseReward = 0;
+            rewards.lockupExtraReward = 0;
         }
-        burntReward = fullReward - unlockedReward - lockedUpReward;
-        return (unlockedReward, lockedUpReward, burntReward);
+        rewards.burntReward = fullReward - rewards.unlockedReward - rewards.lockupBaseReward - rewards.lockupExtraReward;
+        return rewards;
     }
 
-    function _calcValidatorEpochReward(uint256 stakerID, uint256 epoch, uint256 commission) public view returns (uint256, uint256, uint256)  {
+    function _calcValidatorEpochReward(uint256 stakerID, uint256 epoch, uint256 commission) internal view returns (_RewardsSet memory)  {
         uint256 fullReward = 0;
         {
             uint256 rawReward = _calcRawValidatorEpochReward(stakerID, epoch);
@@ -435,7 +447,7 @@ contract Stakers is Ownable, StakersConstants {
             uint256 delegatedTotal = epochSnapshots[epoch].validators[stakerID].delegatedMe;
             uint256 totalStake = stake.add(delegatedTotal);
             if (totalStake == 0) {
-                return (0, 0, 0); // avoid division by zero
+                return _RewardsSet(0, 0, 0, 0); // avoid division by zero
             }
             uint256 weightedTotalStake = stake.add((delegatedTotal.mul(commission)).div(RATIO_UNIT));
 
@@ -447,7 +459,7 @@ contract Stakers is Ownable, StakersConstants {
         return _calcLockupReward(fullReward, isLockingFeatureActive, isLockedUp);
     }
 
-    function _calcDelegationEpochReward(address delegator, uint256 stakerID, uint256 epoch, uint256 commission) public view returns (uint256, uint256, uint256) {
+    function _calcDelegationEpochReward(address delegator, uint256 stakerID, uint256 epoch, uint256 commission) internal view returns (_RewardsSet memory) {
         uint256 fullReward = 0;
         {
             uint256 rawReward = _calcRawValidatorEpochReward(stakerID, epoch);
@@ -456,7 +468,7 @@ contract Stakers is Ownable, StakersConstants {
             uint256 delegatedTotal = epochSnapshots[epoch].validators[stakerID].delegatedMe;
             uint256 totalStake = stake.add(delegatedTotal);
             if (totalStake == 0) {
-                return (0, 0, 0); // avoid division by zero
+                return _RewardsSet(0, 0, 0, 0); // avoid division by zero
             }
             uint256 delegationAmount = delegations[delegator].amount;
             uint256 weightedTotalStake = (delegationAmount.mul(RATIO_UNIT.sub(commission))).div(RATIO_UNIT);
@@ -476,26 +488,25 @@ contract Stakers is Ownable, StakersConstants {
         return a;
     }
 
-    function _calcDelegationLockupRewards(address delegator, uint256 fromEpoch, uint256 maxEpochs) public view returns (uint256, uint256, uint256, uint256, uint256) {
-        uint256 stakerID = delegations[delegator].toStakerID;
+    function _calcDelegationLockupRewards(address delegator, uint256 fromEpoch, uint256 maxEpochs) internal view returns (_RewardsSet memory, uint256, uint256) {
         Delegation memory delegation = delegations[delegator];
         uint256 stakerID = delegation.toStakerID;
         fromEpoch = withDefault(fromEpoch, delegation.paidUntilEpoch + 1);
         assert(delegation.deactivatedTime == 0);
 
         if (delegation.paidUntilEpoch >= fromEpoch) {
-            return (0, 0, 0, fromEpoch, 0);
+            return (_RewardsSet(0, 0, 0, 0), fromEpoch, 0);
         }
 
-        uint256[3] memory rewards = [uint256(0), uint256(0), uint256(0)]; // use memory to avoid exceeding stack size limit
-        // rewards is unlockedReward, lockedUpReward, burntReward
+        _RewardsSet memory rewards = _RewardsSet(0, 0, 0, 0);
 
         uint256 e;
         for (e = fromEpoch; e <= currentSealedEpoch && e < fromEpoch + maxEpochs; e++) {
-            (uint256 unlockedReward, uint256 lockedUpReward, uint256 burntReward) = _calcDelegationEpochReward(delegator, stakerID, e, validatorCommission());
-            rewards[0] += unlockedReward;
-            rewards[1] += lockedUpReward;
-            rewards[2] += burntReward;
+            _RewardsSet memory eRewards = _calcDelegationEpochReward(delegator, stakerID, e, validatorCommission());
+            rewards.unlockedReward += eRewards.unlockedReward;
+            rewards.lockupBaseReward += eRewards.lockupBaseReward;
+            rewards.lockupExtraReward += eRewards.lockupExtraReward;
+            rewards.burntReward += eRewards.burntReward;
         }
         uint256 lastEpoch;
         if (e <= fromEpoch) {
@@ -503,33 +514,33 @@ contract Stakers is Ownable, StakersConstants {
         } else {
             lastEpoch = e - 1;
         }
-        return (rewards[0], rewards[1], rewards[2], fromEpoch, lastEpoch);
+        return (rewards, fromEpoch, lastEpoch);
     }
 
     // Returns the pending rewards for a given delegator, first calculated epoch, last calculated epoch
     // _fromEpoch is starting epoch which rewards are calculated (including). If 0, then it's lowest not claimed epoch
     // maxEpochs is maximum number of epoch to calc rewards for. Set it to your chunk size.
     function calcDelegationRewards(address delegator, uint256 _fromEpoch, uint256 maxEpochs) public view returns (uint256, uint256, uint256) {
-        (uint256 pendingUnlockedRewards, uint256 pendingLockedUpRewards, uint256 burntRewards, uint256 fromEpoch, uint256 untilEpoch) = _calcDelegationLockupRewards(delegator, _fromEpoch, maxEpochs);
-        return (pendingUnlockedRewards + pendingLockedUpRewards, fromEpoch, untilEpoch);
+        (_RewardsSet memory rewards, uint256 fromEpoch, uint256 untilEpoch) = _calcDelegationLockupRewards(delegator, _fromEpoch, maxEpochs);
+        return (rewards.unlockedReward + rewards.lockupBaseReward + rewards.lockupExtraReward, fromEpoch, untilEpoch);
     }
 
-    function _calcValidatorLockupRewards(uint256 stakerID, uint256 fromEpoch, uint256 maxEpochs) public view returns (uint256, uint256, uint256, uint256, uint256) {
+    function _calcValidatorLockupRewards(uint256 stakerID, uint256 fromEpoch, uint256 maxEpochs) internal view returns (_RewardsSet memory, uint256, uint256) {
         fromEpoch = withDefault(fromEpoch, stakers[stakerID].paidUntilEpoch + 1);
 
         if (stakers[stakerID].paidUntilEpoch >= fromEpoch) {
-            return (0, 0, 0, fromEpoch, 0);
+            return (_RewardsSet(0, 0, 0, 0), fromEpoch, 0);
         }
 
-        uint256[3] memory rewards = [uint256(0), uint256(0), uint256(0)]; // use memory to avoid exceeding stack size limit
-        // rewards is unlockedReward, lockedUpReward, burntReward
+        _RewardsSet memory rewards = _RewardsSet(0, 0, 0, 0);
 
         uint256 e;
         for (e = fromEpoch; e <= currentSealedEpoch && e < fromEpoch + maxEpochs; e++) {
-            (uint256 unlockedReward, uint256 lockedUpReward, uint256 burntReward) = _calcValidatorEpochReward(stakerID, e, validatorCommission());
-            rewards[0] += unlockedReward;
-            rewards[1] += lockedUpReward;
-            rewards[2] += burntReward;
+            _RewardsSet memory eRewards = _calcValidatorEpochReward(stakerID, e, validatorCommission());
+            rewards.unlockedReward += eRewards.unlockedReward;
+            rewards.lockupBaseReward += eRewards.lockupBaseReward;
+            rewards.lockupExtraReward += eRewards.lockupExtraReward;
+            rewards.burntReward += eRewards.burntReward;
         }
         uint256 lastEpoch;
         if (e <= fromEpoch) {
@@ -537,15 +548,15 @@ contract Stakers is Ownable, StakersConstants {
         } else {
             lastEpoch = e - 1;
         }
-        return (rewards[0], rewards[1], rewards[2], fromEpoch, lastEpoch);
+        return (rewards, fromEpoch, lastEpoch);
     }
 
     // Returns the pending rewards for a given stakerID, first claimed epoch, last claimed epoch
     // _fromEpoch is starting epoch which rewards are calculated (including). If 0, then it's lowest not claimed epoch
     // maxEpochs is maximum number of epoch to calc rewards for. Set it to your chunk size.
     function calcValidatorRewards(uint256 stakerID, uint256 _fromEpoch, uint256 maxEpochs) public view returns (uint256, uint256, uint256) {
-        (uint256 pendingUnlockedRewards, uint256 pendingLockedUpRewards, uint256 burntRewards, uint256 fromEpoch, uint256 untilEpoch) = _calcValidatorLockupRewards(stakerID, _fromEpoch, maxEpochs);
-        return (pendingUnlockedRewards + pendingLockedUpRewards, fromEpoch, untilEpoch);
+        (_RewardsSet memory rewards, uint256 fromEpoch, uint256 untilEpoch) = _calcValidatorLockupRewards(stakerID, _fromEpoch, maxEpochs);
+        return (rewards.unlockedReward + rewards.lockupBaseReward + rewards.lockupExtraReward, fromEpoch, untilEpoch);
     }
 
     // _claimRewards transfers rewards directly if rewards are allowed, or stashes them until rewards are unlocked
@@ -569,17 +580,18 @@ contract Stakers is Ownable, StakersConstants {
         Delegation storage delegation = delegations[delegator];
         uint256 stakerID = delegation.toStakerID;
         _checkNotDeactivatedDelegation(delegator, stakerID);
-        (uint256 pendingUnlockedRewards, uint256 pendingLockedUpRewards, uint256 burntRewards, uint256 fromEpoch, uint256 untilEpoch) = _calcDelegationLockupRewards(delegator, 0, maxEpochs);
+        (_RewardsSet memory rewards, uint256 fromEpoch, uint256 untilEpoch) = _calcDelegationLockupRewards(delegator, 0, maxEpochs);
 
+        uint256 rewardsAll = rewards.unlockedReward + rewards.lockupBaseReward + rewards.lockupExtraReward;
         _checkPaidEpoch(delegation.paidUntilEpoch, fromEpoch, untilEpoch);
 
         delegation.paidUntilEpoch = untilEpoch;
-        delegationEarlyWithdrawalPenalty[delegator][stakerID] += pendingUnlockedRewards / 2 + pendingLockedUpRewards;
-        totalBurntLockupRewards += burntRewards;
+        delegationEarlyWithdrawalPenalty[delegator][stakerID] += rewards.lockupBaseReward / 2 + rewards.lockupExtraReward;
+        totalBurntLockupRewards += rewards.burntReward;
         // It's important that we transfer after updating paidUntilEpoch (protection against Re-Entrancy)
-        _claimRewards(delegator, pendingUnlockedRewards + pendingLockedUpRewards);
+        _claimRewards(delegator, rewardsAll);
 
-        emit ClaimedDelegationReward(delegator, stakerID, pendingUnlockedRewards + pendingLockedUpRewards, fromEpoch, untilEpoch);
+        emit ClaimedDelegationReward(delegator, stakerID, rewardsAll, fromEpoch, untilEpoch);
     }
 
     event ClaimedValidatorReward(uint256 indexed stakerID, uint256 reward, uint256 fromEpoch, uint256 untilEpoch);
@@ -593,15 +605,17 @@ contract Stakers is Ownable, StakersConstants {
         uint256 stakerID = _sfcAddressToStakerID(stakerSfcAddr);
         _checkExistStaker(stakerID);
 
-        (uint256 pendingUnlockedRewards, uint256 pendingLockedUpRewards, uint256 burntRewards, uint256 fromEpoch, uint256 untilEpoch) = _calcValidatorLockupRewards(stakerID, 0, maxEpochs);
+        (_RewardsSet memory rewards, uint256 fromEpoch, uint256 untilEpoch) = _calcValidatorLockupRewards(stakerID, 0, maxEpochs);
+
+        uint256 rewardsAll = rewards.unlockedReward + rewards.lockupBaseReward + rewards.lockupExtraReward;
         _checkPaidEpoch(stakers[stakerID].paidUntilEpoch, fromEpoch, untilEpoch);
 
         stakers[stakerID].paidUntilEpoch = untilEpoch;
-        totalBurntLockupRewards += burntRewards;
+        totalBurntLockupRewards += rewards.burntReward;
         // It's important that we transfer after updating paidUntilEpoch (protection against Re-Entrancy)
-        _claimRewards(stakerSfcAddr, pendingUnlockedRewards + pendingLockedUpRewards);
+        _claimRewards(stakerSfcAddr, rewardsAll);
 
-        emit ClaimedValidatorReward(stakerID, pendingUnlockedRewards + pendingLockedUpRewards, fromEpoch, untilEpoch);
+        emit ClaimedValidatorReward(stakerID, rewardsAll, fromEpoch, untilEpoch);
     }
 
     event UnstashedRewards(address indexed auth, address indexed receiver, uint256 rewards);
@@ -932,7 +946,8 @@ contract Stakers is Ownable, StakersConstants {
         require(lockedDelegations[delegator][stakerID].endTime < endTime, "already locked up");
 
         if (!_isLockedDelegation(delegator, stakerID)) {
-            delete delegationEarlyWithdrawalPenalty[delegator][stakerID]; // erase previous penalty counter
+            // forgive non-paid penalty from previous lockup period, if any
+            delete delegationEarlyWithdrawalPenalty[delegator][stakerID];
         }
         lockedDelegations[delegator][stakerID] = LockedAmount(currentEpoch(), endTime);
         emit LockingDelegation(delegator, stakerID, currentEpoch(), endTime);

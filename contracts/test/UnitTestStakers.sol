@@ -137,13 +137,13 @@ contract UnitTestStakers is Stakers {
     }
 
     function calcValidatorEpochReward(uint256 stakerID, uint256 epoch, uint256 commission) external view returns (uint256) {
-        (uint256 unlockedReward, uint256 lockedUpReward, uint256 _) = _calcValidatorEpochReward(stakerID, epoch, commission);
-        return unlockedReward + lockedUpReward;
+        _RewardsSet memory rewards = _calcValidatorEpochReward(stakerID, epoch, commission);
+        return rewards.unlockedReward + rewards.lockupBaseReward + rewards.lockupExtraReward;
     }
 
     function calcDelegationEpochReward(address delegator, uint256 stakerID, uint256 epoch, uint256 delegationAmount, uint256 commission) external view returns (uint256) {
-        (uint256 unlockedReward, uint256 lockedUpReward, uint256 _) = _calcDelegationEpochReward(delegator, stakerID, epoch, commission);
-        return unlockedReward + lockedUpReward;
+        _RewardsSet memory rewards = _calcDelegationEpochReward(delegator, stakerID, epoch, commission);
+        return rewards.unlockedReward + rewards.lockupBaseReward + rewards.lockupExtraReward;
     }
 
     function calcDelegationPenalty(address delegator, uint256 stakerID, uint256 withdrawalAmount) external view returns (uint256) {
