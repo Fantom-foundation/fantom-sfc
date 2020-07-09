@@ -89,6 +89,8 @@ contract Governance is GovernanceSettings {
     event VotingResultCalculated(uint256 proposalId);
     event VoterRecalculated(address voter, uint256 poposalId);
     event VoterDataRefreshed(address voter);
+    event CannotRefreshIfNotVoted(address voter, uint256 proposalId);
+    event LogPower(uint256 power, uint256 selfpower, uint256 delpower, address voter);
 
     constructor (address _governableContract, address _proposalFactory) public {
         governableContract = Governable(_governableContract);
@@ -100,8 +102,9 @@ contract Governance is GovernanceSettings {
         // require(msg.sender == address(governableContract), "only governable contract can reduce user stake");
         for (uint256 i = 0; i < activeProposalIds.length; i++) {
             uint256 proposalId = activeProposalIds[i];
-            Voter storage vtr = voters[voter][proposalId];
+            Voter memory vtr = voters[voter][proposalId];
             if (vtr.power == 0) {
+                emit CannotRefreshIfNotVoted(voter, proposalId);
                 continue;
             }
             recountVoter(proposalId, voter);
@@ -204,14 +207,14 @@ contract Governance is GovernanceSettings {
 
         if (ownVotingPower != 0) {
             uint256 power = ownVotingPower + delegationVotingPower - reducedVotersPower[msg.sender][proposalId];
-            makeVote(proposalId, choises, power);
+            makeVote(proposalId, choises, power, msg.sender);
         }
 
         if (delegatedVotingPower != 0) {
             address delegatedTo = governableContract.delegatedVotesTo(msg.sender);
             recountVoter(proposalId, delegatedTo);
             reduceVotersPower(proposalId, delegatedTo, delegatedVotingPower);
-            makeVote(proposalId, choises, delegatedVotingPower);
+            makeVote(proposalId, choises, delegatedVotingPower, msg.sender);
             voters[msg.sender][proposalId].previousDelegation = delegatedTo;
         }
     }
@@ -436,7 +439,7 @@ contract Governance is GovernanceSettings {
     }
 
     function _cancelVote(uint256 proposalId, address voterAddr) internal {
-        Voter memory voter = voters[voterAddr][proposalId];
+        Voter storage voter = voters[voterAddr][proposalId];
         ProposalDescription storage prop = proposals[proposalId];
 
         // prop.choises[voter.choise] -= voter.power;
@@ -448,14 +451,14 @@ contract Governance is GovernanceSettings {
         delete voters[voterAddr][proposalId];
     }
 
-    function makeVote(uint256 proposalId, uint256[] memory choises, uint256 power) internal {
-
-        Voter storage voter = voters[msg.sender][proposalId];
+    // НАШЁЛ АШИБАЧКУ
+    function makeVote(uint256 proposalId, uint256[] memory choises, uint256 power, address voterAddr) internal {
+        Voter storage voter = voters[voterAddr][proposalId];
         voter.choises = choises;
         voter.power = power;
         addChoisesToProp(proposalId, choises, power);
 
-        emit UserVoted(msg.sender, proposalId, choises, power);
+        emit UserVoted(voterAddr, proposalId, choises, power);
     }
 
     function addChoisesToProp(uint256 proposalId, uint256[] memory choises, uint256 power) internal {
@@ -482,10 +485,10 @@ contract Governance is GovernanceSettings {
         for (uint256 i = 0; i < prop.optionIDs.length; i++) {
             uint256 optionID = prop.optionIDs[i];
             prop.options[optionID].removeVote(choises[i], power);
+            prop.options[optionID].recalculate();
         }
     }
 
-    event LogPower(uint256 power, uint256 selfpower, uint256 delpower, address voter);
     function recountVoter(uint256 proposalId, address voterAddr) internal {
         Voter memory voter = voters[voterAddr][proposalId];
         ProposalDescription storage prop = proposals[proposalId];
@@ -501,7 +504,7 @@ contract Governance is GovernanceSettings {
         }
         emit LogPower(power, ownVotingPower, delegationVotingPower, voterAddr);
 
-        makeVote(proposalId, voter.choises, power);
+        makeVote(proposalId, voter.choises, power, voterAddr);
         emit VoterRecalculated(voterAddr, proposalId);
     }
 

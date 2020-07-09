@@ -344,7 +344,6 @@ contract('Governance test', async ([acc0, acc1, acc2, acc3, acc4, acc5, contract
     })
 
     it("test lrc constants", async () => {
-        // 4.1. Создать стейкеров с заданным количеством стейка
         let minStake = await this.stakers.minStake();
         let mediumStake = minStake.mul(new BN("2"));
         let largeStake = minStake.mul(new BN("3"));
@@ -364,8 +363,6 @@ contract('Governance test', async ([acc0, acc1, acc2, acc3, acc4, acc5, contract
             let accWp = await this.governanceProd.accountVotingPower(stakerDesc.address, 0);
             expect(accWp[0]).to.be.bignumber.equal(stakerDesc.stake);
         }
-
-        // 4.2. Создать делегаторов с заданным количеством стейка
     
         let delegatedAmount = await createDelegatorsSet(this.stakers, delegatorsDesc);
         for (const delegatorDesc of delegatorsDesc) {
@@ -376,7 +373,6 @@ contract('Governance test', async ([acc0, acc1, acc2, acc3, acc4, acc5, contract
         let totalStake = stakedAmount.add(delegatedAmount);
         console.log("totalStake d", totalStake.toString());
         
-        // 4.4. Уменьшить или увеличить средства стейкеров и делегаторов
         let options = [ new testHelper.LrcOption(), new testHelper.LrcOption()];
         let proposalId = await getPtpWithVoting(this.proposalFactory, this.governanceProd, acc0);
         for (const stakerDesc of stakersDesc) {
@@ -407,10 +403,7 @@ contract('Governance test', async ([acc0, acc1, acc2, acc3, acc4, acc5, contract
         await this.stakers.makeEpochSnapshots(10000);
         let accWp = await this.governanceProd.accountVotingPower(acc1, 0);
         // console.log("reduced accWp", accWp[0].toString(), accWp[1].toString(), accWp[2].toString())
-        expect(accWp[0])
-
-
-        // 4.5. Проверить, что lrc считается корректно
+        expect(accWp[0]);
 
     })
 
@@ -427,11 +420,12 @@ contract('Governance test', async ([acc0, acc1, acc2, acc3, acc4, acc5, contract
 
         let delegatorsDesc = [
             { address: acc4, stake: mediumStake, choises: ["2", "0"], delegationTo: "2" },
-            { address: acc5, stake: largeStake,  choises: ["0", "4"], delegationTo: "3" }
+            { address: acc5, stake: largeStake,  choises: ["3", "1"], delegationTo: "3" }
         ];
+        votersDesc = stakersDesc;
 
-        let stakedAmount = await createStakersSet(this.stakers, stakersDesc);
-        for (const stakerDesc of stakersDesc) {
+        let stakedAmount = await createStakersSet(this.stakers, votersDesc);
+        for (const stakerDesc of votersDesc) {
             let accWp = await this.governanceProd.accountVotingPower(stakerDesc.address, 0);
             expect(accWp[0]).to.be.bignumber.equal(stakerDesc.stake);
         }
@@ -443,14 +437,14 @@ contract('Governance test', async ([acc0, acc1, acc2, acc3, acc4, acc5, contract
             let accWp = await this.governanceProd.accountVotingPower(delegatorDesc.address, 0);
             expect(accWp[2]).to.be.bignumber.equal(delegatorDesc.stake);
             let stakerId = parseInt(delegatorDesc.delegationTo);
-            stakersDesc[stakerId - 1].delegatedStake = delegatorDesc.stake;
+            votersDesc[stakerId - 1].delegatedStake = delegatorDesc.stake;
         }
 
         let totalStake = stakedAmount.add(delegatedAmount);
         let options = [ new testHelper.LrcOption(), new testHelper.LrcOption()];
         let proposalId = await getPtpWithVoting(this.proposalFactory, this.governanceProd, acc0);
 
-        for (const stakerDesc of stakersDesc) {
+        for (const stakerDesc of votersDesc) {
             await this.governanceProd.vote(proposalId, stakerDesc.choises, {from: stakerDesc.address});
             for (let i = 0; i < stakerDesc.choises.length; i++) {
                 let choise = stakerDesc.choises[i];
@@ -467,17 +461,6 @@ contract('Governance test', async ([acc0, acc1, acc2, acc3, acc4, acc5, contract
             }
         }
 
-        // for (const stakerDesc of stakersDesc) {
-        //     let voter = await this.governanceProd.voters(stakerDesc.address, proposalId);
-        //     let delStake = new BN(0);
-        //     if (stakerDesc.delegatedStake)
-        //     { 
-        //         delStake = stakerDesc.delegatedStake; 
-        //     }
-// 
-        //     let stakerVotePower = stakerDesc.stake.add(delStake);
-        //     expect(voter.power).to.be.bignumber.equal(stakerVotePower);
-        // }
         options.forEach(option => {
             option.calculate();
         });
@@ -503,8 +486,6 @@ contract('Governance test', async ([acc0, acc1, acc2, acc3, acc4, acc5, contract
         await this.stakers.prepareToWithdrawStake({from: acc1});
         voterRefreshedEvents = await this.governanceProd.getPastEvents('VoterDataRefreshed',{ fromBlock: 0, toBlock: 'latest' });
         expect(voterRefreshedEvents.length).to.equal(1);
-        let normStaker = await this.governanceProd.voters(stakersDesc[1].address, proposalId);
-        console.log("normStaker", normStaker);
 
         voterRecalculatedEvents = await this.governanceProd.getPastEvents('VoterRecalculated', { fromBlock: 0, toBlock: 'latest' } );
         // expect(voterRefreshedEvents.length).to.equal(1);
@@ -531,58 +512,101 @@ contract('Governance test', async ([acc0, acc1, acc2, acc3, acc4, acc5, contract
         let voterAfterWithdraw = await this.governanceProd.voters(acc1, proposalId);
         expect(voterAfterWithdraw.power).to.be.bignumber.equal(Zero);
 
-        stakersDesc[0].stake = new BN(0); // a staker withdrawed his stake, so his stake is now 0
+        votersDesc[0].stake = new BN(0); // a staker withdrawed his stake, so his stake is now 0
         let expectedTotalVotes = options[0].totalVotes;
         
         // calculate LRC again
-        await testLocalAndRemoteLrc(proposalId, stakersDesc, this.governanceProd);
+        await testLocalAndRemoteLrc(proposalId, votersDesc, this.governanceProd);
 
 
         // now we increase stake and check that LRC data changed
-        await this.stakers.increaseStake({from: stakersDesc[1].address, value: minStake});
-        stakersDesc[1].stake = stakersDesc[1].stake.add(minStake);
-        await testLocalAndRemoteLrc(proposalId, stakersDesc, this.governanceProd);
+        let cannotRefreshIfNotVotedEvents = await this.governanceProd.getPastEvents('CannotRefreshIfNotVoted', { fromBlock: 0, toBlock: 'latest' } );
+        console.log("cannotRefreshIfNotVotedEvents", cannotRefreshIfNotVotedEvents);
+        await this.stakers.increaseStake({from: votersDesc[1].address, value: minStake});
 
-        await this.stakers.claimValidatorRewards(100000, {from: stakersDesc[2].address});
-        await this.stakers.prepareToWithdrawStakePartial(0, minStake, {from: stakersDesc[2].address});
-        stakersDesc[2].stake = stakersDesc[2].stake.sub(minStake);
-        await testLocalAndRemoteLrc(proposalId, stakersDesc, this.governanceProd);
+        let LogPowerRes = await this.governanceProd.getPastEvents('LogPower', { fromBlock: 0, toBlock: 'latest' } );
+        console.log("LogPowerRes", LogPowerRes);//[LogPowerRes.length - 1]
+        let normStaker = await this.governanceProd.voters(votersDesc[1].address, proposalId);
+        console.log("normStaker", normStaker);//
+        let UserVotedLogs = await this.governanceProd.getPastEvents('UserVoted', { fromBlock: 0, toBlock: 'latest' } );
+        console.log("UserVotedLogs", UserVotedLogs);//[LogPowerRes.length - 1]
+
+        cannotRefreshIfNotVotedEvents = await this.governanceProd.getPastEvents('CannotRefreshIfNotVoted', { fromBlock: 0, toBlock: 'latest' } );
+        console.log("cannotRefreshIfNotVotedEvents", cannotRefreshIfNotVotedEvents[cannotRefreshIfNotVotedEvents.length-1]);
+        votersDesc[1].stake = votersDesc[1].stake.add(minStake);
+        let stakerWithIncreasedStake = await this.stakers.stakers("2");
+        expect(stakerWithIncreasedStake.stakeAmount).to.be.bignumber.equal(votersDesc[1].stake);
+
+
+        await testLocalAndRemoteLrc(proposalId, votersDesc, this.governanceProd);
+        await this.stakers.claimValidatorRewards(100000, {from: votersDesc[2].address});
+        await this.stakers.prepareToWithdrawStakePartial(0, minStake, {from: votersDesc[2].address});
+        votersDesc[2].stake = votersDesc[2].stake.sub(minStake);
+        await testLocalAndRemoteLrc(proposalId, votersDesc, this.governanceProd);
     
-        accVp = await this.governanceProd.accountVotingPower(stakersDesc[1].address, 0);
+        accVp = await this.governanceProd.accountVotingPower(votersDesc[1].address, 0);
         console.log("accWp before claim delegation", accVp[0].toString(), accVp[1].toString(), accVp[2].toString())
 
-        voterBeforeWithdraw = await this.governanceProd.voters(stakersDesc[1].address, proposalId);
+        voterBeforeWithdraw = await this.governanceProd.voters(votersDesc[1].address, proposalId);
         console.log("voterBeforeWithdraw", voterBeforeWithdraw);
         await this.stakers.claimDelegationRewards(100000, {from: delegatorsDesc[0].address});
         await this.stakers.prepareToWithdrawDelegation({from: delegatorsDesc[0].address});
-        stakersDesc[1].delegatedStake = new BN(0);
+        votersDesc[1].delegatedStake = new BN(0);
         delegatorsDesc[0].stake = new BN(0);
 
-        accVp = await this.governanceProd.accountVotingPower(stakersDesc[1].address, 1); // 
+        accVp = await this.governanceProd.accountVotingPower(votersDesc[1].address, 1); // 
         expect(accVp[1]).to.be.bignumber.equal(Zero);
         console.log("accWp after claim delegation", accVp[0].toString(), accVp[1].toString(), accVp[2].toString())
-        let LogPowerRes = await this.governanceProd.getPastEvents('LogPower', { fromBlock: 0, toBlock: 'latest' } );
+        LogPowerRes = await this.governanceProd.getPastEvents('LogPower', { fromBlock: 0, toBlock: 'latest' } );
         // console.log("LogPowerRes", LogPowerRes[LogPowerRes.length - 1]);//
-        console.log("LogPowerRes power", LogPowerRes[LogPowerRes.length - 1].args.power.toString());
-        console.log("LogPowerRes selfpower", LogPowerRes[LogPowerRes.length - 1].args.selfpower.toString());
-        console.log("LogPowerRes delpower", LogPowerRes[LogPowerRes.length - 1].args.delpower.toString());
-        console.log("LogPowerRes voter", LogPowerRes[LogPowerRes.length - 1].args.voter.toString());
-        console.log("stakersDesc   [0]", stakersDesc[0].address);
-        console.log("stakersDesc   [1]", stakersDesc[1].address);
-        console.log("stakersDesc   [2]", stakersDesc[2].address);
-        let reducedVp = await this.governanceProd.reducedVotersPower(stakersDesc[1].address, proposalId);
+        // console.log("LogPowerRes power", LogPowerRes[LogPowerRes.length - 1].args.power.toString());
+        // console.log("LogPowerRes selfpower", LogPowerRes[LogPowerRes.length - 1].args.selfpower.toString());
+        // console.log("LogPowerRes delpower", LogPowerRes[LogPowerRes.length - 1].args.delpower.toString());
+        // console.log("LogPowerRes voter", LogPowerRes[LogPowerRes.length - 1].args.voter.toString());
+        // console.log("LogPowerRes power 2", LogPowerRes[LogPowerRes.length - 2].args.power.toString());
+        // console.log("LogPowerRes selfpower 2", LogPowerRes[LogPowerRes.length - 2].args.selfpower.toString());
+        // console.log("LogPowerRes delpower 2", LogPowerRes[LogPowerRes.length - 2].args.delpower.toString());
+        // console.log("LogPowerRes voter 2", LogPowerRes[LogPowerRes.length - 2].args.voter.toString());
+        // console.log("stakersDesc   [0]", stakersDesc[0].address);
+        // console.log("stakersDesc   [1]", stakersDesc[1].address);
+        // console.log("stakersDesc   [2]", stakersDesc[2].address);
+        let reducedVp = await this.governanceProd.reducedVotersPower(votersDesc[1].address, proposalId);
         expect(reducedVp).to.be.bignumber.equal(Zero);
-        voterAfterWithdraw = await this.governanceProd.voters(stakersDesc[1].address, proposalId);
+        voterAfterWithdraw = await this.governanceProd.voters(votersDesc[1].address, proposalId);
         console.log("voterAfterWithdraw", voterAfterWithdraw);
-        expect(voterAfterWithdraw.power).to.be.bignumber.equal(stakersDesc[1].stake);
-
-        await testLocalAndRemoteLrc(proposalId, stakersDesc, this.governanceProd);
-        return
+        expect(voterAfterWithdraw.power).to.be.bignumber.equal(votersDesc[1].stake);
+        await testLocalAndRemoteLrc(proposalId, votersDesc, this.governanceProd);
     
         await this.stakers.claimDelegationRewards(100000, {from: delegatorsDesc[1].address});
-        await this.stakers.prepareToWithdrawStakePartial(0, minStake, {from: delegatorsDesc[1].address});
-        stakersDesc[2].delegatedStake = stakersDesc[2].delegatedStake.sub(minStake);
-        await testLocalAndRemoteLrc(proposalId, stakersDesc, this.governanceProd);
+        await this.stakers.prepareToWithdrawDelegationPartial(0, minStake, {from: delegatorsDesc[1].address});
+        votersDesc[2].delegatedStake = votersDesc[2].delegatedStake.sub(minStake);
+        await testLocalAndRemoteLrc(proposalId, votersDesc, this.governanceProd);
+
+        //await this.stakers.claimDelegationRewards(100000, {from: delegatorsDesc[1].address});
+        await this.stakers.increaseDelegation({from: delegatorsDesc[1].address, value: minStake});
+        votersDesc[2].delegatedStake = votersDesc[2].delegatedStake.add(minStake);
+        delegatorsDesc[1].stake = delegatorsDesc[1].stake.add(minStake);
+        await testLocalAndRemoteLrc(proposalId, votersDesc, this.governanceProd);
+
+        // now we want to check a special logic for a case when delegator decided to vote
+        reducedVp = await this.governanceProd.reducedVotersPower(votersDesc[2].address, proposalId);
+        expect(reducedVp).to.be.bignumber.equal(Zero);
+        console.log("\x1b[31m%s\x1b[0m", "reducedVp", reducedVp.toString());
+
+        await this.governanceProd.vote(proposalId, delegatorsDesc[1].choises, {from: delegatorsDesc[1].address});
+        reducedVp = await this.governanceProd.reducedVotersPower(votersDesc[2].address, proposalId);
+        console.log("\x1b[31m%s\x1b[0m", "reducedVp", reducedVp.toString());
+        expect(reducedVp).to.be.bignumber.equal(delegatorsDesc[1].stake);
+
+        votersDesc[2].delegatedStake = new BN(0);
+        votersDesc.push(delegatorsDesc[1]);
+        let ss = new BN(0);
+        for (let i =0; i < votersDesc.length; i++) {
+            ss = ss.add(votersDesc[i].stake);
+            console.log("addr:", votersDesc[i].address, "stake:", votersDesc[i].stake.toString());
+        }
+        console.log("votersDesc", ss.toString());
+        await testLocalAndRemoteLrc(proposalId, votersDesc, this.governanceProd);
     })
 
     it ("test lrc voting fail", async () => {
@@ -610,19 +634,19 @@ contract('Governance test', async ([acc0, acc1, acc2, acc3, acc4, acc5, contract
     })
 })
 
-async function testLocalAndRemoteLrc(proposalId, stakersDesc, governanceProd) {
+async function testLocalAndRemoteLrc(proposalId, votersDesc, governanceProd) {
     options = [ new testHelper.LrcOption(), new testHelper.LrcOption()];
-    for (const stakerDesc of stakersDesc) {
-        for (let i = 0; i < stakerDesc.choises.length; i++) {
-            let choise = stakerDesc.choises[i];
+    for (const voterDesc of votersDesc) {
+        for (let i = 0; i < voterDesc.choises.length; i++) {
+            let choise = voterDesc.choises[i];
             let c = parseInt(choise);
             let delStake = new BN(0);
-            if (stakerDesc.delegatedStake)
-            { 
-                delStake = stakerDesc.delegatedStake; 
+            if (voterDesc.delegatedStake)
+            {
+                delStake = voterDesc.delegatedStake; 
             }
 
-            let stakerVotePower = stakerDesc.stake.add(delStake);
+            let stakerVotePower = voterDesc.stake.add(delStake);
             options[i].opinions[c].count = options[i].opinions[c].count.add(stakerVotePower);
             options[i].totalVotes = options[i].totalVotes.add(stakerVotePower);
         }
@@ -708,7 +732,6 @@ async function createDelegatorsSet(stakersContract, depositorsDesc) {
     return totalDelegation;
 }
 
-// нужно - получить все дедлайны Вообще
 async function resolveProp(governance, id, acc1) {
     await governance.increaseProposalDeposit(id, {from: acc1, value: minProposalDeposit});
 
