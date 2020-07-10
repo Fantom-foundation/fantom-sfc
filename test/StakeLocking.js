@@ -8,7 +8,8 @@ const {
 const {expect} = require('chai');
 
 const UnitTestStakers = artifacts.require('UnitTestStakers');
-const getDeposition = async (depositor, to) => this.stakers.delegations_v2.call(depositor, to);
+//const getDeposition = async (depositor, to) => this.stakers.delegations_v2.call(depositor, to);
+const getDeposition = async (depositor, to) => this.stakers.delegations.call(depositor);
 const getStaker = async (stakerID) => this.stakers.stakers.call(stakerID);
 
 contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, secondDepositor, thirdDepositor]) => {
@@ -453,18 +454,29 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       await this.stakers.lockUpDelegation(duration, firstStakerID, { from: firstDepositor });
       await this.stakers.lockUpDelegation(duration, firstStakerID, { from: secondDepositor });
       await this.stakers.makeEpochSnapshots(10000, false); // epoch #3
-      await this.stakers.discardDelegationRewards(firstStakerID, {from: firstDepositor});
-      await this.stakers.discardDelegationRewards(firstStakerID, {from: secondDepositor});
-      /*time.increase(86400 * 14 - 2);
+
+      await this.stakers.claimDelegationRewards(2, {from: firstDepositor});
+      const penaltyNonLocked = await this.stakers.calcDelegationPenalty(firstDepositor, firstStakerID, ether('1.0'));
+      expect(penaltyNonLocked).to.be.bignumber.equal(ether('0.0')); // penalty must be zero for non-lockup epochs
+
+      const reward = await this.stakers.calcDelegationRewards(firstDepositor, 0, 1);
+      expect(reward[0]).to.be.bignumber.equal(ether('0.000000070833333333'));
+      await this.stakers.claimDelegationRewards(100, {from: firstDepositor});
+      await this.stakers.claimDelegationRewards(100, {from: secondDepositor});
       const penalty = await this.stakers.calcDelegationPenalty(firstDepositor, firstStakerID, ether('1.0'));
-      expect(penalty).to.be.bignumber.equal(ether('0.000000068958333333'));
-      await this.stakers.prepareToWithdrawDelegation(firstStakerID, { from: firstDepositor });
+      expect(penalty).to.be.bignumber.equal(ether('0.000000060208333333')); // (50% of base reward + 100% of extra reward) * 1.0 FTM / 1.0 FTM
+
+      time.increase(86400 * 14 - 2); // not unlocked yet
+
+      await this.stakers.prepareToWithdrawDelegation({ from: firstDepositor });
       const firstDeposition = await getDeposition(firstDepositor, firstStakerID);
       expect(firstDeposition.amount).to.be.bignumber.equal(ether('1.0').sub(penalty));
-      time.increase(3);
-      await this.stakers.prepareToWithdrawDelegation(firstStakerID, { from: secondDepositor });
+
+      time.increase(3); // after lockup
+
+      await this.stakers.prepareToWithdrawDelegation({ from: secondDepositor });
       const secondDeposition = await getDeposition(secondDepositor, firstStakerID);
-      expect(secondDeposition.amount).to.be.bignumber.equal(ether('1.0'));*/
+      expect(secondDeposition.amount).to.be.bignumber.equal(ether('1.0'));
     });
 
     it('should subtract penalty if prepareToWithdrawDelegationPartial will call earlier than locked time is pass', async () => {
@@ -486,19 +498,35 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       await this.stakers.lockUpDelegation(duration, firstStakerID, { from: firstDepositor });
       await this.stakers.lockUpDelegation(duration, firstStakerID, { from: secondDepositor });
       await this.stakers.makeEpochSnapshots(10000, false); // epoch #3
-      await this.stakers.discardDelegationRewards(firstStakerID, {from: firstDepositor});
-      await this.stakers.discardDelegationRewards(firstStakerID, {from: secondDepositor});
-      /*time.increase(86400 * 14 - 2);
+
+      await this.stakers.claimDelegationRewards(2, {from: firstDepositor});
+      const penaltyNonLocked = await this.stakers.calcDelegationPenalty(firstDepositor, firstStakerID, ether('1.0'));
+      expect(penaltyNonLocked).to.be.bignumber.equal(ether('0.0')); // penalty must be zero for non-lockup epochs
+
+      const reward = await this.stakers.calcDelegationRewards(firstDepositor, 0, 1);
+      expect(reward[0]).to.be.bignumber.equal(ether('0.000000070833333333'));
+      await this.stakers.claimDelegationRewards(100, {from: firstDepositor});
+      await this.stakers.claimDelegationRewards(100, {from: secondDepositor});
       const penalty = await this.stakers.calcDelegationPenalty(firstDepositor, firstStakerID, ether('1.0'));
-      expect(penalty).to.be.bignumber.equal(ether('0.000000034479166666')); // 50% for reward
-      const wrID = new BN('1');
-      await this.stakers.prepareToWithdrawDelegationPartial(wrID, firstStakerID, ether('1.0'), { from: firstDepositor });
+      expect(penalty).to.be.bignumber.equal(ether('0.000000030104166666')); // (50% of base reward + 100% of extra reward) * 1.0 FTM / 2.0 FTM
+
+      time.increase(86400 * 14 - 2); // not unlocked yet
+
+      const wrID1 = new BN('1');
+      await this.stakers.prepareToWithdrawDelegationPartial(wrID1, ether('1.0'), { from: firstDepositor });
       const firstDeposition = await getDeposition(firstDepositor, firstStakerID);
-      expect(firstDeposition.amount).to.be.bignumber.equal(ether('1.0').sub(penalty));
-      time.increase(3);
-      await this.stakers.prepareToWithdrawDelegationPartial(wrID.add(new BN('1')), firstStakerID, ether('1.0'), { from: secondDepositor });
+      const firstRequest = await this.stakers.withdrawalRequests(firstDepositor, wrID1);
+      expect(firstDeposition.amount).to.be.bignumber.equal(ether('1.0'));
+      expect(firstRequest.amount).to.be.bignumber.equal(ether('1.0').sub(penalty));
+
+      time.increase(3); // after lockup
+
+      const wrID2 = new BN('2');
+      await this.stakers.prepareToWithdrawDelegationPartial(wrID2, ether('1.0'), { from: secondDepositor });
       const secondDeposition = await getDeposition(secondDepositor, firstStakerID);
-      expect(secondDeposition.amount).to.be.bignumber.equal(ether('1.0'));*/
+      const secondRequest = await this.stakers.withdrawalRequests(secondDepositor, wrID2);
+      expect(secondDeposition.amount).to.be.bignumber.equal(ether('1.0'));
+      expect(secondRequest.amount).to.be.bignumber.equal(ether('1.0'));
     });
   });
 });
