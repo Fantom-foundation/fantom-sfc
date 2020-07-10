@@ -8,7 +8,8 @@ const {
 const {expect} = require('chai');
 
 const UnitTestStakers = artifacts.require('UnitTestStakers');
-const getDeposition = async (depositor, to) => this.stakers.delegations_v2.call(depositor, to);
+//const getDeposition = async (depositor, to) => this.stakers.delegations_v2.call(depositor, to);
+const getDeposition = async (depositor, to) => this.stakers.delegations.call(depositor);
 const getStaker = async (stakerID) => this.stakers.stakers.call(stakerID);
 
 contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, secondDepositor, thirdDepositor]) => {
