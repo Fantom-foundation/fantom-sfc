@@ -43,7 +43,7 @@ contract('SFC', async ([firstStaker, secondStaker, firstDepositor, secondDeposit
       this.validatorComission = new BN('150000'); // 0.15
     });
 
-    it('should auto migrate legacy deposition to new model', async () => {
+    /*it('should auto migrate legacy deposition to new model', async () => {
       // create 5 legacy delegation
       await this.stakers._createStake({ from: firstStaker, value: ether('2.0')});
       const firstStakerID = await this.stakers.getStakerID(firstStaker);
@@ -136,6 +136,6 @@ contract('SFC', async ([firstStaker, secondStaker, firstDepositor, secondDeposit
       expect(rewards[0]).to.be.bignumber.equal(new BN('595000000212500000'));
       expect(rewards[1]).to.be.bignumber.equal(new BN('1'));
       expect(rewards[2]).to.be.bignumber.equal(new BN('1'));
-    });
+    });*/
   });
 });

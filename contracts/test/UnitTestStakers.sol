@@ -57,7 +57,7 @@ contract UnitTestStakers is Stakers {
 
     function createDelegation(uint256 to) public payable {
         delegationIDsArr.push(DelegationID(msg.sender, to));
-        super.createDelegation(to);
+        super._createDelegation(msg.sender, to);
     }
 
     function makeEpochSnapshots() external returns(uint256) {
@@ -102,7 +102,7 @@ contract UnitTestStakers is Stakers {
                     firstLockedUpEpoch <= currentSealedEpoch &&
                     lockedStakes[stakerID].fromEpoch <= currentSealedEpoch &&
                     lockedStakes[stakerID].endTime >= newSnapshot.endTime) {
-                    newSnapshot.totalLockedAmount += stakers[stakerID].stakeAmount;
+                    //newSnapshot.totalLockedAmount += stakers[stakerID].stakeAmount;
                 }
                 newSnapshot.validators[stakerID] = ValidatorMerit(
                     stakers[stakerID].stakeAmount,
@@ -120,7 +120,7 @@ contract UnitTestStakers is Stakers {
                 uint256 stakerID = delegationIDsArr[i].stakerID;
                 if (lockedDelegations[delegator][stakerID].fromEpoch <= currentSealedEpoch &&
                     lockedDelegations[delegator][stakerID].endTime >= newSnapshot.endTime) {
-                    newSnapshot.totalLockedAmount += delegations_v2[delegator][stakerID].amount;
+                    //newSnapshot.totalLockedAmount += delegations_v2[delegator][stakerID].amount;
                 }
             }
         }
@@ -133,19 +133,17 @@ contract UnitTestStakers is Stakers {
     }
 
     function calcRawValidatorEpochReward(uint256 stakerID, uint256 epoch) external view returns (uint256) {
-        return _calcRawValidatorEpochReward(stakerID, epoch, unlockedRatio());
-    }
-
-    function calcLockedUpReward(uint256 amount, uint256 epoch) external view returns (uint256) {
-        return _calcLockedUpReward(amount, epoch);
+        return _calcRawValidatorEpochReward(stakerID, epoch);
     }
 
     function calcValidatorEpochReward(uint256 stakerID, uint256 epoch, uint256 commission) external view returns (uint256) {
-        return _calcValidatorEpochReward(stakerID, epoch, commission);
+        _RewardsSet memory rewards = _calcValidatorEpochReward(stakerID, epoch, commission);
+        return rewards.unlockedReward + rewards.lockupBaseReward + rewards.lockupExtraReward;
     }
 
     function calcDelegationEpochReward(address delegator, uint256 stakerID, uint256 epoch, uint256 delegationAmount, uint256 commission) external view returns (uint256) {
-        return _calcDelegationEpochReward(delegator, stakerID, epoch, delegationAmount, commission, unlockedRatio());
+        _RewardsSet memory rewards = _calcDelegationEpochReward(delegator, stakerID, epoch, commission);
+        return rewards.unlockedReward + rewards.lockupBaseReward + rewards.lockupExtraReward;
     }
 
     function calcDelegationPenalty(address delegator, uint256 stakerID, uint256 withdrawalAmount) external view returns (uint256) {
@@ -161,9 +159,9 @@ contract UnitTestStakers is Stakers {
     function discardDelegationRewards(uint256 stakerID) public {
         if (delegations[msg.sender].amount != 0) {
             delegations[msg.sender].paidUntilEpoch = currentSealedEpoch;
-        } else if (delegations_v2[msg.sender][stakerID].amount != 0) {
+        }/* else if (delegations_v2[msg.sender][stakerID].amount != 0) {
             delegations_v2[msg.sender][stakerID].paidUntilEpoch = currentSealedEpoch;
-        } else {
+        } */else {
             revert("delegation doesn't exist");
         }
     }
