@@ -87,6 +87,20 @@ contract StakersConstants {
     }
 
     /**
+     * @dev The minimum duration of a stake/delegation lockup, e.g. 2 weeks
+     */
+    function minLockupDuration() public pure returns (uint256) {
+        return 86400 * 14;
+    }
+
+    /**
+     * @dev The maximum duration of a stake/delegation lockup, e.g. 1 year
+     */
+    function maxLockupDuration() public pure returns (uint256) {
+        return 86400 * 365;
+    }
+
+    /**
      * @dev the period of time that stake is locked
      */
     function stakeLockPeriodTime() public pure returns (uint256) {
