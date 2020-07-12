@@ -897,7 +897,7 @@ contract Stakers is Ownable, StakersConstants, Version {
         require(firstLockedUpEpoch != 0 && firstLockedUpEpoch <= currentSealedEpoch + 1, "feature was not activated");
         uint256 stakerID = _sfcAddressToStakerID(msg.sender);
         _checkActiveStaker(stakerID);
-        require(lockDuration >= 86400 * 14 && lockDuration <= 86400 * 365, "incorrect duration");
+        require(lockDuration >= minLockupDuration() && lockDuration <= maxLockupDuration(), "incorrect duration");
         require(lockedStakes[stakerID].endTime < block.timestamp.add(lockDuration), "already locked up");
         uint256 endTime = block.timestamp.add(lockDuration);
 
@@ -917,7 +917,7 @@ contract Stakers is Ownable, StakersConstants, Version {
         _checkAndUpgradeDelegationStorage(delegator);
         _checkExistDelegation(delegator, toStakerID);
         _checkActiveStaker(toStakerID);
-        require(lockDuration >= 86400 * 14 && lockDuration <= 86400 * 365, "incorrect duration");
+        require(lockDuration >= minLockupDuration() && lockDuration <= maxLockupDuration(), "incorrect duration");
         uint256 endTime = block.timestamp.add(lockDuration);
         require(lockedStakes[toStakerID].endTime >= endTime, "staker's locking will finish first");
         require(lockedDelegations[delegator][toStakerID].endTime < endTime, "already locked up");
