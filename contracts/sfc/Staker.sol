@@ -931,6 +931,10 @@ contract Stakers is Ownable, StakersConstants {
         require(lockedStakes[stakerID].endTime < block.timestamp.add(lockDuration), "already locked up");
         uint256 endTime = block.timestamp.add(lockDuration);
 
+        uint256 prevLockupEpoch = lockedStakes[stakerID].fromEpoch;
+        if (prevLockupEpoch != 0) {
+            require(stakers[stakerID].paidUntilEpoch >= prevLockupEpoch - 1, "previous lockup rewards rewards are not claimed");
+        }
         lockedStakes[stakerID] = LockedAmount(currentEpoch(), endTime);
         emit LockingStake(stakerID, currentEpoch(), endTime);
     }
@@ -948,6 +952,10 @@ contract Stakers is Ownable, StakersConstants {
         require(lockedStakes[stakerID].endTime >= endTime, "staker's locking will finish first");
         require(lockedDelegations[delegator][stakerID].endTime < endTime, "already locked up");
 
+        uint256 prevLockupEpoch = lockedDelegations[delegator][stakerID].fromEpoch;
+        if (prevLockupEpoch != 0) {
+            require(delegations[delegator].paidUntilEpoch >= prevLockupEpoch - 1, "previous lockup rewards rewards are not claimed");
+        }
         if (!_isLockedDelegation(delegator, stakerID)) {
             // forgive non-paid penalty from previous lockup period, if any
             delete delegationEarlyWithdrawalPenalty[delegator][stakerID];

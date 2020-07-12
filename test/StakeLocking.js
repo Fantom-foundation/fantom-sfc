@@ -218,6 +218,8 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       await expectRevert(this.stakers.lockUpStake(maxDuration.add(new BN("1")), { from: secondStaker }), "incorrect duration");
       await this.stakers.lockUpStake(maxDuration, { from: secondStaker });
       await expectRevert(this.stakers.lockUpStake(minDuration, { from: secondStaker }), "already locked up");
+      await expectRevert(this.stakers.lockUpStake(maxDuration, { from: firstStaker }), "previous lockup rewards rewards are not claimed");
+      await this.stakers.discardValidatorRewards({ from: firstStaker });
       await this.stakers.lockUpStake(maxDuration, { from: firstStaker });
     });
 
@@ -318,7 +320,7 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       expect(await this.stakers.calcDelegationEpochReward(firstDepositor, firstStakerID, epoch, ether('5.0'), this.validatorComission)).to.be.bignumber.equal(ether('0.000000223684210526'));
       expect(await this.stakers.calcDelegationEpochReward(thirdDepositor, firstStakerID, epoch, ether('10.0'), this.validatorComission)).to.be.bignumber.equal(ether('0.000000447368421052'));
 
-      await this.stakers.lockUpStake(duration.add(new BN("5")), { from: firstStaker });
+      await this.stakers.lockUpStake(duration.add(new BN("10005")), { from: firstStaker });
       await this.stakers.lockUpDelegation(duration, firstStakerID, { from: firstDepositor });
       await this.stakers.makeEpochSnapshots(10000, false); // epoch #5
       epoch = new BN('5');
@@ -332,8 +334,6 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       expect(await this.stakers.calcDelegationEpochReward(thirdDepositor, firstStakerID, epoch, ether('10.0'), this.validatorComission)).to.be.bignumber.equal(ether('0.000000134210526315'));
 
       time.increase(10000);
-      await expectRevert(this.stakers.lockUpDelegation(duration, firstStakerID, { from: thirdDepositor }), "staker's locking will finish first");
-      await this.stakers.lockUpStake(duration, { from: firstStaker });
       await this.stakers.lockUpDelegation(duration, firstStakerID, { from: thirdDepositor });
       await this.stakers.makeEpochSnapshots(10000, false); // epoch #6
       epoch = new BN('6');
@@ -408,6 +408,8 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       await this.stakers.lockUpDelegation(maxDuration.sub(new BN("1")), firstStakerID, { from: secondDepositor });
       await expectRevert(this.stakers.lockUpDelegation(minDuration, firstStakerID, { from: secondDepositor }), "already locked up");
       await expectRevert(this.stakers.lockUpDelegation(minDuration.mul(new BN("3")), secondStakerID, { from: firstDepositor }), "staker's locking will finish first");
+      await expectRevert(this.stakers.lockUpDelegation(minDuration.add(new BN("2")), secondStakerID, { from: firstDepositor }), "previous lockup rewards rewards are not claimed");
+      await this.stakers.discardDelegationRewards(firstStakerID, { from: firstDepositor });
       await this.stakers.lockUpDelegation(minDuration.add(new BN("2")), secondStakerID, { from: firstDepositor });
     });
 
