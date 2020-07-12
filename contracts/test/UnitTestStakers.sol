@@ -141,6 +141,18 @@ contract UnitTestStakers is Stakers {
         return rewards.unlockedReward + rewards.lockupBaseReward + rewards.lockupExtraReward;
     }
 
+    function calcValidatorLockupRewards(uint256 stakerID, uint256 _fromEpoch, uint256 maxEpochs) external view returns (uint256 unlockedReward, uint256 lockupBaseReward, uint256 lockupExtraReward, uint256 burntReward, uint256 fromEpoch, uint256 untilEpoch) {
+        _RewardsSet memory rewards;
+        (rewards, fromEpoch, untilEpoch) = _calcValidatorLockupRewards(stakerID, _fromEpoch, maxEpochs);
+        return (rewards.unlockedReward, rewards.lockupBaseReward, rewards.lockupExtraReward, rewards.burntReward, fromEpoch, untilEpoch);
+    }
+
+    function calcDelegationLockupRewards(address addr, uint256, uint256 _fromEpoch, uint256 maxEpochs) external view returns (uint256 unlockedReward, uint256 lockupBaseReward, uint256 lockupExtraReward, uint256 burntReward, uint256 fromEpoch, uint256 untilEpoch) {
+        _RewardsSet memory rewards;
+        (rewards, fromEpoch, untilEpoch) = _calcDelegationLockupRewards(addr, _fromEpoch, maxEpochs);
+        return (rewards.unlockedReward, rewards.lockupBaseReward, rewards.lockupExtraReward, rewards.burntReward, fromEpoch, untilEpoch);
+    }
+
     function calcDelegationEpochReward(address delegator, uint256 stakerID, uint256 epoch, uint256, uint256 commission) external view returns (uint256) {
         _RewardsSet memory rewards = _calcDelegationEpochReward(delegator, stakerID, epoch, commission);
         return rewards.unlockedReward + rewards.lockupBaseReward + rewards.lockupExtraReward;
