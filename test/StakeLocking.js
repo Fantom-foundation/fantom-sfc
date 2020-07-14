@@ -455,6 +455,23 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       await this.stakers.prepareToWithdrawDelegation({ from: secondDepositor });
       const secondDeposition = await getDeposition(secondDepositor, firstStakerID);
       expect(secondDeposition.amount).to.be.bignumber.equal(ether('1.0'));
+
+      // check withdrawal amount
+      await expectRevert(this.stakers.withdrawDelegation({ from: firstDepositor }), "not enough time passed");
+      time.increase(86400 * 14);
+      await expectRevert(this.stakers.withdrawDelegation({ from: firstDepositor }), "not enough epochs passed");
+      await this.stakers.makeEpochSnapshots(10000, false);
+      await this.stakers.makeEpochSnapshots(10000, false);
+      await this.stakers.makeEpochSnapshots(10000, false);
+
+      const balanceStakersBefore = await balance.current(this.stakers.address);
+      const balanceDelegatorBefore = await balance.current(firstDepositor);
+      await this.stakers.withdrawDelegation({ from: firstDepositor });
+      const balanceStakersAfter = await balance.current(this.stakers.address);
+      const balanceDelegatorAfter = await balance.current(firstDepositor);
+
+      expect(balanceStakersAfter).to.be.bignumber.equal(balanceStakersBefore.sub(firstDeposition.amount));
+      expect(balanceDelegatorAfter).to.be.bignumber.least(balanceDelegatorBefore.add(firstDeposition.amount).sub(ether('0.005')));
     });
 
     it('should adjust penalty if penalty is bigger than delegated stake', async () => {
