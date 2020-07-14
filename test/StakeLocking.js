@@ -516,7 +516,7 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       expect(penaltyAfterFull).to.be.bignumber.equal(ether('1.392380000000000002'));
     });
 
-    it('should subtract penalty if prepareToWithdrawDelegationPartial will call earlier than locked time is pass', async () => {
+    it('should subtract penalty if prepareToWithdrawDelegationPartial will call earlier than locked time is passed', async () => {
       await this.stakers._createStake({from: firstStaker, value: ether('20.0')});
       let firstStakerID = await this.stakers.getStakerID(firstStaker);
       await this.stakers.createDelegation(firstStakerID, {from: firstDepositor, value: ether('2.0')});
@@ -564,6 +564,23 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       const secondRequest = await this.stakers.withdrawalRequests(secondDepositor, wrID2);
       expect(secondDeposition.amount).to.be.bignumber.equal(ether('1.0'));
       expect(secondRequest.amount).to.be.bignumber.equal(ether('1.0'));
+
+      // check withdrawal amount
+      await expectRevert(this.stakers.partialWithdrawByRequest(wrID1, { from: firstDepositor }), "not enough time passed");
+      time.increase(86400 * 14);
+      await expectRevert(this.stakers.partialWithdrawByRequest(wrID1, { from: firstDepositor }), "not enough epochs passed");
+      await this.stakers.makeEpochSnapshots(10000, false);
+      await this.stakers.makeEpochSnapshots(10000, false);
+      await this.stakers.makeEpochSnapshots(10000, false);
+
+      const balanceStakersBefore = await balance.current(this.stakers.address);
+      const balanceDelegatorBefore = await balance.current(firstDepositor);
+      await this.stakers.partialWithdrawByRequest(wrID1, { from: firstDepositor });
+      const balanceStakersAfter = await balance.current(this.stakers.address);
+      const balanceDelegatorAfter = await balance.current(firstDepositor);
+
+      expect(balanceStakersAfter).to.be.bignumber.equal(balanceStakersBefore.sub(firstRequest.amount));
+      expect(balanceDelegatorAfter).to.be.bignumber.least(balanceDelegatorBefore.add(firstRequest.amount).sub(ether('0.005')));
     });
 
     const checkClaimReward = async (addr, stakerID, isDelegator, expectation) => {
