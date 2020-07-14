@@ -763,6 +763,18 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
         burntReward: ether('0.0'),
         epoch: new BN('7')
       });
+
+      // full withdrawal
+      await this.stakers.prepareToWithdrawDelegation({ from: firstDepositor });
+      await this.stakers.makeEpochSnapshots(10000, false); // epoch #8
+      await checkClaimReward(firstStaker, firstStakerID, false, {
+        unlockedReward: ether('0.0'),
+        lockupBaseReward: ether('0.0000003'),
+        lockupExtraReward: ether('0.0000007'),
+        burntReward: ether('0.0'),
+        epoch: new BN('8')
+      });
+      await expectRevert(this.stakers.claimDelegationRewards(1, { from: firstDepositor }), "delegation is deactivated");
     });
   });
 });
