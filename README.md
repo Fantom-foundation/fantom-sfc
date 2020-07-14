@@ -56,13 +56,13 @@ Compiling your contracts...
       ✓ should calc ValidatorEpochReward correctly after locked up started (1529ms)
       ✓ should lock stake (2406ms)
       ✓ should lock stake with right duration (710ms)
-      ✓ should not call prepareToWithdrawStake, until locked time is pass (570ms)
-      ✓ should not call prepareToWithdrawStakePartial, until locked time is pass (545ms)
+      ✓ should not call prepareToWithdrawStake, until locked time is passed (570ms)
+      ✓ should not call prepareToWithdrawStakePartial, until locked time is passed (545ms)
       ✓ should lock delegation (2455ms)
       ✓ should lock delegation with right duration (964ms)
-      ✓ should subtract penalty if prepareToWithdrawDelegation will call earlier than locked time is pass (861ms)
+      ✓ should subtract penalty if prepareToWithdrawDelegation will call earlier than locked time is passed (861ms)
       ✓ should adjust penalty if penalty is bigger than delegated stake (711ms)
-      ✓ should subtract penalty if prepareToWithdrawDelegationPartial will call earlier than locked time is pass (927ms)
+      ✓ should subtract penalty if prepareToWithdrawDelegationPartial will call earlier than locked time is passed (927ms)
       ✓ should claim lockup rewards (2253ms)
 
   Contract: SFC
