@@ -562,6 +562,7 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       // check claiming
       const balanceStakersBefore = await balance.current(this.stakers.address);
       const totalBurntLockupRewardsBefore = await this.stakers.totalBurntLockupRewards();
+      const delegationPenaltyBefore = await this.stakers.delegationEarlyWithdrawalPenalty(addr, stakerID);
 
       if (isDelegator) {
         await this.stakers.claimDelegationRewards(1, {from: addr});
@@ -575,6 +576,13 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
 
       const totalBurntLockupRewardsAfter = await this.stakers.totalBurntLockupRewards();
       expect(totalBurntLockupRewardsAfter).to.be.bignumber.equal(totalBurntLockupRewardsBefore.add(expectation.burntReward));
+      const delegationPenaltyAfter = await this.stakers.delegationEarlyWithdrawalPenalty(addr, stakerID);
+      if (isDelegator) {
+        const penalty = expectation.lockupBaseReward.div(new BN(2)).add(expectation.lockupExtraReward);
+        expect(delegationPenaltyAfter).to.be.bignumber.equal(delegationPenaltyBefore.add(penalty));
+      } else {
+        expect(delegationPenaltyAfter).to.be.bignumber.equal(delegationPenaltyBefore);
+      }
     };
 
     it('should claim lockup rewards', async () => {
