@@ -223,7 +223,7 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       await this.stakers.lockUpStake(maxDuration, { from: firstStaker });
     });
 
-    it('should not call prepareToWithdrawStake, until locked time is pass', async () => {
+    it('should not call prepareToWithdrawStake, until locked time is passed', async () => {
       await this.stakers._createStake({from: firstStaker, value: ether('1.0')});
       await this.stakers.makeEpochSnapshots(10000, false); // epoch #1
 
@@ -245,7 +245,7 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       await this.stakers.prepareToWithdrawStake({ from: firstStaker });
     });
 
-    it('should not call prepareToWithdrawStakePartial, until locked time is pass', async () => {
+    it('should not call prepareToWithdrawStakePartial, until locked time is passed', async () => {
       await this.stakers._createStake({from: firstStaker, value: ether('2.0')});
       await this.stakers.makeEpochSnapshots(10000, false); // epoch #1
 
@@ -413,7 +413,7 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       await this.stakers.lockUpDelegation(minDuration.add(new BN("2")), secondStakerID, { from: firstDepositor });
     });
 
-    it('should subtract penalty if prepareToWithdrawDelegation will call earlier than locked time is pass', async () => {
+    it('should subtract penalty if prepareToWithdrawDelegation will call earlier than locked time is passed', async () => {
       await this.stakers._createStake({from: firstStaker, value: ether('10.0')});
       let firstStakerID = await this.stakers.getStakerID(firstStaker);
       await this.stakers.createDelegation(firstStakerID, {from: firstDepositor, value: ether('1.0')});
