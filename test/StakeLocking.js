@@ -744,6 +744,25 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
         burntReward: ether('0.0'),
         epoch: new BN('6')
       });
+
+      // partial withdrawal
+      const wrID1 = new BN('1');
+      await this.stakers.prepareToWithdrawDelegationPartial(wrID1, ether('1.0'), { from: firstDepositor });
+      await this.stakers.makeEpochSnapshots(10000, false); // epoch #7
+      await checkClaimReward(firstStaker, firstStakerID, false, {
+        unlockedReward: ether('0.0'),
+        lockupBaseReward: ether('0.000000129999999999'),
+        lockupExtraReward: ether('0.000000303333333334'),
+        burntReward: ether('0.0'),
+        epoch: new BN('7')
+      });
+      await checkClaimReward(firstDepositor, firstStakerID, true, {
+        unlockedReward: ether('0.0'),
+        lockupBaseReward: ether('0.000000169999999999'),
+        lockupExtraReward: ether('0.000000396666666667'),
+        burntReward: ether('0.0'),
+        epoch: new BN('7')
+      });
     });
   });
 });
