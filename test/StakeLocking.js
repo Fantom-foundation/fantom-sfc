@@ -648,6 +648,8 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       await this.stakers.makeEpochSnapshots(10000, false); // epoch #4
       await this.stakers.makeEpochSnapshots(10000, false); // epoch #5
 
+      //console.log(await this.stakers.calcValidatorLockupRewards(firstStakerID, 1, 1));
+      //console.log(await this.stakers.calcDelegationLockupRewards(firstDepositor, firstStakerID, 1, 1));
       await checkClaimReward(firstStaker, firstStakerID, false, {
         unlockedReward: ether('0.000000291666666666'),
         lockupBaseReward: ether('0.0'),
@@ -720,22 +722,25 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
         epoch: new BN('5')
       });
 
+      // increase stake
+      await this.stakers.increaseStake({ from: firstStaker, value: ether('2.0') });
+      await this.stakers.increaseDelegation({ from: firstDepositor, value: ether('2.0') });
+
       // lockup again
       await this.stakers.lockUpStake(duration.add(new BN("5")), { from: firstStaker });
       await this.stakers.lockUpDelegation(duration, firstStakerID, { from: firstDepositor });
       await this.stakers.makeEpochSnapshots(10000, false); // epoch #6
-
       await checkClaimReward(firstStaker, firstStakerID, false, {
         unlockedReward: ether('0.0'),
-        lockupBaseReward: ether('0.000000087499999999'),
-        lockupExtraReward: ether('0.000000204166666667'),
+        lockupBaseReward: ether('0.0000001215'),
+        lockupExtraReward: ether('0.0000002835'),
         burntReward: ether('0.0'),
         epoch: new BN('6')
       });
       await checkClaimReward(firstDepositor, firstStakerID, true, {
         unlockedReward: ether('0.0'),
-        lockupBaseReward: ether('0.000000212499999999'),
-        lockupExtraReward: ether('0.000000495833333334'),
+        lockupBaseReward: ether('0.0000001785'),
+        lockupExtraReward: ether('0.0000004165'),
         burntReward: ether('0.0'),
         epoch: new BN('6')
       });
