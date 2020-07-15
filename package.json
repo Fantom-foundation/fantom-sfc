@@ -31,7 +31,7 @@
     "eslint-plugin-react-hooks": "^1.7.0",
     "ethereumjs-testrpc-sc": "^6.5.1-sc.0",
     "karma": "^4.3.0",
-    "lodash": "^4.17.15",
+    "lodash": "^4.17.19",
     "openzeppelin-test-helpers": "^0.4.3",
     "solidity-coverage": "^0.7.1",
     "truffle-flattener": "^1.4.0",
