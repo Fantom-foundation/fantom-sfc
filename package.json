@@ -35,7 +35,7 @@
     "openzeppelin-test-helpers": "^0.4.3",
     "solidity-coverage": "^0.7.1",
     "truffle-flattener": "^1.4.0",
-    "web3-utils": "^1.2.1"
+    "web3-utils": "^1.2.11"
   },
   "repository": {
     "type": "git",
