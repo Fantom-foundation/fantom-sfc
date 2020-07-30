@@ -3,11 +3,12 @@ pragma solidity ^0.5.0;
 import "./SafeMath.sol";
 import "./StakerConstants.sol";
 import "../ownership/Ownable.sol";
+import "../version/Version.sol";
 
 /**
  * @dev Stakers contract defines data structure and methods for validators / stakers.
  */
-contract Stakers is Ownable, StakersConstants {
+contract Stakers is Ownable, StakersConstants, Version {
     using SafeMath for uint256;
 
     /**
