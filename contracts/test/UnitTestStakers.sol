@@ -177,8 +177,4 @@ contract UnitTestStakers is Stakers {
             revert("delegation doesn't exist");
         }
     }
-
-    function rewardsAllowed() public view returns (bool) {
-        return true;
-    }
 }

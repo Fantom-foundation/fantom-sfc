@@ -269,14 +269,6 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       await expectRevert(this.stakers.claimDelegationRewards(new BN('100')/*, firstStakerID*/, {from: firstDepositor}), "delegation is deactivated");
     });
 
-    it('checking bonded ratio', async () => {
-      let br = await this.stakers.bondedRatio();
-      expect(br).to.be.bignumber.equal(new BN('0'));
-      await this.stakers._createStake({from: firstStaker, value: ether('1.0')});
-      await this.stakers.makeEpochSnapshots(10000);
-      // since there is no way to increase snapshot's total_supply, a temprorary mock should be considered
-    });
-
     it('checking claimValidatorRewards function', async () => {
       await expectRevert(this.stakers.claimValidatorRewards(new BN('1'), {from: firstStaker}), 'staker doesn\'t exist');
       await this.stakers._createStake({from: firstStaker, value: ether('1.0')});

@@ -180,34 +180,6 @@ contract Stakers is Ownable, StakersConstants {
         return stakerIDs[addr];
     }
 
-    // Calculate bonded ratio
-    function bondedRatio() public view returns(uint256) {
-        uint256 totalSupply = epochSnapshots[currentSealedEpoch].totalSupply;
-        if (totalSupply == 0) {
-            return 0;
-        }
-        uint256 totalStaked = epochSnapshots[currentSealedEpoch].stakeTotalAmount.add(epochSnapshots[currentSealedEpoch].delegationsTotalAmount);
-        return totalStaked.mul(RATIO_UNIT).div(totalSupply);
-    }
-
-    // Calculate bonded ratio target
-    function bondedTargetRewardUnlock() public view returns (uint256) {
-        uint256 passedTime = block.timestamp.sub(unbondingStartDate());
-        uint256 passedPercents = RATIO_UNIT.mul(passedTime).div(bondedTargetPeriod()); // total duration from 0% to 100% is bondedTargetPeriod
-        if (passedPercents >= bondedTargetStart()) {
-            return 0;
-        }
-        return bondedTargetStart() - passedPercents;
-    }
-
-    // rewardsAllowed returns true if rewards are unlocked.
-    // Rewards are unlocked when either 6 months passed or until TARGET% of the supply is staked,
-    // where TARGET starts with 80% and decreases 1% every week
-    function rewardsAllowed() public view returns (bool) {
-        return block.timestamp >= unbondingStartDate() + unbondingUnlockPeriod() ||
-               bondedRatio() >= bondedTargetRewardUnlock();
-    }
-
     /*
     Methods
     */
@@ -559,18 +531,6 @@ contract Stakers is Ownable, StakersConstants {
         return (rewards.unlockedReward + rewards.lockupBaseReward + rewards.lockupExtraReward, fromEpoch, untilEpoch);
     }
 
-    // _claimRewards transfers rewards directly if rewards are allowed, or stashes them until rewards are unlocked
-    function _claimRewards(address payable addr, uint256 amount) internal {
-        if (amount == 0) {
-            return;
-        }
-        if (rewardsAllowed()) {
-            addr.transfer(amount);
-        } else {
-            rewardsStash[addr][0].amount = rewardsStash[addr][0].amount.add(amount);
-        }
-    }
-
     event ClaimedDelegationReward(address indexed from, uint256 indexed stakerID, uint256 reward, uint256 fromEpoch, uint256 untilEpoch);
 
     // Claim the pending rewards for a given delegator (sender)
@@ -589,7 +549,7 @@ contract Stakers is Ownable, StakersConstants {
         delegationEarlyWithdrawalPenalty[delegator][stakerID] += rewards.lockupBaseReward / 2 + rewards.lockupExtraReward;
         totalBurntLockupRewards += rewards.burntReward;
         // It's important that we transfer after updating paidUntilEpoch (protection against Re-Entrancy)
-        _claimRewards(delegator, rewardsAll);
+        delegator.transfer(rewardsAll);
 
         emit ClaimedDelegationReward(delegator, stakerID, rewardsAll, fromEpoch, untilEpoch);
     }
@@ -613,7 +573,7 @@ contract Stakers is Ownable, StakersConstants {
         stakers[stakerID].paidUntilEpoch = untilEpoch;
         totalBurntLockupRewards += rewards.burntReward;
         // It's important that we transfer after updating paidUntilEpoch (protection against Re-Entrancy)
-        _claimRewards(stakerSfcAddr, rewardsAll);
+        stakerSfcAddr.transfer(rewardsAll);
 
         emit ClaimedValidatorReward(stakerID, rewardsAll, fromEpoch, untilEpoch);
     }
@@ -626,7 +586,6 @@ contract Stakers is Ownable, StakersConstants {
         address payable receiver = msg.sender;
         uint256 rewards = rewardsStash[auth][0].amount;
         require(rewards != 0, "no rewards");
-        require(rewardsAllowed(), "before minimum unlock period");
 
         delete rewardsStash[auth][0];
 
