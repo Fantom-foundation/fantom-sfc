@@ -16,7 +16,7 @@ contract LegacyStaker is UnitTestStakers {
         newDelegation.amount = msg.value;
         newDelegation.toStakerID = to;
         newDelegation.paidUntilEpoch = currentSealedEpoch;
-        delegations[delegator] = newDelegation;
+        legacyDelegations[delegator] = newDelegation;
 
         stakers[to].delegatedMe = stakers[to].delegatedMe.add(msg.value);
         delegationsNum++;
@@ -28,12 +28,12 @@ contract LegacyStaker is UnitTestStakers {
     function prepareToWithdrawLegacyDelegation() external {
         address delegator = msg.sender;
 
-        uint256 stakerID = delegations[delegator].toStakerID;
-        _mayBurnRewardsOnDeactivation(true, stakerID, delegator, delegations[delegator].amount, delegations[delegator].amount);
+        uint256 stakerID = legacyDelegations[delegator].toStakerID;
+        _mayBurnRewardsOnDeactivation(true, stakerID, delegator, legacyDelegations[delegator].amount, legacyDelegations[delegator].amount);
 
-        delegations[delegator].deactivatedEpoch = currentEpoch();
-        delegations[delegator].deactivatedTime = block.timestamp;
-        uint256 delegationAmount = delegations[delegator].amount;
+        legacyDelegations[delegator].deactivatedEpoch = currentEpoch();
+        legacyDelegations[delegator].deactivatedTime = block.timestamp;
+        uint256 delegationAmount = legacyDelegations[delegator].amount;
 
         if (stakers[stakerID].stakeAmount != 0) {
             // if staker haven't withdrawn
@@ -41,6 +41,12 @@ contract LegacyStaker is UnitTestStakers {
         }
 
         emit DeactivatedDelegation(delegator, stakerID);
+    }
+
+    function lockUpStake(uint256 lockDuration) external {
+    }
+
+    function lockUpDelegation(uint256 lockDuration, uint256 toStakerID) external {
     }
 }
 

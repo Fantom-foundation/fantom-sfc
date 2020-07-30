@@ -95,33 +95,12 @@ contract UnitTestStakers is Stakers {
                 }
                 newSnapshot.totalBaseRewardWeight += basePower;
                 newSnapshot.totalTxRewardWeight += txPower;
-                // newSnapshot.stakeTotalAmount += stakers[stakerID].stakeAmount; // or += basePower ?
-                // newSnapshot.delegationsTotalAmount += stakers[stakerID].delegatedMe;
-                // newSnapshot.totalSupply += (basePower + txPower);
-                if (firstLockedUpEpoch > 0 &&
-                    firstLockedUpEpoch <= currentSealedEpoch &&
-                    lockedStakes[stakerID].fromEpoch <= currentSealedEpoch &&
-                    lockedStakes[stakerID].endTime >= newSnapshot.endTime) {
-                    //newSnapshot.totalLockedAmount += stakers[stakerID].stakeAmount;
-                }
                 newSnapshot.validators[stakerID] = ValidatorMerit(
                     stakers[stakerID].stakeAmount,
                     stakers[stakerID].delegatedMe,
                     basePower,
                     txPower
                 );
-            }
-        }
-
-        if (firstLockedUpEpoch > 0 &&
-            firstLockedUpEpoch <= currentSealedEpoch) {
-            for (uint256 i = 0; i < delegationIDsArr.length; i++) {
-                address delegator = delegationIDsArr[i].delegator;
-                uint256 stakerID = delegationIDsArr[i].stakerID;
-                if (lockedDelegations[delegator][stakerID].fromEpoch <= currentSealedEpoch &&
-                    lockedDelegations[delegator][stakerID].endTime >= newSnapshot.endTime) {
-                    //newSnapshot.totalLockedAmount += delegations_v2[delegator][stakerID].amount;
-                }
             }
         }
 
@@ -147,19 +126,19 @@ contract UnitTestStakers is Stakers {
         return (rewards.unlockedReward, rewards.lockupBaseReward, rewards.lockupExtraReward, rewards.burntReward, fromEpoch, untilEpoch);
     }
 
-    function calcDelegationLockupRewards(address addr, uint256, uint256 _fromEpoch, uint256 maxEpochs) external view returns (uint256 unlockedReward, uint256 lockupBaseReward, uint256 lockupExtraReward, uint256 burntReward, uint256 fromEpoch, uint256 untilEpoch) {
+    function calcDelegationLockupRewards(address addr, uint256 toStakerID, uint256 _fromEpoch, uint256 maxEpochs) external view returns (uint256 unlockedReward, uint256 lockupBaseReward, uint256 lockupExtraReward, uint256 burntReward, uint256 fromEpoch, uint256 untilEpoch) {
         _RewardsSet memory rewards;
-        (rewards, fromEpoch, untilEpoch) = _calcDelegationLockupRewards(addr, _fromEpoch, maxEpochs);
+        (rewards, fromEpoch, untilEpoch) = _calcDelegationLockupRewards(addr, toStakerID, _fromEpoch, maxEpochs);
         return (rewards.unlockedReward, rewards.lockupBaseReward, rewards.lockupExtraReward, rewards.burntReward, fromEpoch, untilEpoch);
     }
 
-    function calcDelegationEpochReward(address delegator, uint256 stakerID, uint256 epoch, uint256, uint256 commission) external view returns (uint256) {
-        _RewardsSet memory rewards = _calcDelegationEpochReward(delegator, stakerID, epoch, commission);
+    function calcDelegationEpochReward(address delegator, uint256 toStakerID, uint256 epoch, uint256, uint256 commission) external view returns (uint256) {
+        _RewardsSet memory rewards = _calcDelegationEpochReward(delegator, toStakerID, epoch, commission);
         return rewards.unlockedReward + rewards.lockupBaseReward + rewards.lockupExtraReward;
     }
 
-    function calcDelegationPenalty(address delegator, uint256 stakerID, uint256 withdrawalAmount) external view returns (uint256) {
-        return _calcDelegationPenalty(delegator, stakerID, withdrawalAmount);
+    function calcDelegationPenalty(address delegator, uint256 toStakerID, uint256 withdrawalAmount) external view returns (uint256) {
+        return _calcDelegationPenalty(delegator, toStakerID, withdrawalAmount, delegations[delegator][toStakerID].amount);
     }
 
     function discardValidatorRewards() public {
@@ -168,12 +147,12 @@ contract UnitTestStakers is Stakers {
         stakers[stakerID].paidUntilEpoch = currentSealedEpoch;
     }
 
-    function discardDelegationRewards(uint256) public {
-        if (delegations[msg.sender].amount != 0) {
-            delegations[msg.sender].paidUntilEpoch = currentSealedEpoch;
-        }/* else if (delegations_v2[msg.sender][stakerID].amount != 0) {
-            delegations_v2[msg.sender][stakerID].paidUntilEpoch = currentSealedEpoch;
-        } */else {
+    function discardDelegationRewards(uint256 toStakerID) public {
+        if (legacyDelegations[msg.sender].amount != 0) {
+            legacyDelegations[msg.sender].paidUntilEpoch = currentSealedEpoch;
+        } else if (delegations[msg.sender][toStakerID].amount != 0) {
+            delegations[msg.sender][toStakerID].paidUntilEpoch = currentSealedEpoch;
+        } else {
             revert("delegation doesn't exist");
         }
     }
