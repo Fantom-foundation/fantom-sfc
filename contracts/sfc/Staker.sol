@@ -873,12 +873,16 @@ contract Stakers is Ownable, StakersConstants, Version {
         emit PartialWithdrawnByRequest(auth, receiver, stakerID, wrID, delegation, penalty);
     }
 
-    function updateGasPowerAllocationRate(uint256 short, uint256 long) onlyOwner external {
+    function _updateGasPowerAllocationRate(uint256 short, uint256 long) onlyOwner external {
         emit UpdatedGasPowerAllocationRate(short, long);
     }
 
-    function updateBaseRewardPerSec(uint256 value) onlyOwner external {
+    function _updateBaseRewardPerSec(uint256 value) onlyOwner external {
         emit UpdatedBaseRewardPerSec(value);
+    }
+
+    function _updateOfflinePenaltyThreshold(uint256 blocksNum, uint256 period) onlyOwner external {
+        emit UpdatedOfflinePenaltyThreshold(blocksNum, period);
     }
 
     function startLockedUp(uint256 epochNum) onlyOwner external {
