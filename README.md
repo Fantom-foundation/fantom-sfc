@@ -51,39 +51,45 @@ Compiling your contracts...
 
 
   Contract: SFC
+    Delegation migration tests
+	gas used for sfc deploying: 4913921
+      ✓ should auto migrate legacy deposition to new model (1931ms)
+      ✓ should manually migrate legacy deposition to new model (371ms)
+      ✓ should not call calcDelegationRewards while delegation is in the legacy model (373ms)
+
+  Contract: SFC
     Locking stake tests
-      ✓ should start "locked stake" feature (730ms)
-      ✓ should calc ValidatorEpochReward correctly after locked up started (1529ms)
-      ✓ should lock stake (2406ms)
-      ✓ should lock stake with right duration (710ms)
-      ✓ should not call prepareToWithdrawStake, until locked time is passed (570ms)
-      ✓ should not call prepareToWithdrawStakePartial, until locked time is passed (545ms)
-      ✓ should lock delegation (2455ms)
-      ✓ should lock delegation with right duration (964ms)
-      ✓ should subtract penalty if prepareToWithdrawDelegation will call earlier than locked time is passed (861ms)
-      ✓ should adjust penalty if penalty is bigger than delegated stake (711ms)
-      ✓ should subtract penalty if prepareToWithdrawDelegationPartial will call earlier than locked time is passed (927ms)
-      ✓ should claim lockup rewards (2253ms)
+      ✓ should start "locked stake" feature (441ms)
+      ✓ should calc ValidatorEpochReward correctly after locked up started (940ms)
+      ✓ should lock stake (1824ms)
+      ✓ should lock stake with right duration (497ms)
+      ✓ should not call prepareToWithdrawStake, until locked time is passed (376ms)
+      ✓ should not call prepareToWithdrawStakePartial, until locked time is passed (389ms)
+      ✓ should lock delegation (1906ms)
+      ✓ should lock delegation with right duration (719ms)
+      ✓ should subtract penalty if prepareToWithdrawDelegation will call earlier than locked time is passed (987ms)
+      ✓ should adjust penalty if penalty is bigger than delegated stake (609ms)
+      ✓ should subtract penalty if prepareToWithdrawDelegationPartial is called earlier than locked time is passed (1022ms)
+      ✓ should claim lockup rewards (2843ms)
 
   Contract: SFC
     Methods tests
-      ✓ checking Staker parameters (153ms)
-      ✓ checking createStake function (528ms)
-      ✓ checking increaseStake function (263ms)
-      ✓ checking createDelegation function (458ms)
-      ✓ checking calcRawValidatorEpochReward function (349ms)
-      ✓ checking epoch snapshot logic (169ms)
-      ✓ checking calcValidatorEpochReward function (467ms)
-      ✓ checking calcDelegationEpochReward function (578ms)
-      ✓ checking claimDelegationRewards function (645ms)
-      ✓ checking bonded ratio (109ms)
-      ✓ checking claimValidatorRewards function (396ms)
-      ✓ checking prepareToWithdrawStake function (214ms)
-      ✓ checking withdrawStake function (923ms)
-      ✓ checking prepareToWithdrawDelegation function (343ms)
-      ✓ checking withdrawDelegation function (1541ms)
+      ✓ checking Staker parameters (122ms)
+      ✓ checking createStake function (435ms)
+      ✓ checking increaseStake function (222ms)
+      ✓ checking createDelegation function (391ms)
+      ✓ checking createDelegation function to several stakers (482ms)
+      ✓ checking calcRawValidatorEpochReward function (316ms)
+      ✓ checking epoch snapshot logic (130ms)
+      ✓ checking calcValidatorEpochReward function (405ms)
+      ✓ checking calcDelegationEpochReward function (356ms)
+      ✓ checking claimDelegationRewards function (555ms)
+      ✓ checking claimValidatorRewards function (340ms)
+      ✓ checking prepareToWithdrawStake function (179ms)
+      ✓ checking withdrawStake function (771ms)
+      ✓ checking prepareToWithdrawDelegation function (294ms)
+      ✓ checking withdrawDelegation function (1299ms)
 
 
-  27 passing (25s)
-
+  30 passing (24s)
 ```
