@@ -17,6 +17,7 @@ contract UnitTestStakers is Stakers {
         address delegator;
         uint256 stakerID;
     }
+
     uint256[] public stakerIDsArr;
     DelegationID[] public delegationIDsArr;
 
@@ -60,18 +61,19 @@ contract UnitTestStakers is Stakers {
         super._createDelegation(msg.sender, to);
     }
 
-    function makeEpochSnapshots() external returns(uint256) {
+    function makeEpochSnapshots() external returns (uint256) {
         return _makeEpochSnapshots(0, true);
     }
 
-    function makeEpochSnapshots(uint256 optionalDuration) external returns(uint256) {
+    function makeEpochSnapshots(uint256 optionalDuration) external returns (uint256) {
         return _makeEpochSnapshots(optionalDuration, true);
     }
 
-    function makeEpochSnapshots(uint256 optionalDuration, bool addTxPower) external returns(uint256) {
+    function makeEpochSnapshots(uint256 optionalDuration, bool addTxPower) external returns (uint256) {
         return _makeEpochSnapshots(optionalDuration, addTxPower);
     }
-    function _makeEpochSnapshots(uint256 optionalDuration, bool addTxPower) internal returns(uint256) {
+
+    function _makeEpochSnapshots(uint256 optionalDuration, bool addTxPower) internal returns (uint256) {
         currentSealedEpoch++;
         EpochSnapshot storage newSnapshot = epochSnapshots[currentSealedEpoch];
         uint256 epochPay = 0;

@@ -230,7 +230,7 @@ contract Stakers is Ownable, StakersConstants {
         }
     }
 
-    function _sfcAddressToStakerID(address sfcAddress) public view returns(uint256) {
+    function _sfcAddressToStakerID(address sfcAddress) public view returns (uint256) {
         uint256 stakerID = stakerIDs[sfcAddress];
         if (stakerID == 0) {
             return 0;
@@ -259,7 +259,8 @@ contract Stakers is Ownable, StakersConstants {
 
         // update addresses index
         stakerIDs[newSfcAddress] = stakerID;
-        stakerIDs[stakers[stakerID].dagAddress] = stakerID; // it's possible dagAddress == oldSfcAddress
+        // it's possible dagAddress == oldSfcAddress
+        stakerIDs[stakers[stakerID].dagAddress] = stakerID;
 
         // redirect rewards stash
         if (rewardsStash[oldSfcAddress][0].amount != 0) {
@@ -416,7 +417,8 @@ contract Stakers is Ownable, StakersConstants {
             uint256 delegatedTotal = epochSnapshots[epoch].validators[stakerID].delegatedMe;
             uint256 totalStake = stake.add(delegatedTotal);
             if (totalStake == 0) {
-                return _RewardsSet(0, 0, 0, 0); // avoid division by zero
+                // avoid division by zero
+                return _RewardsSet(0, 0, 0, 0);
             }
             uint256 weightedTotalStake = stake.add((delegatedTotal.mul(commission)).div(RATIO_UNIT));
 
@@ -437,7 +439,8 @@ contract Stakers is Ownable, StakersConstants {
             uint256 delegatedTotal = epochSnapshots[epoch].validators[toStakerID].delegatedMe;
             uint256 totalStake = stake.add(delegatedTotal);
             if (totalStake == 0) {
-                return _RewardsSet(0, 0, 0, 0); // avoid division by zero
+                // avoid division by zero
+                return _RewardsSet(0, 0, 0, 0);
             }
             uint256 delegationAmount = delegations[delegator][toStakerID].amount;
             uint256 weightedTotalStake = (delegationAmount.mul(RATIO_UNIT.sub(commission))).div(RATIO_UNIT);
@@ -450,7 +453,7 @@ contract Stakers is Ownable, StakersConstants {
         return _calcLockupReward(fullReward, isLockingFeatureActive, isLockedUp);
     }
 
-    function withDefault(uint256 a, uint256 defaultA) pure private returns(uint256) {
+    function withDefault(uint256 a, uint256 defaultA) pure private returns (uint256) {
         if (a == 0) {
             return defaultA;
         }
@@ -593,7 +596,7 @@ contract Stakers is Ownable, StakersConstants {
 
     // stashed rewards are burnt on deactivation in all the cases except when delegator has deactivated after
     // validator has deactivated or was slashed/pruned
-    function _rewardsBurnableOnDeactivation(bool isDelegation, uint256 stakerID) public view returns(bool) {
+    function _rewardsBurnableOnDeactivation(bool isDelegation, uint256 stakerID) public view returns (bool) {
         return !isDelegation || (stakers[stakerID].stakeAmount != 0 && stakers[stakerID].status == OK_STATUS && stakers[stakerID].deactivatedTime == 0);
     }
 
@@ -643,7 +646,8 @@ contract Stakers is Ownable, StakersConstants {
         _checkNotDeactivatedStaker(stakerID);
         _checkClaimedStaker(stakerID);
         require(!_isLockedStake(stakerID), "stake is locked");
-        require(amount >= minStakeDecrease(), "too small amount"); // avoid confusing wrID and amount
+        // avoid confusing wrID and amount
+        require(amount >= minStakeDecrease(), "too small amount");
 
         // don't allow to withdraw full as a request, because amount==0 originally meant "not existing"
         uint256 totalAmount = stakers[stakerID].stakeAmount;
@@ -685,7 +689,8 @@ contract Stakers is Ownable, StakersConstants {
         delete stakerIDs[stakerDagAddr];
 
         if (status != 0) {
-            stakers[stakerID].status = status; // write status back into storage
+            // write status back into storage
+            stakers[stakerID].status = status;
         }
         stakersNum--;
         stakeTotalAmount = stakeTotalAmount.sub(stake);
@@ -729,9 +734,11 @@ contract Stakers is Ownable, StakersConstants {
             if (penalty >= delegationAmount) {
                 penalty = delegationAmount - 1;
             }
-            delegationEarlyWithdrawalPenalty[delegator][toStakerID] -= penalty; // forgive penalty
+            // forgive penalty
+            delegationEarlyWithdrawalPenalty[delegator][toStakerID] -= penalty;
         }
-        delegation.amount -= penalty; // delegator will receive less funds on withdrawal if penalty > 0
+        // delegator will receive less funds on withdrawal if penalty > 0
+        delegation.amount -= penalty;
         delegationsTotalAmount -= penalty;
 
         emit DeactivatedDelegation(delegator, toStakerID);
@@ -747,7 +754,8 @@ contract Stakers is Ownable, StakersConstants {
         _checkNotDeactivatedDelegation(delegator, toStakerID);
         // previous rewards must be claimed because rewards calculation depends on current delegation amount
         _checkClaimedDelegation(delegator, toStakerID);
-        require(amount >= minDelegationDecrease(), "too small amount"); // avoid confusing wrID and amount
+        // avoid confusing wrID and amount
+        require(amount >= minDelegationDecrease(), "too small amount");
 
         // don't allow to withdraw full as a request, because amount==0 originally meant "not existing"
         uint256 totalAmount = delegation.amount;
@@ -763,7 +771,8 @@ contract Stakers is Ownable, StakersConstants {
             if (penalty >= amount) {
                 penalty = amount - 1;
             }
-            delegationEarlyWithdrawalPenalty[delegator][toStakerID] -= penalty; // forgive penalty
+            // forgive penalty
+            delegationEarlyWithdrawalPenalty[delegator][toStakerID] -= penalty;
         }
         delegation.amount -= amount;
         if (stakers[toStakerID].stakeAmount != 0) {
@@ -772,7 +781,8 @@ contract Stakers is Ownable, StakersConstants {
         }
 
         withdrawalRequests[delegator][wrID].stakerID = toStakerID;
-        withdrawalRequests[delegator][wrID].amount = amount - penalty; // delegator will receive less funds on withdrawal if penalty > 0
+        // delegator will receive less funds on withdrawal if penalty > 0
+        withdrawalRequests[delegator][wrID].amount = amount - penalty;
         withdrawalRequests[delegator][wrID].epoch = currentEpoch();
         withdrawalRequests[delegator][wrID].time = block.timestamp;
         withdrawalRequests[delegator][wrID].delegation = true;
