@@ -100,34 +100,6 @@ contract StakersConstants {
     }
 
     /**
-     * @dev Unbonding start date
-     */ 
-    function unbondingStartDate() public pure returns (uint256) {
-        return 1577419000;
-    }
-
-    /**
-     * @dev Target period of bonding, say 100 weeks
-     */
-    function bondedTargetPeriod() public pure returns (uint256) {
-        return 60 * 60 * 24 * 700; // 100 weeks
-    }
-
-    /**
-     * @dev Target start for bonding, say 80%
-     */ 
-    function bondedTargetStart() public pure returns (uint256) {
-        return (80 * RATIO_UNIT) / 100; // 80%
-    }
-
-    /**
-     * @dev period before unbonding unlock
-     */ 
-    function unbondingUnlockPeriod() public pure returns (uint256) {
-        return 60 * 60 * 24 * 30 * 6; // 6 months
-    }
-
-    /**
      * @dev number of epochs to lock a delegation
      */ 
     function delegationLockPeriodEpochs() public pure returns (uint256) {
