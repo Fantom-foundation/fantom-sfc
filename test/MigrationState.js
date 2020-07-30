@@ -15,8 +15,8 @@ const assertEqual = (a, b) => assert.isTrue(Object.is(a, b), `Expected ${a.toStr
 const LegacyStaker = artifacts.require('LegacyStaker');
 const Factory = artifacts.require('Factory');
 
-const getLegacyDeposition = async (depositor) => this.stakers.delegations.call(depositor);
-const getDeposition = async (depositor, to) => this.stakers.delegations_v2.call(depositor, to);
+const getLegacyDeposition = async (depositor) => this.stakers.legacyDelegations.call(depositor);
+const getDeposition = async (depositor, to) => this.stakers.delegations.call(depositor, to);
 const getStaker = async (stakerID) => this.stakers.stakers.call(stakerID);
 const createLegacyDelegation = async(depositor, stakerID, amount, epoch) => {
   await this.stakers.createLegacyDelegation(stakerID, { from: depositor, value: amount});
@@ -43,7 +43,7 @@ contract('SFC', async ([firstStaker, secondStaker, firstDepositor, secondDeposit
       this.validatorComission = new BN('150000'); // 0.15
     });
 
-    /*it('should auto migrate legacy deposition to new model', async () => {
+    it('should auto migrate legacy deposition to new model', async () => {
       // create 5 legacy delegation
       await this.stakers._createStake({ from: firstStaker, value: ether('2.0')});
       const firstStakerID = await this.stakers.getStakerID(firstStaker);
@@ -108,8 +108,10 @@ contract('SFC', async ([firstStaker, secondStaker, firstDepositor, secondDeposit
       await createLegacyDelegation(firstDepositor, firstStakerID, delegationAmount, currentEpoch);
       // check legacy delegations
       expect((await getLegacyDeposition(firstDepositor)).amount).to.be.bignumber.equal(delegationAmount);
-      // migrate delegation (_syncDelegator)
-      await this.stakers._syncDelegator(firstDepositor, firstStakerID);
+      // migrate delegation (_upgradeDelegationStorage)
+      await expectRevert(this.stakers._upgradeDelegationStorage(firstStaker), "doesn't exist or already upgraded");
+      await this.stakers._upgradeDelegationStorage(firstDepositor);
+      await expectRevert(this.stakers._upgradeDelegationStorage(firstDepositor), "doesn't exist or already upgraded");
       // check removed legacy delegations
       expect((await getLegacyDeposition(firstDepositor)).amount).to.be.bignumber.equal(new BN('0'));
       // check delegation in new model
@@ -128,14 +130,17 @@ contract('SFC', async ([firstStaker, secondStaker, firstDepositor, secondDeposit
       // can't call calcDelegationRewards while delegation is in the legacy model
       await this.stakers.makeEpochSnapshots(5);
       await this.stakers.makeEpochSnapshots(5);
-      await expectRevert(this.stakers.calcDelegationRewards(firstDepositor, firstStakerID, new BN('0'), currentEpoch), "old version delegation, please update");
-      // migrate delegation (_syncDelegator)
-      await this.stakers._syncDelegator(firstDepositor, firstStakerID);
+      const rewardsBad = await this.stakers.calcDelegationRewards(firstDepositor, firstStakerID, new BN('0'), currentEpoch);
+      expect(rewardsBad[0]).to.be.bignumber.equal(new BN('0'));
+      expect(rewardsBad[1]).to.be.bignumber.equal(new BN('1'));
+      expect(rewardsBad[2]).to.be.bignumber.equal(new BN('1'));
+      // migrate delegation (_upgradeDelegationStorage)
+      await this.stakers._upgradeDelegationStorage(firstDepositor);
       // call calcDelegationRewards
       const rewards = await this.stakers.calcDelegationRewards(firstDepositor, firstStakerID, new BN('0'), currentEpoch);
       expect(rewards[0]).to.be.bignumber.equal(new BN('595000000212500000'));
       expect(rewards[1]).to.be.bignumber.equal(new BN('1'));
       expect(rewards[2]).to.be.bignumber.equal(new BN('1'));
-    });*/
+    });
   });
 });
