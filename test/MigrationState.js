@@ -68,7 +68,7 @@ contract('SFC', async ([firstStaker, secondStaker, firstDepositor, secondDeposit
       //  migrate first delegation (increaseDelegation)
       await this.stakers.increaseDelegation(firstStakerID, { from: firstDepositor, value: delegationAmount});
       // migrate second delegation (claimDelegationRewards)
-      await this.stakers.makeEpochSnapshots(5);
+      await this.stakers.makeEpochSnapshots(5, true);
       await this.stakers.claimDelegationRewards(currentEpoch, firstStakerID, { from: secondDepositor });
       // migrate third delegation (prepareToWithdrawDelegation)
       await this.stakers.discardDelegationRewards(firstStakerID, { from: thirdDepositor });
@@ -81,9 +81,9 @@ contract('SFC', async ([firstStaker, secondStaker, firstDepositor, secondDeposit
       await this.stakers.discardDelegationRewards(firstStakerID, { from: fifthDepositor });
       await this.stakers.prepareToWithdrawLegacyDelegation({ from: fifthDepositor });
       time.increase(86400 * 7);
-      await this.stakers.makeEpochSnapshots(5);
-      await this.stakers.makeEpochSnapshots(5);
-      await this.stakers.makeEpochSnapshots(5);
+      await this.stakers.makeEpochSnapshots(5, true);
+      await this.stakers.makeEpochSnapshots(5, true);
+      await this.stakers.makeEpochSnapshots(5, true);
       await this.stakers.withdrawDelegation(firstStakerID, { from: fifthDepositor });
       // check removed legacy delegations
       expect((await getLegacyDeposition(firstDepositor)).amount).to.be.bignumber.equal(new BN('0'));
@@ -128,8 +128,8 @@ contract('SFC', async ([firstStaker, secondStaker, firstDepositor, secondDeposit
       // check legacy delegations
       expect((await getLegacyDeposition(firstDepositor)).amount).to.be.bignumber.equal(delegationAmount);
       // can't call calcDelegationRewards while delegation is in the legacy model
-      await this.stakers.makeEpochSnapshots(5);
-      await this.stakers.makeEpochSnapshots(5);
+      await this.stakers.makeEpochSnapshots(5, true);
+      await this.stakers.makeEpochSnapshots(5, true);
       const rewardsBad = await this.stakers.calcDelegationRewards(firstDepositor, firstStakerID, new BN('0'), currentEpoch);
       expect(rewardsBad[0]).to.be.bignumber.equal(new BN('0'));
       expect(rewardsBad[1]).to.be.bignumber.equal(new BN('1'));
