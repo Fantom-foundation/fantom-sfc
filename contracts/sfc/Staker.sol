@@ -292,6 +292,7 @@ contract Stakers is Ownable, StakersConstants, Version {
 
         require(msg.value >= minStakeIncrease(), "insufficient amount");
         _checkActiveStaker(stakerID);
+        require(!_isLockedStake(stakerID), "locked up");
 
         uint256 newAmount = stakers[stakerID].stakeAmount.add(msg.value);
         stakers[stakerID].stakeAmount = newAmount;
@@ -343,6 +344,7 @@ contract Stakers is Ownable, StakersConstants, Version {
         address delegator = msg.sender;
         _checkAndUpgradeDelegationStorage(delegator);
         _checkNotDeactivatedDelegation(delegator, to);
+        require(!_isLockedDelegation(delegator, to), "locked up");
         // previous rewards must be claimed because rewards calculation depends on current delegation amount
         _checkClaimedDelegation(delegator, to);
 
