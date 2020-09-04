@@ -900,7 +900,7 @@ contract Stakers is Ownable, StakersConstants, Version {
         _checkActiveStaker(stakerID);
         require(lockDuration >= minLockupDuration() && lockDuration <= maxLockupDuration(), "incorrect duration");
         uint256 endTime = block.timestamp.add(lockDuration);
-        require(lockedStakes[stakerID].endTime < endTime, "already locked up");
+        require(!_isLockedStake(stakerID), "already locked up");
         _checkClaimedStakerLockupRewards(stakerID);
 
         lockedStakes[stakerID] = LockedAmount(currentEpoch(), endTime, lockDuration);
@@ -918,10 +918,10 @@ contract Stakers is Ownable, StakersConstants, Version {
         require(lockDuration >= minLockupDuration() && lockDuration <= maxLockupDuration(), "incorrect duration");
         uint256 endTime = block.timestamp.add(lockDuration);
         require(lockedStakes[toStakerID].endTime >= endTime, "staker's locking will finish first");
-        require(lockedDelegations[delegator][toStakerID].endTime < endTime, "already locked up");
+        require(!_isLockedDelegation(delegator, toStakerID), "already locked up");
         _checkClaimedDelegationLockupRewards(delegator, toStakerID);
 
-        if (!_isLockedDelegation(delegator, toStakerID)) {
+        {
             // forgive non-paid penalty from previous lockup period, if any
             delete delegationEarlyWithdrawalPenalty[delegator][toStakerID];
         }
