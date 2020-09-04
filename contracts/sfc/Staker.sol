@@ -391,9 +391,9 @@ contract Stakers is Ownable, StakersConstants, Version {
         return delegationEarlyWithdrawalPenalty[delegator][toStakerID].mul(withdrawalAmount).div(delegationAmount);
     }
 
-    function _calcLockupReward(uint256 fullReward, bool isLockingFeatureActive, bool isLockedUp, uint256 lockupDuration) private pure returns (_RewardsSet memory rewards) {
+    function _calcLockupReward(uint256 fullReward, bool isLockingFeature, bool isLockedUp, uint256 lockupDuration) private pure returns (_RewardsSet memory rewards) {
         rewards = _RewardsSet(0, 0, 0, 0);
-        if (isLockingFeatureActive) {
+        if (isLockingFeature) {
             uint256 maxLockupExtraRatio = RATIO_UNIT - unlockedRewardRatio();
             uint256 lockupExtraRatio = maxLockupExtraRatio.mul(lockupDuration).div(maxLockupDuration());
 
@@ -431,10 +431,9 @@ contract Stakers is Ownable, StakersConstants, Version {
 
             fullReward = rawReward.mul(weightedTotalStake).div(totalStake);
         }
-        bool isLockingFeatureActive = firstLockedUpEpoch > 0 && epoch >= firstLockedUpEpoch;
         bool isLockedUp = lockedStakes[stakerID].fromEpoch <= epoch && lockedStakes[stakerID].endTime > epochEndTime(epoch);
 
-        return _calcLockupReward(fullReward, isLockingFeatureActive, isLockedUp, lockedStakes[stakerID].duration);
+        return _calcLockupReward(fullReward, isLockingFeatureActive(epoch), isLockedUp, lockedStakes[stakerID].duration);
     }
 
     function _calcDelegationEpochReward(address delegator, uint256 toStakerID, uint256 epoch, uint256 commission) internal view returns (_RewardsSet memory) {
@@ -454,10 +453,9 @@ contract Stakers is Ownable, StakersConstants, Version {
 
             fullReward = rawReward.mul(weightedTotalStake).div(totalStake);
         }
-        bool isLockingFeatureActive = firstLockedUpEpoch > 0 && epoch >= firstLockedUpEpoch;
         bool isLockedUp = lockedDelegations[delegator][toStakerID].fromEpoch <= epoch && lockedDelegations[delegator][toStakerID].endTime > epochEndTime(epoch);
 
-        return _calcLockupReward(fullReward, isLockingFeatureActive, isLockedUp, lockedDelegations[delegator][toStakerID].duration);
+        return _calcLockupReward(fullReward, isLockingFeatureActive(epoch), isLockedUp, lockedDelegations[delegator][toStakerID].duration);
     }
 
     function withDefault(uint256 a, uint256 defaultA) pure private returns (uint256) {
@@ -1010,6 +1008,10 @@ contract Stakers is Ownable, StakersConstants, Version {
 
     function _isLockedStake(uint256 staker) view internal returns (bool) {
         return lockedStakes[staker].endTime != 0 && block.timestamp <= lockedStakes[staker].endTime;
+    }
+
+    function isLockingFeatureActive(uint256 epoch) view internal returns (bool) {
+        return firstLockedUpEpoch > 0 && epoch >= firstLockedUpEpoch;
     }
 
     function _checkPaidEpoch(uint256 paidUntilEpoch, uint256 fromEpoch, uint256 untilEpoch) view internal {
