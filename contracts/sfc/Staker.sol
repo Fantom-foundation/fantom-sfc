@@ -427,7 +427,7 @@ contract Stakers is Ownable, StakersConstants, Version {
             fullReward = rawReward.mul(weightedTotalStake).div(totalStake);
         }
         bool isLockingFeatureActive = firstLockedUpEpoch > 0 && epoch >= firstLockedUpEpoch;
-        bool isLockedUp = lockedStakes[stakerID].fromEpoch <= epoch && lockedStakes[stakerID].endTime > epochStartTime(epoch);
+        bool isLockedUp = lockedStakes[stakerID].fromEpoch <= epoch && lockedStakes[stakerID].endTime > epochStartTime(epoch + 1);
 
         return _calcLockupReward(fullReward, isLockingFeatureActive, isLockedUp);
     }
@@ -450,7 +450,7 @@ contract Stakers is Ownable, StakersConstants, Version {
             fullReward = rawReward.mul(weightedTotalStake).div(totalStake);
         }
         bool isLockingFeatureActive = firstLockedUpEpoch > 0 && epoch >= firstLockedUpEpoch;
-        bool isLockedUp = lockedDelegations[delegator][toStakerID].fromEpoch <= epoch && lockedDelegations[delegator][toStakerID].endTime > epochStartTime(epoch);
+        bool isLockedUp = lockedDelegations[delegator][toStakerID].fromEpoch <= epoch && lockedDelegations[delegator][toStakerID].endTime > epochStartTime(epoch + 1);
 
         return _calcLockupReward(fullReward, isLockingFeatureActive, isLockedUp);
     }
