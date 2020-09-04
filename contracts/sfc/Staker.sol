@@ -76,6 +76,7 @@ contract Stakers is Ownable, StakersConstants, Version {
     struct LockedAmount {
         uint256 fromEpoch;
         uint256 endTime;
+        uint256 duration;
     }
 
     uint256 private reserved1;
@@ -905,7 +906,7 @@ contract Stakers is Ownable, StakersConstants, Version {
         if (prevLockupEpoch != 0) {
             require(stakers[stakerID].paidUntilEpoch >= prevLockupEpoch - 1, "previous lockup rewards rewards are not claimed");
         }
-        lockedStakes[stakerID] = LockedAmount(currentEpoch(), endTime);
+        lockedStakes[stakerID] = LockedAmount(currentEpoch(), endTime, lockDuration);
         emit LockingStake(stakerID, currentEpoch(), endTime);
     }
 
@@ -930,7 +931,7 @@ contract Stakers is Ownable, StakersConstants, Version {
             // forgive non-paid penalty from previous lockup period, if any
             delete delegationEarlyWithdrawalPenalty[delegator][toStakerID];
         }
-        lockedDelegations[delegator][toStakerID] = LockedAmount(currentEpoch(), endTime);
+        lockedDelegations[delegator][toStakerID] = LockedAmount(currentEpoch(), endTime, lockDuration);
         emit LockingDelegation(delegator, toStakerID, currentEpoch(), endTime);
     }
 
