@@ -391,13 +391,16 @@ contract Stakers is Ownable, StakersConstants, Version {
         return delegationEarlyWithdrawalPenalty[delegator][toStakerID].mul(withdrawalAmount).div(delegationAmount);
     }
 
-    function _calcLockupReward(uint256 fullReward, bool isLockingFeatureActive, bool isLockedUp) private pure returns (_RewardsSet memory rewards) {
+    function _calcLockupReward(uint256 fullReward, bool isLockingFeatureActive, bool isLockedUp, uint256 lockupDuration) private pure returns (_RewardsSet memory rewards) {
         rewards = _RewardsSet(0, 0, 0, 0);
         if (isLockingFeatureActive) {
+            uint256 maxLockupExtraRatio = RATIO_UNIT - unlockedRewardRatio();
+            uint256 lockupExtraRatio = maxLockupExtraRatio.mul(lockupDuration).div(maxLockupDuration());
+
             if (isLockedUp) {
                 rewards.unlockedReward = 0;
                 rewards.lockupBaseReward = fullReward.mul(unlockedRewardRatio()).div(RATIO_UNIT);
-                rewards.lockupExtraReward = fullReward - rewards.lockupBaseReward;
+                rewards.lockupExtraReward = fullReward.mul(lockupExtraRatio).div(RATIO_UNIT);
             } else {
                 rewards.unlockedReward = fullReward.mul(unlockedRewardRatio()).div(RATIO_UNIT);
                 rewards.lockupBaseReward = 0;
@@ -431,7 +434,7 @@ contract Stakers is Ownable, StakersConstants, Version {
         bool isLockingFeatureActive = firstLockedUpEpoch > 0 && epoch >= firstLockedUpEpoch;
         bool isLockedUp = lockedStakes[stakerID].fromEpoch <= epoch && lockedStakes[stakerID].endTime > epochStartTime(epoch + 1);
 
-        return _calcLockupReward(fullReward, isLockingFeatureActive, isLockedUp);
+        return _calcLockupReward(fullReward, isLockingFeatureActive, isLockedUp, lockedStakes[stakerID].duration);
     }
 
     function _calcDelegationEpochReward(address delegator, uint256 toStakerID, uint256 epoch, uint256 commission) internal view returns (_RewardsSet memory) {
@@ -454,7 +457,7 @@ contract Stakers is Ownable, StakersConstants, Version {
         bool isLockingFeatureActive = firstLockedUpEpoch > 0 && epoch >= firstLockedUpEpoch;
         bool isLockedUp = lockedDelegations[delegator][toStakerID].fromEpoch <= epoch && lockedDelegations[delegator][toStakerID].endTime > epochStartTime(epoch + 1);
 
-        return _calcLockupReward(fullReward, isLockingFeatureActive, isLockedUp);
+        return _calcLockupReward(fullReward, isLockingFeatureActive, isLockedUp, lockedDelegations[delegator][toStakerID].duration);
     }
 
     function withDefault(uint256 a, uint256 defaultA) pure private returns (uint256) {
