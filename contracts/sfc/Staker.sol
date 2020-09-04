@@ -190,21 +190,22 @@ contract Stakers is Ownable, StakersConstants, Version {
 
     // Create new staker
     // Stake amount is msg.value
-    // dagAddress is msg.sender
-    // sfcAdrress is msg.sender
+    // dagAddress is msg.sender (address to authenticate validator's consensus messages (DAG events))
+    // sfcAdrress is msg.sender (address to authenticate validator inside SFC contract)
     function createStake(bytes memory metadata) public payable {
         _createStake(msg.sender, msg.sender, msg.value, metadata);
     }
 
-    // Create new staker
+    // Create new validator
     // Stake amount is msg.value
+    // Metadata is an arbitrary bytes array. Metadata isn't interpreted by the SFC contract.
+    // dagAddress is msg.sender (address to authenticate validator's consensus messages (DAG events))
+    // sfcAdrress is msg.sender (address to authenticate validator inside SFC contract)
     function createStakeWithAddresses(address dagAddress, address sfcAddress, bytes memory metadata) public payable {
         require(dagAddress != address(0) && sfcAddress != address(0), "invalid address");
         _createStake(dagAddress, sfcAddress, msg.value, metadata);
     }
 
-    // Create new staker
-    // Stake amount is msg.value
     function _createStake(address dagAddress, address sfcAddress, uint256 amount, bytes memory metadata) internal {
         require(stakerIDs[dagAddress] == 0 && stakerIDs[sfcAddress] == 0, "staker already exists");
         require(amount >= minStake(), "insufficient amount");
@@ -245,7 +246,7 @@ contract Stakers is Ownable, StakersConstants, Version {
 
     event UpdatedStakerSfcAddress(uint256 indexed stakerID, address indexed oldSfcAddress, address indexed newSfcAddress);
 
-    // update validator's SFC authentication/rewards/collateral address
+    // update validator's SFC authentication address
     function updateStakerSfcAddress(address newSfcAddress) external {
         address oldSfcAddress = msg.sender;
 
@@ -275,6 +276,8 @@ contract Stakers is Ownable, StakersConstants, Version {
 
     event UpdatedStakerMetadata(uint256 indexed stakerID);
 
+    // updateStakerMetadata updates validator's metadata.
+    // Metadata is an arbitrary bytes array. Metadata isn't interpreted by the SFC contract.
     function updateStakerMetadata(bytes memory metadata) public {
         uint256 stakerID = _sfcAddressToStakerID(msg.sender);
         _checkExistStaker(stakerID);
@@ -293,7 +296,7 @@ contract Stakers is Ownable, StakersConstants, Version {
         emit IncreasedStake(stakerID, newAmount, amount);
     }
 
-    // maxDelegatedLimit is maximum amount of delegations to staker
+    // maxDelegatedLimit is a maximum amount which may be delegated to validator
     function maxDelegatedLimit(uint256 selfStake) internal pure returns (uint256) {
         return selfStake.mul(maxDelegatedRatio()).div(RATIO_UNIT);
     }
@@ -324,7 +327,7 @@ contract Stakers is Ownable, StakersConstants, Version {
         emit CreatedDelegation(delegator, to, msg.value);
     }
 
-    // Create new delegation to a given staker
+    // createDelegation creates new delegation to a given validator
     // Delegated amount is msg.value
     function createDelegation(uint256 to) external payable {
         _createDelegation(msg.sender, to);
@@ -480,13 +483,17 @@ contract Stakers is Ownable, StakersConstants, Version {
     }
 
     // Returns the pending rewards for a given delegator, first calculated epoch, last calculated epoch
-    // _fromEpoch is starting epoch which rewards are calculated (including). If 0, then it's lowest not claimed epoch
-    // maxEpochs is maximum number of epoch to calc rewards for. Set it to your chunk size.
+    // _fromEpoch is a starting epoch from which rewards are calculated (including). If 0, then lowest not claimed epoch iss substituted.
+    // maxEpochs is a maximum number of epoch to calculate rewards for.
     function calcDelegationRewards(address delegator, uint256 toStakerID, uint256 _fromEpoch, uint256 maxEpochs) public view returns (uint256, uint256, uint256) {
         (_RewardsSet memory rewards, uint256 fromEpoch, uint256 untilEpoch) = _calcDelegationLockupRewards(delegator, toStakerID, _fromEpoch, maxEpochs, false);
         return (rewards.unlockedReward + rewards.lockupBaseReward + rewards.lockupExtraReward, fromEpoch, untilEpoch);
     }
 
+    // Returns the pending rewards for a given delegator, first calculated epoch, last calculated epoch
+    // The function calculates an approximation of rewards in a case if delegator was delegating his rewards every epoch
+    // _fromEpoch is a starting epoch from which rewards are calculated (including). If 0, then lowest not claimed epoch iss substituted.
+    // maxEpochs is a maximum number of epoch to calculate rewards for.
     function calcDelegationCompoundRewards(address delegator, uint256 toStakerID, uint256 _fromEpoch, uint256 maxEpochs) public view returns (uint256, uint256, uint256) {
         (_RewardsSet memory rewards, uint256 fromEpoch, uint256 untilEpoch) = _calcDelegationLockupRewards(delegator, toStakerID, _fromEpoch, maxEpochs, true);
         return (rewards.unlockedReward + rewards.lockupBaseReward + rewards.lockupExtraReward, fromEpoch, untilEpoch);
@@ -530,6 +537,10 @@ contract Stakers is Ownable, StakersConstants, Version {
         return (rewards.unlockedReward + rewards.lockupBaseReward + rewards.lockupExtraReward, fromEpoch, untilEpoch);
     }
 
+    // Returns the pending rewards for a given validator, first claimed epoch, last claimed epoch
+    // The function calculates an approximation of rewards in a case if validator was staking his rewards every epoch
+    // _fromEpoch is starting epoch which rewards are calculated (including). If 0, then it's lowest not claimed epoch
+    // maxEpochs is maximum number of epoch to calc rewards for. Set it to your chunk size.
     function calcValidatorCompoundRewards(uint256 stakerID, uint256 _fromEpoch, uint256 maxEpochs) public view returns (uint256, uint256, uint256) {
         (_RewardsSet memory rewards, uint256 fromEpoch, uint256 untilEpoch) = _calcValidatorLockupRewards(stakerID, _fromEpoch, maxEpochs, true);
         return (rewards.unlockedReward + rewards.lockupBaseReward + rewards.lockupExtraReward, fromEpoch, untilEpoch);
@@ -561,11 +572,17 @@ contract Stakers is Ownable, StakersConstants, Version {
     }
 
     // Claim the pending rewards for a given delegator (sender)
-    // maxEpochs is maximum number of epoch to calc rewards for. Set it to your chunk size.
+    // Rewards are sent to sender's address
+    // toStakerID is a stakerID of delegation
+    // maxEpochs is maximum number of epoch to calc rewards for.
     function claimDelegationRewards(uint256 maxEpochs, uint256 toStakerID) external {
         _claimDelegationRewards(maxEpochs, toStakerID, false);
     }
 
+    // Claim the pending rewards for a given delegator (sender)
+    // Rewards are delegated to the validator
+    // toStakerID is a stakerID of delegation
+    // maxEpochs is maximum number of epoch to calc rewards for.
     function claimDelegationCompoundRewards(uint256 maxEpochs, uint256 toStakerID) external {
         _claimDelegationRewards(maxEpochs, toStakerID, true);
     }
@@ -594,14 +611,18 @@ contract Stakers is Ownable, StakersConstants, Version {
         emit ClaimedValidatorReward(stakerID, rewardsAll, fromEpoch, untilEpoch);
     }
 
-    // Claim the pending rewards for a given stakerID (sender)
-    // maxEpochs is maximum number of epoch to calc rewards for. Set it to your chunk size.
-    //
-    // may be already deactivated, but still allowed to withdraw old rewards
+    // claimValidatorRewards claims the pending rewards for a given stakerID (sender)
+    // Rewards are sent to sender's address
+    // maxEpochs is maximum number of epoch to calc rewards for.
+    // Deactivated validators are still allowed to withdraw old rewards
     function claimValidatorRewards(uint256 maxEpochs) external {
         _claimValidatorRewards(maxEpochs, false);
     }
 
+    // claimValidatorCompoundRewards claims the pending rewards for a given stakerID (sender)
+    // Rewards are staked
+    // maxEpochs is maximum number of epoch to calc rewards for.
+    // Deactivated validators are still allowed to withdraw old rewards
     function claimValidatorCompoundRewards(uint256 maxEpochs) external {
         _claimValidatorRewards(maxEpochs, true);
     }
@@ -626,7 +647,7 @@ contract Stakers is Ownable, StakersConstants, Version {
     event PreparedToWithdrawStake(uint256 indexed stakerID); // previous name for DeactivatedStake
     event DeactivatedStake(uint256 indexed stakerID);
 
-    // deactivate stake, to be able to withdraw later
+    // prepareToWithdrawStake starts validator withdrawal
     function prepareToWithdrawStake() external {
         address stakerSfcAddr = msg.sender;
         uint256 stakerID = _sfcAddressToStakerID(stakerSfcAddr);
@@ -642,6 +663,7 @@ contract Stakers is Ownable, StakersConstants, Version {
 
     event CreatedWithdrawRequest(address indexed auth, address indexed receiver, uint256 indexed stakerID, uint256 wrID, bool delegation, uint256 amount);
 
+    // prepareToWithdrawStakePartial starts withdrawal of a part of validator stake
     function prepareToWithdrawStakePartial(uint256 wrID, uint256 amount) external {
         address payable stakerSfcAddr = msg.sender;
         uint256 stakerID = _sfcAddressToStakerID(stakerSfcAddr);
@@ -671,6 +693,7 @@ contract Stakers is Ownable, StakersConstants, Version {
 
     event WithdrawnStake(uint256 indexed stakerID, uint256 penalty);
 
+    // withdrawStake finalises validator withdrawal
     function withdrawStake() external {
         address payable stakerSfcAddr = msg.sender;
         uint256 stakerID = _sfcAddressToStakerID(stakerSfcAddr);
@@ -709,7 +732,7 @@ contract Stakers is Ownable, StakersConstants, Version {
     event PreparedToWithdrawDelegation(address indexed delegator, uint256 indexed stakerID); // previous name for DeactivatedDelegation
     event DeactivatedDelegation(address indexed delegator, uint256 indexed stakerID);
 
-    // deactivate delegation, to be able to withdraw later
+    // prepareToWithdrawDelegation starts delegation withdrawal
     function prepareToWithdrawDelegation(uint256 toStakerID) external {
         address delegator = msg.sender;
         _checkAndUpgradeDelegationStorage(delegator);
@@ -745,6 +768,7 @@ contract Stakers is Ownable, StakersConstants, Version {
         _syncStaker(toStakerID);
     }
 
+    // prepareToWithdrawDelegation starts withdrawal for a part of delegation stake
     function prepareToWithdrawDelegationPartial(uint256 wrID, uint256 toStakerID, uint256 amount) external {
         address payable delegator = msg.sender;
         _checkAndUpgradeDelegationStorage(delegator);
@@ -791,6 +815,7 @@ contract Stakers is Ownable, StakersConstants, Version {
 
     event WithdrawnDelegation(address indexed delegator, uint256 indexed toStakerID, uint256 penalty);
 
+    // withdrawDelegation finalises delegation withdrawal
     function withdrawDelegation(uint256 toStakerID) external {
         address payable delegator = msg.sender;
         _checkAndUpgradeDelegationStorage(delegator);
@@ -825,6 +850,7 @@ contract Stakers is Ownable, StakersConstants, Version {
 
     event PartialWithdrawnByRequest(address indexed auth, address indexed receiver, uint256 indexed stakerID, uint256 wrID, bool delegation, uint256 penalty);
 
+    // partialWithdrawByRequest finalises partial withdrawal by WithdrawalRequestID
     function partialWithdrawByRequest(uint256 wrID) external {
         address auth = msg.sender;
         address payable receiver = msg.sender;
@@ -888,6 +914,8 @@ contract Stakers is Ownable, StakersConstants, Version {
 
     event LockingStake(uint256 indexed stakerID, uint256 fromEpoch, uint256 endTime);
 
+    // lockUpStake locks validator's stake
+    // Locked validator isn't allowed to withdraw until lockup period is elapsed
     function lockUpStake(uint256 lockDuration) external {
         require(isLockingFeatureActive(currentEpoch()), "feature was not activated");
         uint256 stakerID = _sfcAddressToStakerID(msg.sender);
@@ -903,6 +931,7 @@ contract Stakers is Ownable, StakersConstants, Version {
 
     event LockingDelegation(address indexed delegator, uint256 indexed stakerID, uint256 fromEpoch, uint256 endTime);
 
+    // lockUpDelegation locks delegation stake
     function lockUpDelegation(uint256 lockDuration, uint256 toStakerID) external {
         require(isLockingFeatureActive(currentEpoch()), "feature was not activated");
         address delegator = msg.sender;
