@@ -41,6 +41,30 @@ contract UnitTestStakers is Stakers {
         currentSealedEpoch = firstEpoch;
     }
 
+    // Increase msg.sender's delegation by msg.value
+    function increaseDelegation(uint256 to) external payable {
+        address delegator = msg.sender;
+        _checkAndUpgradeDelegationStorage(delegator);
+        _checkNotDeactivatedDelegation(delegator, to);
+        // previous rewards must be claimed because rewards calculation depends on current delegation amount
+        _checkClaimedDelegation(delegator, to);
+
+        require(msg.value >= minDelegationIncrease(), "insufficient amount");
+        _checkActiveStaker(to);
+
+        _increaseDelegation(delegator, to, msg.value);
+    }
+
+    // Increase msg.sender's validator stake by msg.value
+    function increaseStake() external payable {
+        uint256 stakerID = _sfcAddressToStakerID(msg.sender);
+
+        require(msg.value >= minStakeIncrease(), "insufficient amount");
+        _checkActiveStaker(stakerID);
+
+        _increaseStake(stakerID, msg.value);
+    }
+
     function _markValidationStakeAsCheater(uint256 stakerID, bool cheater) external {
         if (stakers[stakerID].stakeAmount != 0) {
             if (cheater) {

@@ -293,17 +293,6 @@ contract Stakers is Ownable, StakersConstants, Version {
         emit IncreasedStake(stakerID, newAmount, amount);
     }
 
-    // Increase msg.sender's validator stake by msg.value
-    function increaseStake() external payable {
-        uint256 stakerID = _sfcAddressToStakerID(msg.sender);
-
-        require(msg.value >= minStakeIncrease(), "insufficient amount");
-        _checkActiveStaker(stakerID);
-        require(!_isLockedStake(stakerID), "locked up");
-
-        _increaseStake(stakerID, msg.value);
-    }
-
     // maxDelegatedLimit is maximum amount of delegations to staker
     function maxDelegatedLimit(uint256 selfStake) internal pure returns (uint256) {
         return selfStake.mul(maxDelegatedRatio()).div(RATIO_UNIT);
@@ -355,21 +344,6 @@ contract Stakers is Ownable, StakersConstants, Version {
 
         _syncDelegation(delegator, to);
         _syncStaker(to);
-    }
-
-    // Increase msg.sender's delegation by msg.value
-    function increaseDelegation(uint256 to) external payable {
-        address delegator = msg.sender;
-        _checkAndUpgradeDelegationStorage(delegator);
-        _checkNotDeactivatedDelegation(delegator, to);
-        require(!_isLockedDelegation(delegator, to), "locked up");
-        // previous rewards must be claimed because rewards calculation depends on current delegation amount
-        _checkClaimedDelegation(delegator, to);
-
-        require(msg.value >= minDelegationIncrease(), "insufficient amount");
-        _checkActiveStaker(to);
-
-        _increaseDelegation(delegator, to, msg.value);
     }
 
     function _calcRawValidatorEpochReward(uint256 stakerID, uint256 epoch) internal view returns (uint256) {
