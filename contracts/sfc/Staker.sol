@@ -649,31 +649,6 @@ contract Stakers is Ownable, StakersConstants, Version {
         emit UnstashedRewards(auth, receiver, rewards);
     }
 
-    // stashed rewards are burnt on deactivation in all the cases except when delegator has deactivated after
-    // validator has deactivated or was slashed/pruned
-    function _rewardsBurnableOnDeactivation(bool isDelegation, uint256 stakerID) public view returns (bool) {
-        return !isDelegation || (stakers[stakerID].stakeAmount != 0 && stakers[stakerID].status == OK_STATUS && stakers[stakerID].deactivatedTime == 0);
-    }
-
-    event BurntRewardStash(address indexed addr, uint256 indexed stakerID, bool isDelegation, uint256 amount);
-
-    // proportional part of stashed rewards are burnt on deactivation if _rewardsBurnableOnDeactivation returns true
-    function _mayBurnRewardsOnDeactivation(bool isDelegation, uint256 stakerID, address addr, uint256 withdrawAmount, uint256 totalAmount) internal {
-        if (_rewardsBurnableOnDeactivation(isDelegation, stakerID)) {
-            uint256 leftAmount = totalAmount.sub(withdrawAmount);
-            uint256 oldStash = rewardsStash[addr][0].amount;
-            uint256 newStash = oldStash.mul(leftAmount).div(totalAmount);
-            if (newStash == 0) {
-                delete rewardsStash[addr][0];
-            } else {
-                rewardsStash[addr][0].amount = newStash;
-            }
-            if (newStash != oldStash) {
-                emit BurntRewardStash(addr, stakerID, isDelegation, oldStash - newStash);
-            }
-        }
-    }
-
     event PreparedToWithdrawStake(uint256 indexed stakerID); // previous name for DeactivatedStake
     event DeactivatedStake(uint256 indexed stakerID);
 
@@ -684,8 +659,6 @@ contract Stakers is Ownable, StakersConstants, Version {
         _checkNotDeactivatedStaker(stakerID);
         _checkClaimedStaker(stakerID);
         require(!_isLockedStake(stakerID), "stake is locked");
-
-        _mayBurnRewardsOnDeactivation(false, stakerID, stakerSfcAddr, stakers[stakerID].stakeAmount, stakers[stakerID].stakeAmount);
 
         stakers[stakerID].deactivatedEpoch = currentEpoch();
         stakers[stakerID].deactivatedTime = block.timestamp;
@@ -710,8 +683,6 @@ contract Stakers is Ownable, StakersConstants, Version {
         uint256 newAmount = totalAmount - amount;
         require(maxDelegatedLimit(newAmount) >= stakers[stakerID].delegatedMe, "too much delegations");
         require(withdrawalRequests[stakerSfcAddr][wrID].amount == 0, "wrID already exists");
-
-        _mayBurnRewardsOnDeactivation(false, stakerID, stakerSfcAddr, amount, totalAmount);
 
         stakers[stakerID].stakeAmount -= amount;
         withdrawalRequests[stakerSfcAddr][wrID].stakerID = stakerID;
@@ -772,8 +743,6 @@ contract Stakers is Ownable, StakersConstants, Version {
         _checkNotDeactivatedDelegation(delegator, toStakerID);
         _checkClaimedDelegation(delegator, toStakerID);
 
-        _mayBurnRewardsOnDeactivation(true, toStakerID, delegator, delegation.amount, delegation.amount);
-
         delegation.deactivatedEpoch = currentEpoch();
         delegation.deactivatedTime = block.timestamp;
         uint256 delegationAmount = delegation.amount;
@@ -817,8 +786,6 @@ contract Stakers is Ownable, StakersConstants, Version {
         require(amount + minDelegation() <= totalAmount, "must leave at least minDelegation");
 
         require(withdrawalRequests[delegator][wrID].amount == 0, "wrID already exists");
-
-        _mayBurnRewardsOnDeactivation(true, toStakerID, delegator, amount, totalAmount);
 
         uint256 penalty = 0;
         if (_isLockedDelegation(delegator, toStakerID)) {

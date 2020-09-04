@@ -29,7 +29,6 @@ contract LegacyStaker is UnitTestStakers {
         address delegator = msg.sender;
 
         uint256 stakerID = legacyDelegations[delegator].toStakerID;
-        _mayBurnRewardsOnDeactivation(true, stakerID, delegator, legacyDelegations[delegator].amount, legacyDelegations[delegator].amount);
 
         legacyDelegations[delegator].deactivatedEpoch = currentEpoch();
         legacyDelegations[delegator].deactivatedTime = block.timestamp;
