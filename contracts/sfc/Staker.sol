@@ -889,7 +889,7 @@ contract Stakers is Ownable, StakersConstants, Version {
     event LockingStake(uint256 indexed stakerID, uint256 fromEpoch, uint256 endTime);
 
     function lockUpStake(uint256 lockDuration) external {
-        require(firstLockedUpEpoch != 0 && firstLockedUpEpoch <= currentSealedEpoch + 1, "feature was not activated");
+        require(isLockingFeatureActive(currentEpoch()), "feature was not activated");
         uint256 stakerID = _sfcAddressToStakerID(msg.sender);
         _checkActiveStaker(stakerID);
         require(lockDuration >= minLockupDuration() && lockDuration <= maxLockupDuration(), "incorrect duration");
@@ -904,7 +904,7 @@ contract Stakers is Ownable, StakersConstants, Version {
     event LockingDelegation(address indexed delegator, uint256 indexed stakerID, uint256 fromEpoch, uint256 endTime);
 
     function lockUpDelegation(uint256 lockDuration, uint256 toStakerID) external {
-        require(firstLockedUpEpoch != 0 && firstLockedUpEpoch <= currentSealedEpoch + 1, "feature was not activated");
+        require(isLockingFeatureActive(currentEpoch()), "feature was not activated");
         address delegator = msg.sender;
         _checkAndUpgradeDelegationStorage(delegator);
         _checkExistDelegation(delegator, toStakerID);
