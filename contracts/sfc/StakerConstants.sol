@@ -20,35 +20,35 @@ contract StakersConstants {
     }
 
     /**
-     * @dev Minimum amount of stake for an increase, i.e., 1 FTM 
+     * @dev Minimum amount of stake for an increase, i.e., 1 FTM
      */
     function minStakeIncrease() public pure returns (uint256) {
         return 1 * 1e18;
     }
 
     /**
-     * @dev Minimum amount of stake for a decrease, i.e., 1 FTM 
+     * @dev Minimum amount of stake for a decrease, i.e., 1 FTM
      */
     function minStakeDecrease() public pure returns (uint256) {
         return 1 * 1e18;
     }
 
     /**
-     * @dev Minimum amount for a delegation, i.e., 1 FTM 
+     * @dev Minimum amount for a delegation, i.e., 1 FTM
      */
     function minDelegation() public pure returns (uint256) {
         return 1 * 1e18;
     }
 
     /**
-     * @dev Minimum amount to increase a delegation, i.e., 1 FTM 
+     * @dev Minimum amount to increase a delegation, i.e., 1 FTM
      */
     function minDelegationIncrease() public pure returns (uint256) {
         return 1 * 1e18;
     }
 
     /**
-     * @dev Minimum amount to decrease a delegation, i.e., 1 FTM 
+     * @dev Minimum amount to decrease a delegation, i.e., 1 FTM
      */
     function minDelegationDecrease() public pure returns (uint256) {
         return 1 * 1e18;

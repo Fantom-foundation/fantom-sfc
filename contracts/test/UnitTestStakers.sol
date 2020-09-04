@@ -61,14 +61,6 @@ contract UnitTestStakers is Stakers {
         super._createDelegation(msg.sender, to);
     }
 
-    function makeEpochSnapshots() external returns (uint256) {
-        return _makeEpochSnapshots(0, true);
-    }
-
-    function makeEpochSnapshots(uint256 optionalDuration) external returns (uint256) {
-        return _makeEpochSnapshots(optionalDuration, true);
-    }
-
     function makeEpochSnapshots(uint256 optionalDuration, bool addTxPower) external returns (uint256) {
         return _makeEpochSnapshots(optionalDuration, addTxPower);
     }
@@ -118,24 +110,24 @@ contract UnitTestStakers is Stakers {
     }
 
     function calcValidatorEpochReward(uint256 stakerID, uint256 epoch, uint256 commission) external view returns (uint256) {
-        _RewardsSet memory rewards = _calcValidatorEpochReward(stakerID, epoch, commission);
+        _RewardsSet memory rewards = _calcValidatorEpochReward(stakerID, epoch, commission, 0);
         return rewards.unlockedReward + rewards.lockupBaseReward + rewards.lockupExtraReward;
     }
 
     function calcValidatorLockupRewards(uint256 stakerID, uint256 _fromEpoch, uint256 maxEpochs) external view returns (uint256 unlockedReward, uint256 lockupBaseReward, uint256 lockupExtraReward, uint256 burntReward, uint256 fromEpoch, uint256 untilEpoch) {
         _RewardsSet memory rewards;
-        (rewards, fromEpoch, untilEpoch) = _calcValidatorLockupRewards(stakerID, _fromEpoch, maxEpochs);
+        (rewards, fromEpoch, untilEpoch) = _calcValidatorLockupRewards(stakerID, _fromEpoch, maxEpochs, false);
         return (rewards.unlockedReward, rewards.lockupBaseReward, rewards.lockupExtraReward, rewards.burntReward, fromEpoch, untilEpoch);
     }
 
     function calcDelegationLockupRewards(address addr, uint256 toStakerID, uint256 _fromEpoch, uint256 maxEpochs) external view returns (uint256 unlockedReward, uint256 lockupBaseReward, uint256 lockupExtraReward, uint256 burntReward, uint256 fromEpoch, uint256 untilEpoch) {
         _RewardsSet memory rewards;
-        (rewards, fromEpoch, untilEpoch) = _calcDelegationLockupRewards(addr, toStakerID, _fromEpoch, maxEpochs);
+        (rewards, fromEpoch, untilEpoch) = _calcDelegationLockupRewards(addr, toStakerID, _fromEpoch, maxEpochs, false);
         return (rewards.unlockedReward, rewards.lockupBaseReward, rewards.lockupExtraReward, rewards.burntReward, fromEpoch, untilEpoch);
     }
 
     function calcDelegationEpochReward(address delegator, uint256 toStakerID, uint256 epoch, uint256, uint256 commission) external view returns (uint256) {
-        _RewardsSet memory rewards = _calcDelegationEpochReward(delegator, toStakerID, epoch, commission);
+        _RewardsSet memory rewards = _calcDelegationEpochReward(delegator, toStakerID, epoch, commission, 0);
         return rewards.unlockedReward + rewards.lockupBaseReward + rewards.lockupExtraReward;
     }
 

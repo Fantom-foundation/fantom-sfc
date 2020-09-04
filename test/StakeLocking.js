@@ -20,8 +20,8 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
 
   describe ('Locking stake tests', async () => {
     it('should start \"locked stake\" feature', async () => {
-      await this.stakers.makeEpochSnapshots(5);
-      await this.stakers.makeEpochSnapshots(5);
+      await this.stakers.makeEpochSnapshots(5, true);
+      await this.stakers.makeEpochSnapshots(5, true);
       const sfc_owner = firstStaker; // first address from contract parameters
       const other_address = secondStaker;
       const currentEpoch = await this.stakers.currentEpoch.call();
@@ -31,8 +31,8 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       await expectRevert(this.stakers.startLockedUp(currentEpoch.sub((new BN('1'))), { from: sfc_owner }), "can't start in the past");
       await this.stakers.startLockedUp(currentEpoch, { from: sfc_owner });
       expect(await this.stakers.firstLockedUpEpoch.call()).to.be.bignumber.equal(currentEpoch);
-      await this.stakers.makeEpochSnapshots(5);
-      await this.stakers.makeEpochSnapshots(5);
+      await this.stakers.makeEpochSnapshots(5, true);
+      await this.stakers.makeEpochSnapshots(5, true);
       const newEpoch = await this.stakers.currentEpoch.call();
       await expectRevert(this.stakers.startLockedUp(newEpoch, { from: sfc_owner }), "feature was started");
     });
@@ -164,7 +164,7 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
 
       // first locking has ended
       time.increase(duration.sub(new BN("9999")));
-      await this.stakers.makeEpochSnapshots(); // epoch #7
+      await this.stakers.makeEpochSnapshots(0, true); // epoch #7
       epoch = new BN('8');
       await this.stakers.makeEpochSnapshots(10000, false); // epoch #8
       // locked up stakers receive 100% reward
@@ -343,7 +343,7 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
 
       // first locking has ended
       time.increase(86400 * 14 - 9900);
-      await this.stakers.makeEpochSnapshots(); // epoch #7
+      await this.stakers.makeEpochSnapshots(0, true); // epoch #7
       epoch = new BN('8');
       await this.stakers.makeEpochSnapshots(10000, false); // epoch #8
       // locked up stakers/delegators receive 30% + 70%*14/365 = 32.68% reward
@@ -749,6 +749,100 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
         epoch: new BN('7')
       });
       await expectRevert(this.stakers.claimDelegationRewards(1, firstStakerID, { from: firstDepositor }), "delegation is deactivated");
+    });
+
+    it('should claim compound rewards', async () => {
+      await this.stakers._createStake({
+        from: firstStaker,
+        value: ether('1.0')
+      });
+      let firstStakerID = await this.stakers.getStakerID(firstStaker);
+      await this.stakers.createDelegation(firstStakerID, {
+        from: firstDepositor,
+        value: ether('5.0')
+      });
+
+      await this.stakers.makeEpochSnapshots(10000000000, false); // epoch #1
+
+      const delRewards1 = await this.stakers.calcDelegationRewards(firstDepositor, firstStakerID, 0, 1);
+      expect(delRewards1[0]).to.be.bignumber.equal(ether('0.708333333333333333'));
+      const delCompRewards1 = await this.stakers.calcDelegationCompoundRewards(firstDepositor, firstStakerID, 0, 1);
+      expect(delCompRewards1[0]).to.be.bignumber.equal(ether('0.708333333333333333'));
+      const valRewards1 = await this.stakers.calcValidatorRewards(firstStakerID, 0, 1);
+      expect(valRewards1[0]).to.be.bignumber.equal(ether('0.291666666666666666'));
+      const valCompRewards1 = await this.stakers.calcValidatorCompoundRewards(firstStakerID, 0, 1);
+      expect(valCompRewards1[0]).to.be.bignumber.equal(ether('0.291666666666666666'));
+
+      await this.stakers.makeEpochSnapshots(10000000000, false); // epoch #2
+
+      const delRewards2 = await this.stakers.calcDelegationRewards(firstDepositor, firstStakerID, 0, 2);
+      expect(delRewards2[0]).to.be.bignumber.equal(ether('1.416666666666666666'));
+      const delCompRewards2 = await this.stakers.calcDelegationCompoundRewards(firstDepositor, firstStakerID, 0, 2);
+      expect(delCompRewards2[0]).to.be.bignumber.equal(ether('1.431625258799171842'));
+      const valRewards2 = await this.stakers.calcValidatorRewards(firstStakerID, 0, 2);
+      expect(valRewards2[0]).to.be.bignumber.equal(ether('0.583333333333333332'));
+      const valCompRewards2 = await this.stakers.calcValidatorCompoundRewards(firstStakerID, 0, 2);
+      expect(valCompRewards2[0]).to.be.bignumber.equal(ether('0.616169977924944811'));
+
+      await this.stakers.makeEpochSnapshots(10000000000, false); // epoch #3
+
+      const delRewards3 = await this.stakers.calcDelegationRewards(firstDepositor, firstStakerID, 0, 3);
+      expect(delRewards3[0]).to.be.bignumber.equal(ether('2.124999999999999999'));
+      const delCompRewards3 = await this.stakers.calcDelegationCompoundRewards(firstDepositor, firstStakerID, 0, 3);
+      expect(delCompRewards3[0]).to.be.bignumber.equal(ether('2.167249201019134371'));
+      const valRewards3 = await this.stakers.calcValidatorRewards(firstStakerID, 0, 3);
+      expect(valRewards3[0]).to.be.bignumber.equal(ether('0.874999999999999998'));
+      const valCompRewards3 = await this.stakers.calcValidatorCompoundRewards(firstStakerID, 0, 3);
+      expect(valCompRewards3[0]).to.be.bignumber.equal(ether('0.973804377557926418'));
+
+      // claim
+      const balanceStakersBefore = await balance.current(this.stakers.address);
+
+      await this.stakers.claimDelegationCompoundRewards(3, firstStakerID, {from: firstDepositor});
+      await this.stakers.claimValidatorCompoundRewards(3, {from: firstStaker});
+
+      const balanceStakersAfter = await balance.current(this.stakers.address);
+      expect(balanceStakersAfter).to.be.bignumber.equal(balanceStakersBefore); // no FTM were sent
+
+      const firstDepositionInfo = await getDeposition(firstDepositor, firstStakerID);
+      expect(firstDepositionInfo.amount).to.be.bignumber.equal(ether('7.167249201019134371'));
+      const firstStakerInfo = await getStaker(firstStakerID);
+      expect(firstStakerInfo.stakeAmount).to.be.bignumber.equal(ether('1.973804377557926418'));
+      expect(firstStakerInfo.delegatedMe).to.be.bignumber.equal(ether('7.167249201019134371'));
+      expect(await this.stakers.delegationsTotalAmount()).to.be.bignumber.equal(ether('7.167249201019134371'));
+      expect(await this.stakers.stakeTotalAmount()).to.be.bignumber.equal(ether('1.973804377557926418'));
+    });
+
+    it('should claim compound rewards epoch-by-epoch', async () => {
+      await this.stakers._createStake({
+        from: firstStaker,
+        value: ether('1.0')
+      });
+      let firstStakerID = await this.stakers.getStakerID(firstStaker);
+      await this.stakers.createDelegation(firstStakerID, {
+        from: firstDepositor,
+        value: ether('5.0')
+      });
+
+      // claim
+      const balanceStakersBefore = await balance.current(this.stakers.address);
+
+      for (let i = 0; i < 3; i++) {
+        await this.stakers.makeEpochSnapshots(10000000000, false);
+        await this.stakers.claimDelegationCompoundRewards(1, firstStakerID, {from: firstDepositor});
+        await this.stakers.claimValidatorCompoundRewards(1, {from: firstStaker});
+      }
+
+      const balanceStakersAfter = await balance.current(this.stakers.address);
+      expect(balanceStakersAfter).to.be.bignumber.equal(balanceStakersBefore); // no FTM were sent
+
+      const firstDepositionInfo = await getDeposition(firstDepositor, firstStakerID);
+      expect(firstDepositionInfo.amount).to.be.bignumber.equal(ether('7.081646205357142856'));
+      const firstStakerInfo = await getStaker(firstStakerID);
+      expect(firstStakerInfo.stakeAmount).to.be.bignumber.equal(ether('1.918353794642857141'));
+      expect(firstStakerInfo.delegatedMe).to.be.bignumber.equal(ether('7.081646205357142856'));
+      expect(await this.stakers.delegationsTotalAmount()).to.be.bignumber.equal(ether('7.081646205357142856'));
+      expect(await this.stakers.stakeTotalAmount()).to.be.bignumber.equal(ether('1.918353794642857141'));
     });
   });
 });
