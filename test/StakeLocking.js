@@ -217,8 +217,13 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       await expectRevert(this.stakers.lockUpStake(maxDuration.add(new BN("1")), { from: secondStaker }), "incorrect duration");
       await this.stakers.lockUpStake(maxDuration, { from: secondStaker });
       await expectRevert(this.stakers.lockUpStake(minDuration, { from: secondStaker }), "already locked up");
-      await expectRevert(this.stakers.lockUpStake(maxDuration, { from: firstStaker }), "previous lockup rewards rewards are not claimed");
+      await expectRevert(this.stakers.lockUpStake(maxDuration, { from: firstStaker }), "not all lockup rewards claimed");
       await this.stakers.discardValidatorRewards({ from: firstStaker });
+      await expectRevert(this.stakers.lockUpStake(maxDuration, { from: firstStaker }), "not all lockup rewards claimed");
+      time.increase(maxDuration.add(new BN("100")));
+      await this.stakers.makeEpochSnapshots(10000, false); // epoch #3
+      await this.stakers.discardValidatorRewards({ from: firstStaker });
+      await this.stakers.makeEpochSnapshots(10000, false); // epoch #4
       await this.stakers.lockUpStake(maxDuration, { from: firstStaker });
     });
 
@@ -399,15 +404,19 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       await this.stakers.makeEpochSnapshots(10000, false); // epoch #2
 
       await this.stakers.lockUpStake(maxDuration, { from: firstStaker });
-      await this.stakers.lockUpStake(minDuration.mul(new BN("2")), { from: secondStaker });
+      await this.stakers.lockUpStake(minDuration.mul(new BN("3")), { from: secondStaker });
 
       await expectRevert(this.stakers.lockUpDelegation(minDuration.sub(new BN("1")), secondStakerID, { from: firstDepositor }), "incorrect duration");
       await this.stakers.lockUpDelegation(minDuration, secondStakerID, { from: firstDepositor });
       await expectRevert(this.stakers.lockUpDelegation(maxDuration.add(new BN("1")), firstStakerID, { from: secondDepositor }), "incorrect duration");
       await this.stakers.lockUpDelegation(maxDuration.sub(new BN("1")), firstStakerID, { from: secondDepositor });
       await expectRevert(this.stakers.lockUpDelegation(minDuration, firstStakerID, { from: secondDepositor }), "already locked up");
-      await expectRevert(this.stakers.lockUpDelegation(minDuration.mul(new BN("3")), secondStakerID, { from: firstDepositor }), "staker's locking will finish first");
-      await expectRevert(this.stakers.lockUpDelegation(minDuration.add(new BN("2")), secondStakerID, { from: firstDepositor }), "previous lockup rewards rewards are not claimed");
+      await expectRevert(this.stakers.lockUpDelegation(minDuration.mul(new BN("4")), secondStakerID, { from: firstDepositor }), "staker's locking will finish first");
+      await expectRevert(this.stakers.lockUpDelegation(minDuration.add(new BN("2")), secondStakerID, { from: firstDepositor }), "not all lockup rewards claimed");
+      await this.stakers.discardDelegationRewards(secondStakerID, { from: firstDepositor });
+      await expectRevert(this.stakers.lockUpDelegation(minDuration.add(new BN("2")), secondStakerID, { from: firstDepositor }), "not all lockup rewards claimed");
+      time.increase(minDuration.add(new BN("100")));
+      await this.stakers.makeEpochSnapshots(10000, false); // epoch #3
       await this.stakers.discardDelegationRewards(secondStakerID, { from: firstDepositor });
       await this.stakers.lockUpDelegation(minDuration.add(new BN("2")), secondStakerID, { from: firstDepositor });
     });
@@ -726,7 +735,7 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       await this.stakers.increaseDelegation(firstStakerID, { from: firstDepositor, value: ether('2.0') });
 
       // lockup again
-      await this.stakers.lockUpStake(duration.add(new BN("5")), { from: firstStaker });
+      await this.stakers.lockUpStake(duration.add(new BN("10005")), { from: firstStaker });
       await this.stakers.lockUpDelegation(duration, firstStakerID, { from: firstDepositor });
       await this.stakers.makeEpochSnapshots(10000, false); // epoch #6
       await checkClaimReward(firstStaker, firstStakerID, false, {

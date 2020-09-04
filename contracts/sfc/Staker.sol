@@ -427,7 +427,7 @@ contract Stakers is Ownable, StakersConstants, Version {
             fullReward = rawReward.mul(weightedTotalStake).div(totalStake);
         }
         bool isLockingFeatureActive = firstLockedUpEpoch > 0 && epoch >= firstLockedUpEpoch;
-        bool isLockedUp = lockedStakes[stakerID].fromEpoch <= epoch && lockedStakes[stakerID].endTime > epochSnapshots[epoch - 1].endTime;
+        bool isLockedUp = lockedStakes[stakerID].fromEpoch <= epoch && lockedStakes[stakerID].endTime > epochStartTime(epoch);
 
         return _calcLockupReward(fullReward, isLockingFeatureActive, isLockedUp);
     }
@@ -450,7 +450,7 @@ contract Stakers is Ownable, StakersConstants, Version {
             fullReward = rawReward.mul(weightedTotalStake).div(totalStake);
         }
         bool isLockingFeatureActive = firstLockedUpEpoch > 0 && epoch >= firstLockedUpEpoch;
-        bool isLockedUp = lockedDelegations[delegator][toStakerID].fromEpoch <= epoch && lockedDelegations[delegator][toStakerID].endTime > epochSnapshots[epoch - 1].endTime;
+        bool isLockedUp = lockedDelegations[delegator][toStakerID].fromEpoch <= epoch && lockedDelegations[delegator][toStakerID].endTime > epochStartTime(epoch);
 
         return _calcLockupReward(fullReward, isLockingFeatureActive, isLockedUp);
     }
@@ -899,13 +899,10 @@ contract Stakers is Ownable, StakersConstants, Version {
         uint256 stakerID = _sfcAddressToStakerID(msg.sender);
         _checkActiveStaker(stakerID);
         require(lockDuration >= minLockupDuration() && lockDuration <= maxLockupDuration(), "incorrect duration");
-        require(lockedStakes[stakerID].endTime < block.timestamp.add(lockDuration), "already locked up");
         uint256 endTime = block.timestamp.add(lockDuration);
+        require(lockedStakes[stakerID].endTime < endTime, "already locked up");
+        _checkClaimedStakerLockupRewards(stakerID);
 
-        uint256 prevLockupEpoch = lockedStakes[stakerID].fromEpoch;
-        if (prevLockupEpoch != 0) {
-            require(stakers[stakerID].paidUntilEpoch >= prevLockupEpoch - 1, "previous lockup rewards rewards are not claimed");
-        }
         lockedStakes[stakerID] = LockedAmount(currentEpoch(), endTime, lockDuration);
         emit LockingStake(stakerID, currentEpoch(), endTime);
     }
@@ -922,11 +919,8 @@ contract Stakers is Ownable, StakersConstants, Version {
         uint256 endTime = block.timestamp.add(lockDuration);
         require(lockedStakes[toStakerID].endTime >= endTime, "staker's locking will finish first");
         require(lockedDelegations[delegator][toStakerID].endTime < endTime, "already locked up");
+        _checkClaimedDelegationLockupRewards(delegator, toStakerID);
 
-        uint256 prevLockupEpoch = lockedDelegations[delegator][toStakerID].fromEpoch;
-        if (prevLockupEpoch != 0) {
-            require(delegations[delegator][toStakerID].paidUntilEpoch >= prevLockupEpoch - 1, "previous lockup rewards rewards are not claimed");
-        }
         if (!_isLockedDelegation(delegator, toStakerID)) {
             // forgive non-paid penalty from previous lockup period, if any
             delete delegationEarlyWithdrawalPenalty[delegator][toStakerID];
@@ -989,6 +983,20 @@ contract Stakers is Ownable, StakersConstants, Version {
 
     function _checkClaimedDelegation(address delegator, uint256 toStakerID) view internal {
         require(delegations[delegator][toStakerID].paidUntilEpoch == currentSealedEpoch, "not all rewards claimed");
+    }
+
+    function epochStartTime(uint256 epoch) view internal returns (uint256) {
+        return epochSnapshots[epoch - 1].endTime;
+    }
+
+    function _checkClaimedDelegationLockupRewards(address delegator, uint256 toStakerID) view internal {
+        uint256 claimedEpoch = delegations[delegator][toStakerID].paidUntilEpoch;
+        require(epochStartTime(claimedEpoch + 1) >= lockedDelegations[delegator][toStakerID].endTime, "not all lockup rewards claimed");
+    }
+
+    function _checkClaimedStakerLockupRewards(uint256 stakerID) view internal {
+        uint256 claimedEpoch = stakers[stakerID].paidUntilEpoch;
+        require(epochStartTime(claimedEpoch + 1) >= lockedStakes[stakerID].endTime, "not all lockup rewards claimed");
     }
 
     function _isLockedDelegation(address delegator, uint256 toStakerID) view internal returns (bool) {
