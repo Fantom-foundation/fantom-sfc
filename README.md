@@ -71,6 +71,8 @@ Compiling your contracts...
       ✓ should adjust penalty if penalty is bigger than delegated stake (609ms)
       ✓ should subtract penalty if prepareToWithdrawDelegationPartial is called earlier than locked time is passed (1022ms)
       ✓ should claim lockup rewards (2843ms)
+      ✓ should claim compound rewards (670ms)
+      ✓ should claim compound rewards epoch-by-epoch (508ms)
 
   Contract: SFC
     Methods tests
@@ -91,5 +93,5 @@ Compiling your contracts...
       ✓ checking withdrawDelegation function (1299ms)
 
 
-  30 passing (24s)
+  32 passing (24s)
 ```
