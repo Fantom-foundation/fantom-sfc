@@ -175,21 +175,11 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       expect(await this.stakers.calcDelegationEpochReward(thirdDepositor, firstStakerID, epoch, ether('10.0'), this.validatorComission)).to.be.bignumber.equal(ether('0.000000134210526315'));
       expect(await this.stakers.calcDelegationEpochReward(firstDepositor, firstStakerID, epoch, ether('5.0'), this.validatorComission)).to.be.bignumber.equal(ether('0.000000067105263157'));
 
-      // second locking is still active
+      // second locking has ended
       epoch = new BN('9');
       time.increase(10002);
       await this.stakers.makeEpochSnapshots(10000, false); // epoch #9
       // locked up stakers receive 100% reward
-      expect(await this.stakers.calcValidatorEpochReward(secondStakerID, epoch, this.validatorComission)).to.be.bignumber.equal(ether('0.000000052631578947'));
-      // reduce reward by 70% for unlocked stakers/delegators
-      expect(await this.stakers.calcValidatorEpochReward(firstStakerID, epoch, this.validatorComission)).to.be.bignumber.equal(ether('0.000000051315789473'));
-      expect(await this.stakers.calcValidatorEpochReward(thirdStakerID, epoch, this.validatorComission)).to.be.bignumber.equal(ether('0.000000031578947368'));
-      expect(await this.stakers.calcDelegationEpochReward(thirdDepositor, firstStakerID, epoch, ether('10.0'), this.validatorComission)).to.be.bignumber.equal(ether('0.000000134210526315'));
-      expect(await this.stakers.calcDelegationEpochReward(firstDepositor, firstStakerID, epoch, ether('5.0'), this.validatorComission)).to.be.bignumber.equal(ether('0.000000067105263157'));
-
-      // second locking has ended
-      epoch = new BN('10');
-      await this.stakers.makeEpochSnapshots(10000, false); // epoch #10
       // reduce reward by 70% for unlocked stakers/delegators
       expect(await this.stakers.calcValidatorEpochReward(firstStakerID, epoch, this.validatorComission)).to.be.bignumber.equal(ether('0.000000051315789473'));
       expect(await this.stakers.calcValidatorEpochReward(secondStakerID, epoch, this.validatorComission)).to.be.bignumber.equal(ether('0.000000015789473684'));
@@ -217,14 +207,16 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       await expectRevert(this.stakers.lockUpStake(maxDuration.add(new BN("1")), { from: secondStaker }), "incorrect duration");
       await this.stakers.lockUpStake(maxDuration, { from: secondStaker });
       await expectRevert(this.stakers.lockUpStake(minDuration, { from: secondStaker }), "already locked up");
+      await expectRevert(this.stakers.lockUpStake(maxDuration, { from: firstStaker }), "already locked up");
+      time.increase(maxDuration.add(new BN("3")));
       await expectRevert(this.stakers.lockUpStake(maxDuration, { from: firstStaker }), "not all lockup rewards claimed");
-      await this.stakers.discardValidatorRewards({ from: firstStaker });
-      await expectRevert(this.stakers.lockUpStake(maxDuration, { from: firstStaker }), "not all lockup rewards claimed");
-      time.increase(maxDuration.add(new BN("100")));
       await this.stakers.makeEpochSnapshots(10000, false); // epoch #3
+      await expectRevert(this.stakers.lockUpStake(maxDuration, { from: firstStaker }), "not all lockup rewards claimed");
       await this.stakers.discardValidatorRewards({ from: firstStaker });
-      await this.stakers.makeEpochSnapshots(10000, false); // epoch #4
       await this.stakers.lockUpStake(maxDuration, { from: firstStaker });
+      await this.stakers.discardValidatorRewards({ from: secondStaker });
+      await this.stakers.makeEpochSnapshots(10000, false); // epoch #4
+      await this.stakers.lockUpStake(maxDuration, { from: secondStaker });
     });
 
     it('should not call prepareToWithdrawStake, until locked time is passed', async () => {
@@ -362,21 +354,10 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       expect(await this.stakers.calcValidatorEpochReward(secondStakerID, epoch, this.validatorComission)).to.be.bignumber.equal(ether('0.000000015789473684'));
       expect(await this.stakers.calcValidatorEpochReward(thirdStakerID, epoch, this.validatorComission)).to.be.bignumber.equal(ether('0.000000031578947368'));
 
-      // second locking is still active
+      // second locking has ended
       epoch = new BN('9');
       time.increase(10102);
       await this.stakers.makeEpochSnapshots(10000, false); // epoch #9
-      // locked up stakers/delegators receive 100% reward
-      expect(await this.stakers.calcValidatorEpochReward(firstStakerID, epoch, this.validatorComission)).to.be.bignumber.equal(ether('0.000000171052631578'));
-      expect(await this.stakers.calcDelegationEpochReward(thirdDepositor, firstStakerID, epoch, ether('10.0'), this.validatorComission)).to.be.bignumber.equal(ether('0.000000447368421052'));
-      // reduce reward by 70% for unlocked stakers/delegators
-      expect(await this.stakers.calcDelegationEpochReward(firstDepositor, firstStakerID, epoch, ether('5.0'), this.validatorComission)).to.be.bignumber.equal(ether('0.000000067105263157'));
-      expect(await this.stakers.calcValidatorEpochReward(secondStakerID, epoch, this.validatorComission)).to.be.bignumber.equal(ether('0.000000015789473684'));
-      expect(await this.stakers.calcValidatorEpochReward(thirdStakerID, epoch, this.validatorComission)).to.be.bignumber.equal(ether('0.000000031578947368'));
-
-      // second locking has ended
-      epoch = new BN('10');
-      await this.stakers.makeEpochSnapshots(10000, false); // epoch #10
       // reduce reward by 70% for unlocked stakers/delegators
       expect(await this.stakers.calcValidatorEpochReward(firstStakerID, epoch, this.validatorComission)).to.be.bignumber.equal(ether('0.000000051315789473'));
       expect(await this.stakers.calcValidatorEpochReward(secondStakerID, epoch, this.validatorComission)).to.be.bignumber.equal(ether('0.000000015789473684'));
@@ -412,11 +393,11 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       await this.stakers.lockUpDelegation(maxDuration.sub(new BN("1")), firstStakerID, { from: secondDepositor });
       await expectRevert(this.stakers.lockUpDelegation(minDuration, firstStakerID, { from: secondDepositor }), "already locked up");
       await expectRevert(this.stakers.lockUpDelegation(minDuration.mul(new BN("4")), secondStakerID, { from: firstDepositor }), "staker's locking will finish first");
+      await expectRevert(this.stakers.lockUpDelegation(minDuration.add(new BN("2")), secondStakerID, { from: firstDepositor }), "already locked up");
+      time.increase(minDuration.add(new BN("3")));
       await expectRevert(this.stakers.lockUpDelegation(minDuration.add(new BN("2")), secondStakerID, { from: firstDepositor }), "not all lockup rewards claimed");
-      await this.stakers.discardDelegationRewards(secondStakerID, { from: firstDepositor });
-      await expectRevert(this.stakers.lockUpDelegation(minDuration.add(new BN("2")), secondStakerID, { from: firstDepositor }), "not all lockup rewards claimed");
-      time.increase(minDuration.add(new BN("100")));
       await this.stakers.makeEpochSnapshots(10000, false); // epoch #3
+      await expectRevert(this.stakers.lockUpDelegation(minDuration.add(new BN("2")), secondStakerID, { from: firstDepositor }), "not all lockup rewards claimed");
       await this.stakers.discardDelegationRewards(secondStakerID, { from: firstDepositor });
       await this.stakers.lockUpDelegation(minDuration.add(new BN("2")), secondStakerID, { from: firstDepositor });
     });
@@ -654,7 +635,6 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       // locking has ended
       time.increase(86400 * 14 + 10);
       await this.stakers.makeEpochSnapshots(10000, false); // epoch #4
-      await this.stakers.makeEpochSnapshots(10000, false); // epoch #5
 
       //console.log(await this.stakers.calcValidatorLockupRewards(firstStakerID, 1, 1));
       //console.log(await this.stakers.calcDelegationLockupRewards(firstDepositor, firstStakerID, 1, 1));
@@ -680,18 +660,11 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
         epoch: new BN('3')
       });
       await checkClaimReward(firstStaker, firstStakerID, false, {
-        unlockedReward: ether('0.0'),
-        lockupBaseReward: ether('0.000000087499999999'),
-        lockupExtraReward: ether('0.000000204166666667'),
-        burntReward: ether('0.0'),
-        epoch: new BN('4')
-      });
-      await checkClaimReward(firstStaker, firstStakerID, false, {
         unlockedReward: ether('0.000000087499999999'),
         lockupBaseReward: ether('0.0'),
         lockupExtraReward: ether('0.0'),
         burntReward: ether('0.000000204166666667'),
-        epoch: new BN('5')
+        epoch: new BN('4')
       });
 
       await checkClaimReward(firstDepositor, firstStakerID, true, {
@@ -716,18 +689,11 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
         epoch: new BN('3')
       });
       await checkClaimReward(firstDepositor, firstStakerID, true, {
-        unlockedReward: ether('0.0'),
-        lockupBaseReward: ether('0.000000212499999999'),
-        lockupExtraReward: ether('0.000000495833333334'),
-        burntReward: ether('0.0'),
-        epoch: new BN('4')
-      });
-      await checkClaimReward(firstDepositor, firstStakerID, true, {
         unlockedReward: ether('0.000000212499999999'),
         lockupBaseReward: ether('0.0'),
         lockupExtraReward: ether('0.0'),
         burntReward: ether('0.000000495833333334'),
-        epoch: new BN('5')
+        epoch: new BN('4')
       });
 
       // increase stake
@@ -737,50 +703,50 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       // lockup again
       await this.stakers.lockUpStake(duration.add(new BN("10005")), { from: firstStaker });
       await this.stakers.lockUpDelegation(duration, firstStakerID, { from: firstDepositor });
-      await this.stakers.makeEpochSnapshots(10000, false); // epoch #6
+      await this.stakers.makeEpochSnapshots(10000, false); // epoch #5
       await checkClaimReward(firstStaker, firstStakerID, false, {
         unlockedReward: ether('0.0'),
         lockupBaseReward: ether('0.0000001215'),
         lockupExtraReward: ether('0.0000002835'),
         burntReward: ether('0.0'),
-        epoch: new BN('6')
+        epoch: new BN('5')
       });
       await checkClaimReward(firstDepositor, firstStakerID, true, {
         unlockedReward: ether('0.0'),
         lockupBaseReward: ether('0.0000001785'),
         lockupExtraReward: ether('0.0000004165'),
         burntReward: ether('0.0'),
-        epoch: new BN('6')
+        epoch: new BN('5')
       });
 
       // partial withdrawal
       const wrID1 = new BN('1');
       await this.stakers.prepareToWithdrawDelegationPartial(wrID1, firstStakerID, ether('1.0'), { from: firstDepositor });
-      await this.stakers.makeEpochSnapshots(10000, false); // epoch #7
+      await this.stakers.makeEpochSnapshots(10000, false); // epoch #6
       await checkClaimReward(firstStaker, firstStakerID, false, {
         unlockedReward: ether('0.0'),
         lockupBaseReward: ether('0.000000129999999999'),
         lockupExtraReward: ether('0.000000303333333334'),
         burntReward: ether('0.0'),
-        epoch: new BN('7')
+        epoch: new BN('6')
       });
       await checkClaimReward(firstDepositor, firstStakerID, true, {
         unlockedReward: ether('0.0'),
         lockupBaseReward: ether('0.000000169999999999'),
         lockupExtraReward: ether('0.000000396666666667'),
         burntReward: ether('0.0'),
-        epoch: new BN('7')
+        epoch: new BN('6')
       });
 
       // full withdrawal
       await this.stakers.prepareToWithdrawDelegation(firstStakerID, { from: firstDepositor });
-      await this.stakers.makeEpochSnapshots(10000, false); // epoch #8
+      await this.stakers.makeEpochSnapshots(10000, false); // epoch #7
       await checkClaimReward(firstStaker, firstStakerID, false, {
         unlockedReward: ether('0.0'),
         lockupBaseReward: ether('0.0000003'),
         lockupExtraReward: ether('0.0000007'),
         burntReward: ether('0.0'),
-        epoch: new BN('8')
+        epoch: new BN('7')
       });
       await expectRevert(this.stakers.claimDelegationRewards(1, firstStakerID, { from: firstDepositor }), "delegation is deactivated");
     });
