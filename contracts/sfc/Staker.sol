@@ -783,7 +783,9 @@ contract Stakers is Ownable, StakersConstants, Version {
         emit DeactivatedDelegation(delegator, toStakerID);
 
         _syncDelegation(delegator, toStakerID);
-        _syncStaker(toStakerID);
+        if (stakers[toStakerID].stakeAmount != 0) {
+            _syncStaker(toStakerID);
+        }
     }
 
     // prepareToWithdrawDelegation starts withdrawal for a part of delegation stake
@@ -828,7 +830,9 @@ contract Stakers is Ownable, StakersConstants, Version {
         emit CreatedWithdrawRequest(delegator, delegator, toStakerID, wrID, true, amount);
 
         _syncDelegation(delegator, toStakerID);
-        _syncStaker(toStakerID);
+        if (stakers[toStakerID].stakeAmount != 0) {
+            _syncStaker(toStakerID);
+        }
     }
 
     event WithdrawnDelegation(address indexed delegator, uint256 indexed toStakerID, uint256 penalty);
