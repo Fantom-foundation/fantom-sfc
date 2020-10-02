@@ -137,4 +137,5 @@ contract StakersConstants {
     event UpdatedBaseRewardPerSec(uint256 value);
     event UpdatedGasPowerAllocationRate(uint256 short, uint256 long);
     event UpdatedOfflinePenaltyThreshold(uint256 blocksNum, uint256 period);
+    event UpdatedMinGasPrice(uint256 minGasPrice);
 }
