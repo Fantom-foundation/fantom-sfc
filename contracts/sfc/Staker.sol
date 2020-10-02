@@ -928,6 +928,10 @@ contract Stakers is Ownable, StakersConstants, Version {
         emit UpdatedOfflinePenaltyThreshold(blocksNum, period);
     }
 
+    function _updateMinGasPrice(uint256 minGasPrice) onlyOwner external {
+        emit UpdatedMinGasPrice(minGasPrice);
+    }
+
     function startLockedUp(uint256 epochNum) onlyOwner external {
         require(epochNum > currentSealedEpoch, "can't start in the past");
         require(firstLockedUpEpoch == 0 || firstLockedUpEpoch > currentSealedEpoch, "feature was started");

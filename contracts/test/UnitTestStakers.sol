@@ -21,7 +21,7 @@ contract UnitTestStakers is Stakers {
     uint256[] public stakerIDsArr;
     DelegationID[] public delegationIDsArr;
 
-    function _baseRewardPerSecond() public pure returns (uint256) {
+    function _baseRewardPerSecond() internal pure returns (uint256) {
         return 0.0000000001 * 1e18;
     }
 
