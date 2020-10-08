@@ -932,6 +932,10 @@ contract Stakers is Ownable, StakersConstants, Version {
         emit UpdatedMinGasPrice(minGasPrice);
     }
 
+    function _activateNetworkUpgrade(uint256 minVersion) onlyOwner external {
+        emit NetworkUpgradeActivated(minVersion);
+    }
+
     function startLockedUp(uint256 epochNum) onlyOwner external {
         require(epochNum > currentSealedEpoch, "can't start in the past");
         require(firstLockedUpEpoch == 0 || firstLockedUpEpoch > currentSealedEpoch, "feature was started");
