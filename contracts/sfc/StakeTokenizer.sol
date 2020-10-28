@@ -2,13 +2,18 @@ pragma solidity ^0.5.0;
 
 import "./Staker.sol";
 import "../erc20/IERC20.sol";
+import "../common/Initializable.sol";
 
-contract StakeTokenizer is Ownable {
+contract StakeTokenizer is Ownable, Initializable {
     Stakers internal sfc = Stakers(address(0xFC00FACE00000000000000000000000000000000));
 
     mapping(address => mapping(uint256 => uint256)) public outstandingSFTM;
 
     address public sFTMTokenAddress;
+
+    function initialize() internal initializer {
+        _transferOwnership(msg.sender);
+    }
 
     function _updateSFTMTokenAddress(address addr) onlyOwner external {
         sFTMTokenAddress = addr;
