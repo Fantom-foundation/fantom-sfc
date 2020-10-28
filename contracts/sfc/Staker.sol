@@ -2,6 +2,7 @@ pragma solidity ^0.5.0;
 
 import "./SafeMath.sol";
 import "./StakerConstants.sol";
+import "./StakeTokenizer.sol";
 import "../ownership/Ownable.sol";
 import "../version/Version.sol";
 
@@ -154,6 +155,8 @@ contract Stakers is Ownable, StakersConstants, Version {
     mapping(address => mapping(uint256 => uint256)) public delegationEarlyWithdrawalPenalty; // delegator address, staker ID -> possible penalty for withdrawal
 
     uint256 public totalBurntLockupRewards;
+
+    address public stakeTokenizerAddress;
 
     struct _RewardsSet {
         uint256 unlockedReward;
@@ -672,6 +675,7 @@ contract Stakers is Ownable, StakersConstants, Version {
         _checkNotDeactivatedStaker(stakerID);
         _checkClaimedStaker(stakerID);
         require(!isStakeLockedUp(stakerID), "stake is locked");
+        StakeTokenizer(stakeTokenizerAddress).checkAllowedToWithdrawStake(stakerSfcAddr, stakerID);
 
         stakers[stakerID].deactivatedEpoch = currentEpoch();
         stakers[stakerID].deactivatedTime = block.timestamp;
@@ -688,6 +692,7 @@ contract Stakers is Ownable, StakersConstants, Version {
         _checkNotDeactivatedStaker(stakerID);
         _checkClaimedStaker(stakerID);
         require(!isStakeLockedUp(stakerID), "stake is locked");
+        StakeTokenizer(stakeTokenizerAddress).checkAllowedToWithdrawStake(stakerSfcAddr, stakerID);
         // avoid confusing wrID and amount
         require(amount >= minStakeDecrease(), "too small amount");
 
@@ -756,6 +761,7 @@ contract Stakers is Ownable, StakersConstants, Version {
         _checkAndUpgradeDelegationStorage(delegator);
         Delegation storage delegation = delegations[delegator][toStakerID];
         _checkNotDeactivatedDelegation(delegator, toStakerID);
+        StakeTokenizer(stakeTokenizerAddress).checkAllowedToWithdrawStake(delegator, toStakerID);
         _checkClaimedDelegation(delegator, toStakerID);
 
         delegation.deactivatedEpoch = currentEpoch();
@@ -794,6 +800,7 @@ contract Stakers is Ownable, StakersConstants, Version {
         _checkAndUpgradeDelegationStorage(delegator);
         Delegation storage delegation = delegations[delegator][toStakerID];
         _checkNotDeactivatedDelegation(delegator, toStakerID);
+        StakeTokenizer(stakeTokenizerAddress).checkAllowedToWithdrawStake(delegator, toStakerID);
         // previous rewards must be claimed because rewards calculation depends on current delegation amount
         _checkClaimedDelegation(delegator, toStakerID);
         // avoid confusing wrID and amount
@@ -936,6 +943,10 @@ contract Stakers is Ownable, StakersConstants, Version {
         emit NetworkUpgradeActivated(minVersion);
     }
 
+    function _updateStakeTokenizerAddress(address addr) onlyOwner external {
+        stakeTokenizerAddress = addr;
+    }
+
     function startLockedUp(uint256 epochNum) onlyOwner external {
         require(epochNum > currentSealedEpoch, "can't start in the past");
         require(firstLockedUpEpoch == 0 || firstLockedUpEpoch > currentSealedEpoch, "feature was started");
@@ -998,13 +1009,6 @@ contract Stakers is Ownable, StakersConstants, Version {
         _checkExistStaker(stakerID);
         // emit special log for node
         emit UpdatedStake(stakerID, stakers[stakerID].stakeAmount, stakers[stakerID].delegatedMe);
-    }
-
-    // _upgradeStakerStorage after stakerAddress is divided into sfcAddress and dagAddress
-    function _upgradeStakerStorage(uint256 stakerID) external {
-        require(stakers[stakerID].sfcAddress == address(0), "already updated");
-        _checkExistStaker(stakerID);
-        stakers[stakerID].sfcAddress = stakers[stakerID].dagAddress;
     }
 
     function _checkExistStaker(uint256 to) view internal {
