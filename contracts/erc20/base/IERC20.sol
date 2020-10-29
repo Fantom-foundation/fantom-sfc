@@ -74,25 +74,4 @@ interface IERC20 {
      * a call to {approve}. `value` is the new allowance.
      */
     event Approval(address indexed owner, address indexed spender, uint256 value);
-
-    /**
-     * @dev Burns a specific amount of tokens.
-     * @param value The amount of token to be burned.
-     */
-    function burn(uint256 value) external;
-
-    /**
-     * @dev Burns a specific amount of tokens from the target address and decrements allowance
-     * @param from address The address which you want to send tokens from
-     * @param value uint256 The amount of token to be burned
-     */
-    function burnFrom(address from, uint256 value) external;
-
-    /**
-     * @dev Function to mint tokens
-     * @param to The address that will receive the minted tokens.
-     * @param amount The amount of tokens to mint.
-     * @return A boolean that indicates if the operation was successful.
-     */
-    function mint(address to, uint256 amount) external returns (bool);
 }
