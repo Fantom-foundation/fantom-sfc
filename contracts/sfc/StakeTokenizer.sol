@@ -6,7 +6,7 @@ import "../erc20/base/ERC20Mintable.sol";
 import "../common/Initializable.sol";
 
 contract StakeTokenizer is Ownable, Initializable {
-    Stakers internal sfc = Stakers(address(0xFC00FACE00000000000000000000000000000000));
+    Stakers internal sfc;
 
     mapping(address => mapping(uint256 => uint256)) public outstandingSFTM;
 
@@ -14,6 +14,7 @@ contract StakeTokenizer is Ownable, Initializable {
 
     function initialize() public initializer {
         _transferOwnership(msg.sender);
+        sfc = Stakers(address(0xFC00FACE00000000000000000000000000000000));
     }
 
     function _updateSFTMTokenAddress(address addr) onlyOwner external {
