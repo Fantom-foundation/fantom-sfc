@@ -12,7 +12,7 @@ contract StakeTokenizer is Ownable, Initializable {
 
     address public sFTMTokenAddress;
 
-    function initialize() internal initializer {
+    function initialize() public initializer {
         _transferOwnership(msg.sender);
     }
 
