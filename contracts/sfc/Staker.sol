@@ -1,9 +1,9 @@
 pragma solidity ^0.5.0;
 
-import "./SafeMath.sol";
 import "./StakerConstants.sol";
 import "./StakeTokenizer.sol";
 import "../ownership/Ownable.sol";
+import "../common/SafeMath.sol";
 import "../version/Version.sol";
 
 /**

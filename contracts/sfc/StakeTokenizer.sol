@@ -1,7 +1,8 @@
 pragma solidity ^0.5.0;
 
 import "./Staker.sol";
-import "../erc20/IERC20.sol";
+import "../erc20/base/ERC20Burnable.sol";
+import "../erc20/base/ERC20Mintable.sol";
 import "../common/Initializable.sol";
 
 contract StakeTokenizer is Ownable, Initializable {
@@ -43,7 +44,7 @@ contract StakeTokenizer is Ownable, Initializable {
         outstandingSFTM[msg.sender][stakerID] -= amount;
 
         // It's important that we burn after updating outstandingSFTM (protection against Re-Entrancy)
-        IERC20(sFTMTokenAddress).burnFrom(msg.sender, amount);
+        ERC20Burnable(sFTMTokenAddress).burnFrom(msg.sender, amount);
     }
 
     function mintSFTM(uint256 toStakerID) external {
@@ -56,7 +57,7 @@ contract StakeTokenizer is Ownable, Initializable {
         }
 
         // It's important that we mint after updating outstandingSFTM (protection against Re-Entrancy)
-        require(IERC20(sFTMTokenAddress).mint(msg.sender, diff), "failed to mint sFTM");
+        require(ERC20Mintable(sFTMTokenAddress).mint(msg.sender, diff), "failed to mint sFTM");
     }
 
     function allowedToWithdrawStake(address sender, uint256 stakerID) public view returns(bool) {
