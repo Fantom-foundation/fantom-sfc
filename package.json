@@ -7,7 +7,7 @@
     "eslint": "eslint test/ migrations/",
     "solium": "solium --dir contracts",
     "build": "truffle build",
-    "test": "truffle test",
+    "test": "((ganache-cli --gasLimit=0x1fffffffffffff --allowUnlimitedContractSize -e 1000000000) 2>&1 > /dev/null &) && truffle test && kill $(ps -ef | grep ganache | grep -v grep | awk '{print $2}')",
     "truffle": "truffle",
     "flatten": "rm -rf contracts/Flattened.sol && truffle-flattener contracts/sfc/Staker.sol >> contracts/Flattened.sol"
   },
