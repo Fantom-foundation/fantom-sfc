@@ -11,6 +11,9 @@ The essential:
 - If validator is confirmed to be a cheater, then only a flag is written into SFC storage by consensus. SFC checks this flag and doesn't withdraw stake/delegation during `withdraw` operation if flag is set.
 - Validation staker is allowed to increase his stake, but not decrease (only allowed to withdraw the whole stake).
 
+# Prerequisite
+1. Install `ganache-cli`
+
 # Compile
 
 1. Install solc 0.5.12
