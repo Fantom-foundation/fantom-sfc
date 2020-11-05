@@ -55,7 +55,7 @@ Compiling your contracts...
 
   Contract: SFC
     Delegation migration tests
-	gas used for sfc deploying: 4913921
+	gas used for sfc deploying: 4962665
       ✓ should auto migrate legacy deposition to new model (1931ms)
       ✓ should manually migrate legacy deposition to new model (371ms)
       ✓ should not call calcDelegationRewards while delegation is in the legacy model (373ms)
