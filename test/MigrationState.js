@@ -12,6 +12,7 @@ const { ZERO_ADDRESS } = constants;
 
 const assertEqual = (a, b) => assert.isTrue(Object.is(a, b), `Expected ${a.toString()} to equal ${b.toString()}`);
 
+const StakeTokenizer = artifacts.require('TestStakeTokenizer');
 const LegacyStaker = artifacts.require('LegacyStaker');
 const Factory = artifacts.require('Factory');
 
@@ -40,6 +41,8 @@ contract('SFC', async ([firstStaker, secondStaker, firstDepositor, secondDeposit
     beforeEach(async () => {
       this.firstEpoch = 0;
       this.stakers = await LegacyStaker.new(this.firstEpoch);
+      const dummyStakeTokenizer = await StakeTokenizer.new();
+      this.stakers._updateStakeTokenizerAddress(dummyStakeTokenizer.address);
       this.validatorComission = new BN('150000'); // 0.15
     });
 
