@@ -7,6 +7,7 @@ const {
 } = require('openzeppelin-test-helpers');
 const {expect} = require('chai');
 
+const StakeTokenizer = artifacts.require('TestStakeTokenizer');
 const UnitTestStakers = artifacts.require('UnitTestStakers');
 const getDeposition = async (depositor, to) => this.stakers.delegations.call(depositor, to);
 const getStaker = async (stakerID) => this.stakers.stakers.call(stakerID);
@@ -15,6 +16,8 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
   beforeEach(async () => {
     this.firstEpoch = 0;
     this.stakers = await UnitTestStakers.new(this.firstEpoch);
+    const dummyStakeTokenizer = await StakeTokenizer.new();
+    this.stakers._updateStakeTokenizerAddress(dummyStakeTokenizer.address);
     this.validatorComission = new BN('150000'); // 0.15
   });
 
