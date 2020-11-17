@@ -123,11 +123,9 @@ contract Stakers is Ownable, StakersConstants, Version {
     uint256 public slashedDelegationsTotalAmount;
     uint256 public slashedStakeTotalAmount;
 
-    mapping(address => Delegation) public legacyDelegations; // delegator address -> delegation
-
     uint256 private deleted0;
-
     uint256 private deleted1;
+    uint256 private deleted2;
 
     struct StashedRewards {
         uint256 amount;
@@ -246,7 +244,6 @@ contract Stakers is Ownable, StakersConstants, Version {
     event CreatedDelegation(address indexed delegator, uint256 indexed toStakerID, uint256 amount);
 
     function _createDelegation(address delegator, uint256 to) internal {
-        _checkAndUpgradeDelegationStorage(delegator);
         _checkActiveStaker(to);
         require(msg.value >= minDelegation(), "insufficient amount");
         require(delegations[delegator][to].amount == 0, "delegation already exists");
@@ -510,7 +507,6 @@ contract Stakers is Ownable, StakersConstants, Version {
 
     function _claimDelegationRewards(uint256 maxEpochs, uint256 toStakerID, bool compound) internal {
         address payable delegator = msg.sender;
-        _checkAndUpgradeDelegationStorage(delegator);
         Delegation storage delegation = delegations[delegator][toStakerID];
         _checkNotDeactivatedDelegation(delegator, toStakerID);
         (_RewardsSet memory rewards, uint256 fromEpoch, uint256 untilEpoch) = _calcDelegationLockupRewards(delegator, toStakerID, 0, maxEpochs, compound);
@@ -696,7 +692,6 @@ contract Stakers is Ownable, StakersConstants, Version {
     // prepareToWithdrawDelegation starts delegation withdrawal
     function prepareToWithdrawDelegation(uint256 toStakerID) external {
         address delegator = msg.sender;
-        _checkAndUpgradeDelegationStorage(delegator);
         Delegation storage delegation = delegations[delegator][toStakerID];
         _checkNotDeactivatedDelegation(delegator, toStakerID);
         StakeTokenizer(stakeTokenizerAddress).checkAllowedToWithdrawStake(delegator, toStakerID);
@@ -735,7 +730,6 @@ contract Stakers is Ownable, StakersConstants, Version {
     // prepareToWithdrawDelegation starts withdrawal for a part of delegation stake
     function prepareToWithdrawDelegationPartial(uint256 wrID, uint256 toStakerID, uint256 amount) external {
         address payable delegator = msg.sender;
-        _checkAndUpgradeDelegationStorage(delegator);
         Delegation storage delegation = delegations[delegator][toStakerID];
         _checkNotDeactivatedDelegation(delegator, toStakerID);
         StakeTokenizer(stakeTokenizerAddress).checkAllowedToWithdrawStake(delegator, toStakerID);
@@ -785,7 +779,6 @@ contract Stakers is Ownable, StakersConstants, Version {
     // withdrawDelegation finalises delegation withdrawal
     function withdrawDelegation(uint256 toStakerID) external {
         address payable delegator = msg.sender;
-        _checkAndUpgradeDelegationStorage(delegator);
         Delegation memory delegation = delegations[delegator][toStakerID];
         require(delegation.deactivatedTime != 0, "delegation wasn't deactivated");
         if (stakers[toStakerID].stakeAmount != 0) {
@@ -914,7 +907,6 @@ contract Stakers is Ownable, StakersConstants, Version {
     function lockUpDelegation(uint256 lockDuration, uint256 toStakerID) external {
         require(isLockingFeatureActive(currentEpoch()), "feature was not activated");
         address delegator = msg.sender;
-        _checkAndUpgradeDelegationStorage(delegator);
         _checkExistDelegation(delegator, toStakerID);
         _checkActiveStaker(toStakerID);
         require(lockDuration >= minLockupDuration() && lockDuration <= maxLockupDuration(), "incorrect duration");
@@ -1020,17 +1012,5 @@ contract Stakers is Ownable, StakersConstants, Version {
         require(paidUntilEpoch < fromEpoch, "epoch is already paid");
         require(fromEpoch <= currentSealedEpoch, "future epoch");
         require(untilEpoch >= fromEpoch, "no epochs claimed");
-    }
-
-    function _checkAndUpgradeDelegationStorage(address delegator) internal {
-        if (legacyDelegations[delegator].amount != 0) {
-            delegations[delegator][legacyDelegations[delegator].toStakerID] = legacyDelegations[delegator];
-            delete legacyDelegations[delegator];
-        }
-    }
-
-    function _upgradeDelegationStorage(address delegator) external {
-        require(legacyDelegations[delegator].amount != 0, "doesn't exist or already upgraded");
-        _checkAndUpgradeDelegationStorage(delegator);
     }
 }
