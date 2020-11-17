@@ -43,7 +43,7 @@ Compiling your contracts...
 > Compiling ./contracts/sfc/SafeMath.sol
 > Compiling ./contracts/sfc/Staker.sol
 > Compiling ./contracts/sfc/StakerConstants.sol
-> Compiling ./contracts/test/LegacyStaker.sol
+> Compiling ./contracts/test/TestStakeTokenizer.sol
 > Compiling ./contracts/test/UnitTestStakers.sol
 > Compiling ./contracts/upgradeability/Address.sol
 > Compiling ./contracts/upgradeability/BaseUpgradeabilityProxy.sol
@@ -54,47 +54,40 @@ Compiling your contracts...
 
 
   Contract: SFC
-    Delegation migration tests
-	gas used for sfc deploying: 4962665
-      ✓ should auto migrate legacy deposition to new model (1931ms)
-      ✓ should manually migrate legacy deposition to new model (371ms)
-      ✓ should not call calcDelegationRewards while delegation is in the legacy model (373ms)
-
-  Contract: SFC
     Locking stake tests
-      ✓ should start "locked stake" feature (441ms)
-      ✓ should calc ValidatorEpochReward correctly after locked up started (940ms)
-      ✓ should lock stake (1824ms)
-      ✓ should lock stake with right duration (497ms)
-      ✓ should not call prepareToWithdrawStake, until locked time is passed (376ms)
-      ✓ should not call prepareToWithdrawStakePartial, until locked time is passed (389ms)
-      ✓ should lock delegation (1906ms)
-      ✓ should lock delegation with right duration (719ms)
-      ✓ should subtract penalty if prepareToWithdrawDelegation will call earlier than locked time is passed (987ms)
-      ✓ should adjust penalty if penalty is bigger than delegated stake (609ms)
-      ✓ should subtract penalty if prepareToWithdrawDelegationPartial is called earlier than locked time is passed (1022ms)
-      ✓ should claim lockup rewards (2843ms)
-      ✓ should claim compound rewards (670ms)
-      ✓ should claim compound rewards epoch-by-epoch (508ms)
+      ✓ should start "locked stake" feature (585ms)
+      ✓ should calc ValidatorEpochReward correctly after locked up started (1218ms)
+      ✓ should lock stake (2394ms)
+      ✓ should lock stake with right duration (729ms)
+      ✓ should lock delegation (1920ms)
+      ✓ should lock delegation with right duration (834ms)
+      ✓ should subtract penalty if prepareToWithdrawDelegation will be called earlier than lockup period is passed (1033ms)
+      ✓ should subtract penalty if prepareToWithdrawStake will be called earlier than lockup period is passed (1241ms)
+      ✓ should subtract penalty if prepareToWithdrawStakePartial will be called earlier than lockup period is passed (1248ms)
+      ✓ should adjust penalty if penalty is bigger than delegated stake (612ms)
+      ✓ should subtract penalty if prepareToWithdrawDelegationPartial is called earlier than lockup period is passed (1003ms)
+      ✓ should claim lockup rewards (2598ms)
+      ✓ should claim compound rewards (798ms)
+      ✓ should claim compound rewards epoch-by-epoch (543ms)
 
   Contract: SFC
     Methods tests
-      ✓ checking Staker parameters (122ms)
-      ✓ checking createStake function (435ms)
-      ✓ checking increaseStake function (222ms)
-      ✓ checking createDelegation function (391ms)
-      ✓ checking createDelegation function to several stakers (482ms)
-      ✓ checking calcRawValidatorEpochReward function (316ms)
-      ✓ checking epoch snapshot logic (130ms)
-      ✓ checking calcValidatorEpochReward function (405ms)
-      ✓ checking calcDelegationEpochReward function (356ms)
-      ✓ checking claimDelegationRewards function (555ms)
-      ✓ checking claimValidatorRewards function (340ms)
-      ✓ checking prepareToWithdrawStake function (179ms)
-      ✓ checking withdrawStake function (771ms)
-      ✓ checking prepareToWithdrawDelegation function (294ms)
-      ✓ checking withdrawDelegation function (1299ms)
+      ✓ checking Staker parameters (124ms)
+      ✓ checking createStake function (408ms)
+      ✓ checking increaseStake function (240ms)
+      ✓ checking createDelegation function (402ms)
+      ✓ checking createDelegation function to several stakers (481ms)
+      ✓ checking calcRawValidatorEpochReward function (304ms)
+      ✓ checking epoch snapshot logic (158ms)
+      ✓ checking calcValidatorEpochReward function (404ms)
+      ✓ checking calcDelegationEpochReward function (354ms)
+      ✓ checking claimDelegationRewards function (524ms)
+      ✓ checking claimValidatorRewards function (318ms)
+      ✓ checking prepareToWithdrawStake function (213ms)
+      ✓ checking withdrawStake function (748ms)
+      ✓ checking prepareToWithdrawDelegation function (279ms)
+      ✓ checking withdrawDelegation function (1266ms)
 
 
-  32 passing (24s)
+  29 passing (26s)
 ```
