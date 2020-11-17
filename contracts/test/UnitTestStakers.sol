@@ -44,7 +44,6 @@ contract UnitTestStakers is Stakers {
     // Increase msg.sender's delegation by msg.value
     function increaseDelegation(uint256 to) external payable {
         address delegator = msg.sender;
-        _checkAndUpgradeDelegationStorage(delegator);
         _checkNotDeactivatedDelegation(delegator, to);
         // previous rewards must be claimed because rewards calculation depends on current delegation amount
         _checkClaimedDelegation(delegator, to);
@@ -166,12 +165,6 @@ contract UnitTestStakers is Stakers {
     }
 
     function discardDelegationRewards(uint256 toStakerID) public {
-        if (legacyDelegations[msg.sender].amount != 0) {
-            legacyDelegations[msg.sender].paidUntilEpoch = currentSealedEpoch;
-        } else if (delegations[msg.sender][toStakerID].amount != 0) {
-            delegations[msg.sender][toStakerID].paidUntilEpoch = currentSealedEpoch;
-        } else {
-            revert("delegation doesn't exist");
-        }
+        delegations[msg.sender][toStakerID].paidUntilEpoch = currentSealedEpoch;
     }
 }
