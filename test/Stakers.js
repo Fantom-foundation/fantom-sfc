@@ -34,10 +34,9 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
     });
 
     it('checking createStake function', async () => {
-      const stakerMetadata = "0x0001";
       expect(await this.stakers.stakersNum.call()).to.be.bignumber.equal(new BN('0'));
       await this.stakers._createStake({from: firstStaker, value: ether('2.0')});
-      await this.stakers.createStake(stakerMetadata, {from: secondStaker, value: ether('1.01')});
+      await this.stakers.createStake('0x', {from: secondStaker, value: ether('1.01')});
       await expectRevert(this.stakers._createStake({from: thirdStaker, value: ether('0.99')}), 'insufficient amount');
       await expectRevert(this.stakers._createStake({from: firstStaker}), 'staker already exists');
 
@@ -49,9 +48,6 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       let secondStakerID = await this.stakers.getStakerID(secondStaker);
       expect(firstStakerID).to.be.bignumber.equal(new BN('1'));
       expect(secondStakerID).to.be.bignumber.equal(new BN('2'));
-
-      expect(await this.stakers.stakerMetadata.call(firstStakerID)).to.be.null;
-      expect(await this.stakers.stakerMetadata.call(secondStakerID)).to.be.equal(stakerMetadata);
 
       expect((await this.stakers.stakers.call(firstStakerID)).stakeAmount).to.be.bignumber.equal(ether('2.0'));
       expect((await this.stakers.stakers.call(firstStakerID)).createdEpoch).to.be.bignumber.equal(new BN('1'));

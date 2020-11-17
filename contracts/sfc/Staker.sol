@@ -127,7 +127,7 @@ contract Stakers is Ownable, StakersConstants, Version {
 
     uint256 private deleted0;
 
-    mapping(uint256 => bytes) public stakerMetadata;
+    uint256 private deleted1;
 
     struct StashedRewards {
         uint256 amount;
@@ -195,21 +195,11 @@ contract Stakers is Ownable, StakersConstants, Version {
     // Stake amount is msg.value
     // dagAddress is msg.sender (address to authenticate validator's consensus messages (DAG events))
     // sfcAdrress is msg.sender (address to authenticate validator inside SFC contract)
-    function createStake(bytes memory metadata) public payable {
-        _createStake(msg.sender, msg.sender, msg.value, metadata);
+    function createStake(bytes memory) public payable {
+        _createStake(msg.sender, msg.sender, msg.value);
     }
 
-    // Create new validator
-    // Stake amount is msg.value
-    // Metadata is an arbitrary bytes array. Metadata isn't interpreted by the SFC contract.
-    // dagAddress is msg.sender (address to authenticate validator's consensus messages (DAG events))
-    // sfcAdrress is msg.sender (address to authenticate validator inside SFC contract)
-    function createStakeWithAddresses(address dagAddress, address sfcAddress, bytes memory metadata) public payable {
-        require(dagAddress != address(0) && sfcAddress != address(0), "invalid address");
-        _createStake(dagAddress, sfcAddress, msg.value, metadata);
-    }
-
-    function _createStake(address dagAddress, address sfcAddress, uint256 amount, bytes memory metadata) internal {
+    function _createStake(address dagAddress, address sfcAddress, uint256 amount) internal {
         require(stakerIDs[dagAddress] == 0 && stakerIDs[sfcAddress] == 0, "staker already exists");
         require(amount >= minStake(), "insufficient amount");
 
@@ -226,14 +216,6 @@ contract Stakers is Ownable, StakersConstants, Version {
         stakersNum++;
         stakeTotalAmount = stakeTotalAmount.add(amount);
         emit CreatedStake(stakerID, dagAddress, amount);
-
-        if (metadata.length != 0) {
-            updateStakerMetadata(metadata);
-        }
-
-        if (dagAddress != sfcAddress) {
-            emit UpdatedStakerSfcAddress(stakerID, dagAddress, sfcAddress);
-        }
     }
 
     function _sfcAddressToStakerID(address sfcAddress) public view returns (uint256) {
@@ -245,49 +227,6 @@ contract Stakers is Ownable, StakersConstants, Version {
             return 0;
         }
         return stakerID;
-    }
-
-    event UpdatedStakerSfcAddress(uint256 indexed stakerID, address indexed oldSfcAddress, address indexed newSfcAddress);
-
-    // update validator's SFC authentication address
-    function updateStakerSfcAddress(address newSfcAddress) external {
-        address oldSfcAddress = msg.sender;
-
-        require(oldSfcAddress != newSfcAddress, "the same address");
-
-        uint256 stakerID = _sfcAddressToStakerID(oldSfcAddress);
-        _checkExistStaker(stakerID);
-        require(stakerIDs[newSfcAddress] == 0 || stakerIDs[newSfcAddress] == stakerID, "address already used");
-
-        // update address
-        stakers[stakerID].sfcAddress = newSfcAddress;
-        delete stakerIDs[oldSfcAddress];
-
-        // update addresses index
-        stakerIDs[newSfcAddress] = stakerID;
-        // it's possible dagAddress == oldSfcAddress
-        stakerIDs[stakers[stakerID].dagAddress] = stakerID;
-
-        // redirect rewards stash
-        if (rewardsStash[oldSfcAddress][0].amount != 0) {
-            rewardsStash[newSfcAddress][0] = rewardsStash[oldSfcAddress][0];
-            delete rewardsStash[oldSfcAddress][0];
-        }
-
-        emit UpdatedStakerSfcAddress(stakerID, oldSfcAddress, newSfcAddress);
-    }
-
-    event UpdatedStakerMetadata(uint256 indexed stakerID);
-
-    // updateStakerMetadata updates validator's metadata.
-    // Metadata is an arbitrary bytes array. Metadata isn't interpreted by the SFC contract.
-    function updateStakerMetadata(bytes memory metadata) public {
-        uint256 stakerID = _sfcAddressToStakerID(msg.sender);
-        _checkExistStaker(stakerID);
-        require(metadata.length <= maxStakerMetadataSize(), "too big metadata");
-        stakerMetadata[stakerID] = metadata;
-
-        emit UpdatedStakerMetadata(stakerID);
     }
 
     event IncreasedStake(uint256 indexed stakerID, uint256 newAmount, uint256 diff);
@@ -730,7 +669,6 @@ contract Stakers is Ownable, StakersConstants, Version {
         uint256 status = stakers[stakerID].status;
         bool isCheater = status & CHEATER_MASK != 0;
         delete stakers[stakerID];
-        delete stakerMetadata[stakerID];
         delete stakerIDs[stakerSfcAddr];
         delete stakerIDs[stakerDagAddr];
 
