@@ -311,8 +311,28 @@ contract Stakers is Ownable, StakersConstants, Version {
         return baseReward.add(txReward);
     }
 
-    function _calcDelegationPenalty(address delegator, uint256 toStakerID, uint256 withdrawalAmount, uint256 delegationAmount) internal view returns (uint256) {
-        return delegationEarlyWithdrawalPenalty[delegator][toStakerID].mul(withdrawalAmount).div(delegationAmount);
+    function _calcDelegationLockupPenalty(address delegator, uint256 toStakerID, uint256 withdrawalAmount, uint256 delegationAmount) internal view returns (uint256) {
+        uint256 penalty = delegationEarlyWithdrawalPenalty[delegator][toStakerID].mul(withdrawalAmount).div(delegationAmount);
+        if (penalty >= withdrawalAmount) {
+            penalty = withdrawalAmount.sub(1);
+        }
+        return penalty;
+    }
+
+    function calcValidatorLockupPenalty(uint256 stakerID, uint256 withdrawalAmount) public view returns (uint256) {
+        if (!isStakeLockedUp(stakerID)) {
+            return 0;
+        }
+        uint256 rewardRateEstimation = 142 * RATIO_UNIT / 1000; // 14.2% per maximum lockup duration
+        uint256 lockupDuration = lockedStakes[stakerID].duration;
+        uint256 lockupStart = lockedStakes[stakerID].endTime.sub(lockupDuration);
+        uint256 fullRewardEstimation = withdrawalAmount.mul(rewardRateEstimation).mul(block.timestamp.sub(lockupStart)).div(maxLockupDuration()).div(RATIO_UNIT);
+        _RewardsSet memory rewardsEstimation = _calcLockupReward(fullRewardEstimation, true, true, lockupDuration);
+        uint256 penalty = rewardsEstimation.lockupBaseReward / 2 + rewardsEstimation.lockupExtraReward;
+        if (penalty >= withdrawalAmount) {
+            penalty = withdrawalAmount.sub(1);
+        }
+        return penalty;
     }
 
     // getValidatorRewardRatio returns ratio of full rewards which may be claimed by validator in a given epoch
@@ -609,8 +629,13 @@ contract Stakers is Ownable, StakersConstants, Version {
         uint256 stakerID = _sfcAddressToStakerID(stakerSfcAddr);
         _checkNotDeactivatedStaker(stakerID);
         _checkClaimedStaker(stakerID);
-        require(!isStakeLockedUp(stakerID), "stake is locked");
         StakeTokenizer(stakeTokenizerAddress).checkAllowedToWithdrawStake(stakerSfcAddr, stakerID);
+
+        uint256 stakeAmount = stakers[stakerID].stakeAmount;
+        uint256 penalty = calcValidatorLockupPenalty(stakerID, stakeAmount);
+        // validator will receive less funds on withdrawal if penalty > 0
+        stakers[stakerID].stakeAmount -= penalty;
+        stakeTotalAmount -= penalty;
 
         stakers[stakerID].deactivatedEpoch = currentEpoch();
         stakers[stakerID].deactivatedTime = block.timestamp;
@@ -626,10 +651,11 @@ contract Stakers is Ownable, StakersConstants, Version {
         uint256 stakerID = _sfcAddressToStakerID(stakerSfcAddr);
         _checkNotDeactivatedStaker(stakerID);
         _checkClaimedStaker(stakerID);
-        require(!isStakeLockedUp(stakerID), "stake is locked");
         StakeTokenizer(stakeTokenizerAddress).checkAllowedToWithdrawStake(stakerSfcAddr, stakerID);
         // avoid confusing wrID and amount
         require(amount >= minStakeDecrease(), "too small amount");
+
+        uint256 penalty = calcValidatorLockupPenalty(stakerID, amount);
 
         // don't allow to withdraw full as a request, because amount==0 originally meant "not existing"
         uint256 totalAmount = stakers[stakerID].stakeAmount;
@@ -640,7 +666,8 @@ contract Stakers is Ownable, StakersConstants, Version {
 
         stakers[stakerID].stakeAmount -= amount;
         withdrawalRequests[stakerSfcAddr][wrID].stakerID = stakerID;
-        withdrawalRequests[stakerSfcAddr][wrID].amount = amount;
+        // validator will receive less funds on withdrawal if penalty > 0
+        withdrawalRequests[stakerSfcAddr][wrID].amount = amount - penalty;
         withdrawalRequests[stakerSfcAddr][wrID].epoch = currentEpoch();
         withdrawalRequests[stakerSfcAddr][wrID].time = block.timestamp;
 
@@ -708,10 +735,7 @@ contract Stakers is Ownable, StakersConstants, Version {
 
         uint256 penalty = 0;
         if (isDelegationLockedUp(delegator, toStakerID)) {
-            penalty = _calcDelegationPenalty(delegator, toStakerID, delegationAmount, delegationAmount);
-            if (penalty >= delegationAmount) {
-                penalty = delegationAmount - 1;
-            }
+            penalty = _calcDelegationLockupPenalty(delegator, toStakerID, delegationAmount, delegationAmount);
             // forgive penalty
             delegationEarlyWithdrawalPenalty[delegator][toStakerID] -= penalty;
         }
@@ -746,10 +770,7 @@ contract Stakers is Ownable, StakersConstants, Version {
 
         uint256 penalty = 0;
         if (isDelegationLockedUp(delegator, toStakerID)) {
-            penalty = _calcDelegationPenalty(delegator, toStakerID, amount, totalAmount);
-            if (penalty >= amount) {
-                penalty = amount - 1;
-            }
+            penalty = _calcDelegationLockupPenalty(delegator, toStakerID, amount, totalAmount);
             // forgive penalty
             delegationEarlyWithdrawalPenalty[delegator][toStakerID] -= penalty;
         }

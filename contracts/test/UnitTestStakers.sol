@@ -155,7 +155,7 @@ contract UnitTestStakers is Stakers {
     }
 
     function calcDelegationPenalty(address delegator, uint256 toStakerID, uint256 withdrawalAmount) external view returns (uint256) {
-        return _calcDelegationPenalty(delegator, toStakerID, withdrawalAmount, delegations[delegator][toStakerID].amount);
+        return _calcDelegationLockupPenalty(delegator, toStakerID, withdrawalAmount, delegations[delegator][toStakerID].amount);
     }
 
     function discardValidatorRewards() public {
