@@ -127,13 +127,6 @@ contract StakersConstants {
         return 3;
     }
 
-    /**
-     * @dev maximum size of metadata for staker
-     */
-    function maxStakerMetadataSize() public pure returns (uint256) {
-        return 256;
-    }
-
     event UpdatedBaseRewardPerSec(uint256 value);
     event UpdatedGasPowerAllocationRate(uint256 short, uint256 long);
     event UpdatedOfflinePenaltyThreshold(uint256 blocksNum, uint256 period);
