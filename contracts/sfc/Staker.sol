@@ -430,9 +430,7 @@ contract Stakers is Ownable, StakersConstants, Version {
     function _calcDelegationLockupRewards(address delegator, uint256 toStakerID, uint256 fromEpoch, uint256 maxEpochs, bool compound) internal view returns (_RewardsSet memory, uint256, uint256) {
         Delegation memory delegation = delegations[delegator][toStakerID];
         fromEpoch = withDefault(fromEpoch, delegation.paidUntilEpoch + 1);
-        assert(delegation.deactivatedTime == 0);
-
-        if (delegation.paidUntilEpoch >= fromEpoch) {
+        if (delegation.amount == 0 || delegation.deactivatedTime != 0 || delegation.paidUntilEpoch >= fromEpoch) {
             return (_RewardsSet(0, 0, 0, 0), fromEpoch, 0);
         }
 
