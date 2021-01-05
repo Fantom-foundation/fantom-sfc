@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@openzeppelin/contracts": "^2.3.0",
-    "axios": "^0.19.2",
+    "axios": "^0.21.1",
     "ethereumjs-util": "^6.2.0",
     "keythereum-pure-js": "^1.1.7",
     "web3": "^1.2.6"
