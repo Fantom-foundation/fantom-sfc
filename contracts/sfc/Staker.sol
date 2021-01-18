@@ -712,6 +712,7 @@ contract Stakers is Ownable, StakersConstants, Version {
         slashedStakeTotalAmount = slashedStakeTotalAmount.add(penalty);
 
         // It's important that we transfer after erasing (protection against Re-Entrancy)
+        require(stake > penalty, "stake is fully slashed");
         stakerSfcAddr.transfer(stake.sub(penalty));
 
         emit WithdrawnStake(stakerID, penalty);
@@ -825,6 +826,7 @@ contract Stakers is Ownable, StakersConstants, Version {
         slashedDelegationsTotalAmount = slashedDelegationsTotalAmount.add(penalty);
 
         // It's important that we transfer after erasing (protection against Re-Entrancy)
+        require(delegationAmount > penalty, "stake is fully slashed");
         delegator.transfer(delegationAmount.sub(penalty));
 
         emit WithdrawnDelegation(delegator, toStakerID, penalty);
@@ -867,6 +869,7 @@ contract Stakers is Ownable, StakersConstants, Version {
         }
 
         // It's important that we transfer after erasing (protection against Re-Entrancy)
+        require(amount > penalty, "stake is fully slashed");
         receiver.transfer(amount.sub(penalty));
 
         emit PartialWithdrawnByRequest(auth, receiver, stakerID, wrID, delegation, penalty);
