@@ -343,11 +343,13 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       await expectRevert(this.stakers.withdrawStake({from: firstStaker}), 'staker wasn\'t deactivated');
 
       await this.stakers._markValidationStakeAsCheater(secondStakerID, true);
+      await expectRevert(this.stakers.withdrawStake({from: secondStaker}), 'stake is fully slashed');
+      await this.stakers.updateSlashingRefundRatio(secondStakerID, new BN('1'));
       await this.stakers.withdrawStake({from: secondStaker});
       expect(await this.stakers.stakersNum.call()).to.be.bignumber.equal(new BN('1'));
       expect(await this.stakers.stakeTotalAmount.call()).to.be.bignumber.equal(ether('1.5'));
-      expect(await this.stakers.slashedStakeTotalAmount.call()).to.be.bignumber.equal(ether('1.5'));
-      expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('3'));
+      expect(await this.stakers.slashedStakeTotalAmount.call()).to.be.bignumber.equal(ether('1.499999999999999998'));
+      expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('2.999999999999999998'));
 
       await this.stakers._markValidationStakeAsCheater(thirdStakerID, true);
       let staker = await this.stakers.stakers.call(thirdStakerID);
@@ -365,8 +367,8 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       await this.stakers.withdrawStake({from: thirdStaker});
       expect(await this.stakers.stakersNum.call()).to.be.bignumber.equal(new BN('0'));
       expect(await this.stakers.stakeTotalAmount.call()).to.be.bignumber.equal(ether('0'));
-      expect(await this.stakers.slashedStakeTotalAmount.call()).to.be.bignumber.equal(ether('2.50005'));
-      expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('2.50005'));
+      expect(await this.stakers.slashedStakeTotalAmount.call()).to.be.bignumber.equal(ether('2.500049999999999998'));
+      expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('2.500049999999999998'));
     });
 
     it('checking prepareToWithdrawDelegation function', async () => {
@@ -429,11 +431,13 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
 
       // check withdrawal with a cheater staker
       await this.stakers._markValidationStakeAsCheater(firstStakerID, true);
+      await expectRevert(this.stakers.withdrawDelegation(firstStakerID, {from: secondDepositor}), 'stake is fully slashed');
+      await this.stakers.updateSlashingRefundRatio(firstStakerID, new BN('1'));
       await this.stakers.withdrawDelegation(firstStakerID, {from: secondDepositor});
       expect(await this.stakers.delegationsNum.call()).to.be.bignumber.equal(new BN('1'));
       expect(await this.stakers.delegationsTotalAmount.call()).to.be.bignumber.equal(ether('1.0'));
-      expect(await this.stakers.slashedDelegationsTotalAmount.call()).to.be.bignumber.equal(ether('1.0'));
-      expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('3.0'));
+      expect(await this.stakers.slashedDelegationsTotalAmount.call()).to.be.bignumber.equal(ether('0.999999999999999999'));
+      expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('2.999999999999999999'));
 
       // check early withdrawal
       await expectRevert(this.stakers.prepareToWithdrawStake({from: firstStaker}), 'not all rewards claimed');
@@ -452,9 +456,9 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       await this.stakers.withdrawStake({from: firstStaker});
       await this.stakers.withdrawDelegation(firstStakerID, {from: thirdDepositor});
 
-      expect(await this.stakers.slashedDelegationsTotalAmount.call()).to.be.bignumber.equal(ether('2.0'));
-      expect(await this.stakers.slashedStakeTotalAmount.call()).to.be.bignumber.equal(ether('1.0'));
-      expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('3.0'));
+      expect(await this.stakers.slashedDelegationsTotalAmount.call()).to.be.bignumber.equal(ether('1.999999999999999998'));
+      expect(await this.stakers.slashedStakeTotalAmount.call()).to.be.bignumber.equal(ether('0.999999999999999999'));
+      expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('2.999999999999999997'));
     });
   });
 });
