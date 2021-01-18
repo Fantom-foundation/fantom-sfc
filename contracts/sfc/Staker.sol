@@ -163,6 +163,8 @@ contract Stakers is Ownable, StakersConstants, Version {
         uint256 burntReward;
     }
 
+    mapping(uint256 => uint256) public slashingRefundRatio; // validator ID -> (slashing refund ratio)
+
     /*
     Getters
     */
@@ -674,6 +676,13 @@ contract Stakers is Ownable, StakersConstants, Version {
         _syncStaker(stakerID);
     }
 
+    function getSlashingPenalty(uint256 amount, bool isCheater, uint256 refundRatio) internal pure returns(uint256 penalty) {
+        if (!isCheater || refundRatio >= 1e18) {
+            return 0;
+        }
+        return amount.mul(1e18 - refundRatio).div(1e18);
+    }
+
     event WithdrawnStake(uint256 indexed stakerID, uint256 penalty);
 
     // withdrawStake finalises validator withdrawal
@@ -686,9 +695,9 @@ contract Stakers is Ownable, StakersConstants, Version {
 
         address stakerDagAddr = stakers[stakerID].dagAddress;
         uint256 stake = stakers[stakerID].stakeAmount;
-        uint256 penalty = 0;
         uint256 status = stakers[stakerID].status;
         bool isCheater = status & CHEATER_MASK != 0;
+        uint256 penalty = getSlashingPenalty(stake, isCheater, slashingRefundRatio[stakerID]);
         delete stakers[stakerID];
         delete stakerIDs[stakerSfcAddr];
         delete stakerIDs[stakerDagAddr];
@@ -699,14 +708,11 @@ contract Stakers is Ownable, StakersConstants, Version {
         }
         stakersNum--;
         stakeTotalAmount = stakeTotalAmount.sub(stake);
-        // It's important that we transfer after erasing (protection against Re-Entrancy)
-        if (isCheater == false) {
-            stakerSfcAddr.transfer(stake);
-        } else {
-            penalty = stake;
-        }
 
         slashedStakeTotalAmount = slashedStakeTotalAmount.add(penalty);
+
+        // It's important that we transfer after erasing (protection against Re-Entrancy)
+        stakerSfcAddr.transfer(stake.sub(penalty));
 
         emit WithdrawnStake(stakerID, penalty);
     }
@@ -805,9 +811,9 @@ contract Stakers is Ownable, StakersConstants, Version {
             require(block.timestamp >= delegation.deactivatedTime + delegationLockPeriodTime(), "not enough time passed");
             require(currentEpoch() >= delegation.deactivatedEpoch + delegationLockPeriodEpochs(), "not enough epochs passed");
         }
-        uint256 penalty = 0;
-        bool isCheater = stakers[toStakerID].status & CHEATER_MASK != 0;
+        bool isCheater = isSlashed(toStakerID);
         uint256 delegationAmount = delegation.amount;
+        uint256 penalty = getSlashingPenalty(delegationAmount, isCheater, slashingRefundRatio[toStakerID]);
         delete delegations[delegator][toStakerID];
         delete lockedDelegations[delegator][toStakerID];
         delete delegationEarlyWithdrawalPenalty[delegator][toStakerID];
@@ -815,14 +821,11 @@ contract Stakers is Ownable, StakersConstants, Version {
         delegationsNum--;
 
         delegationsTotalAmount = delegationsTotalAmount.sub(delegationAmount);
-        // It's important that we transfer after erasing (protection against Re-Entrancy)
-        if (isCheater == false) {
-            delegator.transfer(delegationAmount);
-        } else {
-            penalty = delegationAmount;
-        }
 
         slashedDelegationsTotalAmount = slashedDelegationsTotalAmount.add(penalty);
+
+        // It's important that we transfer after erasing (protection against Re-Entrancy)
+        delegator.transfer(delegationAmount.sub(penalty));
 
         emit WithdrawnDelegation(delegator, toStakerID, penalty);
     }
@@ -846,9 +849,9 @@ contract Stakers is Ownable, StakersConstants, Version {
             require(currentEpoch() >= withdrawalRequests[auth][wrID].epoch + stakeLockPeriodEpochs(), "not enough epochs passed");
         }
 
-        uint256 penalty = 0;
-        bool isCheater = stakers[stakerID].status & CHEATER_MASK != 0;
+        bool isCheater = isSlashed(stakerID);
         uint256 amount = withdrawalRequests[auth][wrID].amount;
+        uint256 penalty = getSlashingPenalty(amount, isCheater, slashingRefundRatio[stakerID]);
         delete withdrawalRequests[auth][wrID];
 
         if (delegation) {
@@ -857,18 +860,14 @@ contract Stakers is Ownable, StakersConstants, Version {
             stakeTotalAmount = stakeTotalAmount.sub(amount);
         }
 
-        // It's important that we transfer after erasing (protection against Re-Entrancy)
-        if (isCheater == false) {
-            receiver.transfer(amount);
-        } else {
-            penalty = amount;
-        }
-
         if (delegation) {
             slashedDelegationsTotalAmount = slashedDelegationsTotalAmount.add(penalty);
         } else {
             slashedStakeTotalAmount = slashedStakeTotalAmount.add(penalty);
         }
+
+        // It's important that we transfer after erasing (protection against Re-Entrancy)
+        receiver.transfer(amount.sub(penalty));
 
         emit PartialWithdrawnByRequest(auth, receiver, stakerID, wrID, delegation, penalty);
     }
@@ -895,6 +894,13 @@ contract Stakers is Ownable, StakersConstants, Version {
 
     function _updateStakeTokenizerAddress(address addr) onlyOwner external {
         stakeTokenizerAddress = addr;
+    }
+
+    function updateSlashingRefundRatio(uint256 validatorID, uint256 refundRatio) onlyOwner external {
+        require(isSlashed(validatorID), "validator isn't slashed");
+        require(refundRatio <= 1e18, "must be less than or equal to 1.0 = 1e18");
+        slashingRefundRatio[validatorID] = refundRatio;
+        emit UpdatedSlashingRefundRatio(validatorID, refundRatio);
     }
 
     function startLockedUp(uint256 epochNum) onlyOwner external {
@@ -1025,6 +1031,10 @@ contract Stakers is Ownable, StakersConstants, Version {
 
     function isLockingFeatureActive(uint256 epoch) view internal returns (bool) {
         return firstLockedUpEpoch > 0 && epoch >= firstLockedUpEpoch;
+    }
+
+    function isSlashed(uint256 stakerID) view public returns (bool) {
+        return stakers[stakerID].status & CHEATER_MASK != 0;
     }
 
     function _checkPaidEpoch(uint256 paidUntilEpoch, uint256 fromEpoch, uint256 untilEpoch) view internal {

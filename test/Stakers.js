@@ -323,6 +323,7 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
 
       await this.stakers.prepareToWithdrawStake({from: firstStaker});
       await this.stakers.prepareToWithdrawStake({from: secondStaker});
+      await this.stakers.prepareToWithdrawStake({from: thirdStaker});
 
       await expectRevert(this.stakers.withdrawStake({from: firstStaker}), 'not enough time passed');
       time.increase(86400 * 7);
@@ -334,7 +335,7 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       expect(await this.stakers.stakersNum.call()).to.be.bignumber.equal(new BN('3'));
       expect(await this.stakers.stakeTotalAmount.call()).to.be.bignumber.equal(ether('4.5'));
       expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('4.5'));
-      this.stakers.withdrawStake({from: firstStaker});
+      await this.stakers.withdrawStake({from: firstStaker});
       expect(await this.stakers.stakersNum.call()).to.be.bignumber.equal(new BN('2'));
       expect(await this.stakers.stakeTotalAmount.call()).to.be.bignumber.equal(ether('3'));
       expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('3'));
@@ -342,7 +343,7 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       await expectRevert(this.stakers.withdrawStake({from: firstStaker}), 'staker wasn\'t deactivated');
 
       await this.stakers._markValidationStakeAsCheater(secondStakerID, true);
-      this.stakers.withdrawStake({from: secondStaker});
+      await this.stakers.withdrawStake({from: secondStaker});
       expect(await this.stakers.stakersNum.call()).to.be.bignumber.equal(new BN('1'));
       expect(await this.stakers.stakeTotalAmount.call()).to.be.bignumber.equal(ether('1.5'));
       expect(await this.stakers.slashedStakeTotalAmount.call()).to.be.bignumber.equal(ether('1.5'));
@@ -355,6 +356,17 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       await this.stakers._markValidationStakeAsCheater(thirdStakerID, false);
       staker = await this.stakers.stakers.call(thirdStakerID);
       expect(staker.status).to.be.bignumber.equal(new BN('0'));
+
+      await this.stakers._markValidationStakeAsCheater(thirdStakerID, true);
+      staker = await this.stakers.stakers.call(thirdStakerID);
+      expect(staker.status).to.be.bignumber.equal(new BN('1'));
+
+      await this.stakers.updateSlashingRefundRatio(thirdStakerID, ether('0.3333'));
+      await this.stakers.withdrawStake({from: thirdStaker});
+      expect(await this.stakers.stakersNum.call()).to.be.bignumber.equal(new BN('0'));
+      expect(await this.stakers.stakeTotalAmount.call()).to.be.bignumber.equal(ether('0'));
+      expect(await this.stakers.slashedStakeTotalAmount.call()).to.be.bignumber.equal(ether('2.50005'));
+      expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('2.50005'));
     });
 
     it('checking prepareToWithdrawDelegation function', async () => {
@@ -415,7 +427,7 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('3.0'));
       await expectRevert(this.stakers.withdrawDelegation(firstStakerID, {from: firstDepositor}), 'delegation wasn\'t deactivated');
 
-      // check withdraw with a cheater staker
+      // check withdrawal with a cheater staker
       await this.stakers._markValidationStakeAsCheater(firstStakerID, true);
       await this.stakers.withdrawDelegation(firstStakerID, {from: secondDepositor});
       expect(await this.stakers.delegationsNum.call()).to.be.bignumber.equal(new BN('1'));
