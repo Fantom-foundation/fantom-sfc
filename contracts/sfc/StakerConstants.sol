@@ -132,4 +132,5 @@ contract StakersConstants {
     event UpdatedOfflinePenaltyThreshold(uint256 blocksNum, uint256 period);
     event UpdatedMinGasPrice(uint256 minGasPrice);
     event NetworkUpgradeActivated(uint256 minVersion);
+    event UpdatedSlashingRefundRatio(uint256 indexed validatorID, uint256 refundRatio);
 }
