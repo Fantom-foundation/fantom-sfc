@@ -917,6 +917,10 @@ contract Stakers is Ownable, StakersConstants, Version {
         emit NetworkUpgradeActivated(minVersion);
     }
 
+    function _startNetworkMigration(uint256 version) onlyOwner external {
+        emit NetworkMigrationStarted(version);
+    }
+
     function _updateStakeTokenizerAddress(address addr) onlyOwner external {
         stakeTokenizerAddress = addr;
     }
