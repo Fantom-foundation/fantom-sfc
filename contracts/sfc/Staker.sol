@@ -606,9 +606,8 @@ contract Stakers is Ownable, StakersConstants, Version {
     event UnstashedRewards(address indexed auth, address indexed receiver, uint256 rewards);
 
     // Transfer the claimed rewards to account
-    function unstashRewards() external {
-        address auth = msg.sender;
-        address payable receiver = msg.sender;
+    function unstashRewards(address payable receiver) external {
+        address auth = receiver;
         uint256 rewards = rewardsStash[auth][0].amount;
         require(rewards != 0, "no rewards");
 
