@@ -690,8 +690,10 @@ contract Stakers is Ownable, StakersConstants, Version {
         address payable stakerSfcAddr = msg.sender;
         uint256 stakerID = _sfcAddressToStakerID(stakerSfcAddr);
         require(stakers[stakerID].deactivatedTime != 0, "staker wasn't deactivated");
-        require(block.timestamp >= stakers[stakerID].deactivatedTime + stakeLockPeriodTime(), "not enough time passed");
-        require(currentEpoch() >= stakers[stakerID].deactivatedEpoch + stakeLockPeriodEpochs(), "not enough epochs passed");
+        if (!isSlashed(stakerID)) {
+            require(block.timestamp >= stakers[stakerID].deactivatedTime + stakeLockPeriodTime(), "not enough time passed");
+            require(currentEpoch() >= stakers[stakerID].deactivatedEpoch + stakeLockPeriodEpochs(), "not enough epochs passed");
+        }
 
         address stakerDagAddr = stakers[stakerID].dagAddress;
         uint256 stake = stakers[stakerID].stakeAmount;
@@ -807,7 +809,7 @@ contract Stakers is Ownable, StakersConstants, Version {
         address payable delegator = msg.sender;
         Delegation memory delegation = delegations[delegator][toStakerID];
         require(delegation.deactivatedTime != 0, "delegation wasn't deactivated");
-        if (stakers[toStakerID].stakeAmount != 0) {
+        if (stakers[toStakerID].stakeAmount != 0 && !isSlashed(toStakerID)) {
             // if validator hasn't withdrawn already, then don't allow to withdraw delegation right away
             require(block.timestamp >= delegation.deactivatedTime + delegationLockPeriodTime(), "not enough time passed");
             require(currentEpoch() >= delegation.deactivatedEpoch + delegationLockPeriodEpochs(), "not enough epochs passed");
@@ -842,13 +844,15 @@ contract Stakers is Ownable, StakersConstants, Version {
         bool delegation = withdrawalRequests[auth][wrID].delegation;
 
         uint256 stakerID = withdrawalRequests[auth][wrID].stakerID;
-        if (delegation && stakers[stakerID].stakeAmount != 0) {
-            // if validator hasn't withdrawn already, then don't allow to withdraw delegation right away
-            require(block.timestamp >= withdrawalRequests[auth][wrID].time + delegationLockPeriodTime(), "not enough time passed");
-            require(currentEpoch() >= withdrawalRequests[auth][wrID].epoch + delegationLockPeriodEpochs(), "not enough epochs passed");
-        } else if (!delegation) {
-            require(block.timestamp >= withdrawalRequests[auth][wrID].time + stakeLockPeriodTime(), "not enough time passed");
-            require(currentEpoch() >= withdrawalRequests[auth][wrID].epoch + stakeLockPeriodEpochs(), "not enough epochs passed");
+        if (!isSlashed(stakerID)) {
+            if (delegation && stakers[stakerID].stakeAmount != 0) {
+                // if validator hasn't withdrawn already, then don't allow to withdraw delegation right away
+                require(block.timestamp >= withdrawalRequests[auth][wrID].time + delegationLockPeriodTime(), "not enough time passed");
+                require(currentEpoch() >= withdrawalRequests[auth][wrID].epoch + delegationLockPeriodEpochs(), "not enough epochs passed");
+            } else if (!delegation) {
+                require(block.timestamp >= withdrawalRequests[auth][wrID].time + stakeLockPeriodTime(), "not enough time passed");
+                require(currentEpoch() >= withdrawalRequests[auth][wrID].epoch + stakeLockPeriodEpochs(), "not enough epochs passed");
+            }
         }
 
         bool isCheater = isSlashed(stakerID);

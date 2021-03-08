@@ -443,16 +443,9 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       await expectRevert(this.stakers.prepareToWithdrawStake({from: firstStaker}), 'not all rewards claimed');
       await this.stakers.discardValidatorRewards({from: firstStaker});
       await this.stakers.prepareToWithdrawStake({from: firstStaker}); // deactivate staker
-      {
-        time.increase(86400 * 7);
-        await this.stakers.makeEpochSnapshots(10000, true);
-        await this.stakers.makeEpochSnapshots(10000, true);
-        await this.stakers.makeEpochSnapshots(10000, true);
-      }
       await expectRevert(this.stakers.prepareToWithdrawDelegation(firstStakerID, {from: thirdDepositor}), 'not all rewards claimed');
       await this.stakers.discardDelegationRewards(firstStakerID, {from: thirdDepositor});
       await this.stakers.prepareToWithdrawDelegation(firstStakerID, {from: thirdDepositor});
-      await expectRevert(this.stakers.withdrawDelegation(firstStakerID, {from: thirdDepositor}), 'not enough time passed');
       await this.stakers.withdrawStake({from: firstStaker});
       await this.stakers.withdrawDelegation(firstStakerID, {from: thirdDepositor});
 
