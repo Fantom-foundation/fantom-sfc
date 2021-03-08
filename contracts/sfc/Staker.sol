@@ -725,7 +725,16 @@ contract Stakers is Ownable, StakersConstants, Version {
 
     // prepareToWithdrawDelegation starts delegation withdrawal
     function prepareToWithdrawDelegation(uint256 toStakerID) external {
-        address delegator = msg.sender;
+        _prepareToWithdrawDelegation(msg.sender, toStakerID);
+    }
+
+    function prepareToWithdrawStuckDelegation(address delegator, uint256 toStakerID) onlyOwner external {
+        Delegation storage delegation = delegations[delegator][toStakerID];
+        require(delegation.paidUntilEpoch <= 1200, "delegation isn't stuck because claimed rewards recently");
+        _prepareToWithdrawDelegation(delegator, toStakerID);
+    }
+
+    function _prepareToWithdrawDelegation(address delegator, uint256 toStakerID) internal {
         Delegation storage delegation = delegations[delegator][toStakerID];
         _checkNotDeactivatedDelegation(delegator, toStakerID);
         StakeTokenizer(stakeTokenizerAddress).checkAllowedToWithdrawStake(delegator, toStakerID);
@@ -806,7 +815,16 @@ contract Stakers is Ownable, StakersConstants, Version {
 
     // withdrawDelegation finalises delegation withdrawal
     function withdrawDelegation(uint256 toStakerID) external {
-        address payable delegator = msg.sender;
+        _withdrawDelegation(msg.sender, toStakerID);
+    }
+
+    function withdrawStuckDelegation(address payable delegator, uint256 toStakerID) onlyOwner external {
+        Delegation storage delegation = delegations[delegator][toStakerID];
+        require(delegation.paidUntilEpoch <= 1200, "delegation isn't stuck because claimed rewards recently");
+        _withdrawDelegation(delegator, toStakerID);
+    }
+
+    function _withdrawDelegation(address payable delegator, uint256 toStakerID) internal {
         Delegation memory delegation = delegations[delegator][toStakerID];
         require(delegation.deactivatedTime != 0, "delegation wasn't deactivated");
         if (stakers[toStakerID].stakeAmount != 0 && !isSlashed(toStakerID)) {
