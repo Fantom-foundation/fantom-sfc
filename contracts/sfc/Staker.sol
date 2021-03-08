@@ -525,8 +525,7 @@ contract Stakers is Ownable, StakersConstants, Version {
 
     event ClaimedDelegationReward(address indexed from, uint256 indexed stakerID, uint256 reward, uint256 fromEpoch, uint256 untilEpoch);
 
-    function _claimDelegationRewards(uint256 maxEpochs, uint256 toStakerID, bool compound) internal {
-        address payable delegator = msg.sender;
+    function _claimDelegationRewards(uint256 maxEpochs, address payable delegator, uint256 toStakerID, bool compound) internal {
         Delegation storage delegation = delegations[delegator][toStakerID];
         _checkNotDeactivatedDelegation(delegator, toStakerID);
         (_RewardsSet memory rewards, uint256 fromEpoch, uint256 untilEpoch) = _calcDelegationLockupRewards(delegator, toStakerID, 0, maxEpochs, compound);
@@ -552,7 +551,13 @@ contract Stakers is Ownable, StakersConstants, Version {
     // toStakerID is a stakerID of delegation
     // maxEpochs is maximum number of epoch to calc rewards for.
     function claimDelegationRewards(uint256 maxEpochs, uint256 toStakerID) external {
-        _claimDelegationRewards(maxEpochs, toStakerID, false);
+        _claimDelegationRewards(maxEpochs, msg.sender, toStakerID, false);
+    }
+
+    function claimStuckDelegationRewards(uint256 maxEpochs, address payable delegator, uint256 toStakerID) onlyOwner external {
+        Delegation storage delegation = delegations[delegator][toStakerID];
+        require(delegation.paidUntilEpoch <= 1200, "delegation isn't stuck because claimed rewards recently");
+        _claimDelegationRewards(maxEpochs, delegator, toStakerID, false);
     }
 
     // Claim the pending rewards for a given delegator (sender)
@@ -560,7 +565,7 @@ contract Stakers is Ownable, StakersConstants, Version {
     // toStakerID is a stakerID of delegation
     // maxEpochs is maximum number of epoch to calc rewards for.
     function claimDelegationCompoundRewards(uint256 maxEpochs, uint256 toStakerID) external {
-        _claimDelegationRewards(maxEpochs, toStakerID, true);
+        _claimDelegationRewards(maxEpochs, msg.sender, toStakerID, true);
     }
 
     event ClaimedValidatorReward(uint256 indexed stakerID, uint256 reward, uint256 fromEpoch, uint256 untilEpoch);
