@@ -167,4 +167,8 @@ contract UnitTestStakers is Stakers {
     function discardDelegationRewards(uint256 toStakerID) public {
         delegations[msg.sender][toStakerID].paidUntilEpoch = currentSealedEpoch;
     }
+
+    function addStashedRewards(address addr, uint256 amount) public {
+        rewardsStash[addr][0].amount += amount;
+    }
 }
