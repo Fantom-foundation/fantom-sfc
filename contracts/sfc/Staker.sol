@@ -556,7 +556,7 @@ contract Stakers is Ownable, StakersConstants, Version {
 
     function claimStuckDelegationRewards(uint256 maxEpochs, address payable delegator, uint256 toStakerID) onlyOwner external {
         Delegation storage delegation = delegations[delegator][toStakerID];
-        require(delegation.paidUntilEpoch <= 1200, "delegation isn't stuck because claimed rewards recently");
+        require(delegation.createdEpoch <= 1200, "delegation isn't stuck because was created recently");
         _claimDelegationRewards(maxEpochs, delegator, toStakerID, false);
     }
 
@@ -734,7 +734,7 @@ contract Stakers is Ownable, StakersConstants, Version {
 
     function prepareToWithdrawStuckDelegation(address delegator, uint256 toStakerID) onlyOwner external {
         Delegation storage delegation = delegations[delegator][toStakerID];
-        require(delegation.paidUntilEpoch <= 1200, "delegation isn't stuck because claimed rewards recently");
+        require(delegation.createdEpoch <= 1200, "delegation isn't stuck because was created recently");
         _prepareToWithdrawDelegation(delegator, toStakerID);
     }
 
@@ -823,8 +823,6 @@ contract Stakers is Ownable, StakersConstants, Version {
     }
 
     function withdrawStuckDelegation(address payable delegator, uint256 toStakerID) onlyOwner external {
-        Delegation storage delegation = delegations[delegator][toStakerID];
-        require(delegation.paidUntilEpoch <= 1200, "delegation isn't stuck because claimed rewards recently");
         _withdrawDelegation(delegator, toStakerID);
     }
 
