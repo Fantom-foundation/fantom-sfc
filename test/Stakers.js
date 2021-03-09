@@ -453,5 +453,22 @@ contract('SFC', async ([firstStaker, secondStaker, thirdStaker, firstDepositor, 
       expect(await this.stakers.slashedStakeTotalAmount.call()).to.be.bignumber.equal(ether('0.999999999999999999'));
       expect(await balance.current(this.stakers.address)).to.be.bignumber.equal(ether('2.999999999999999997'));
     });
+
+    it('checking unstashRewards function', async () => {
+      await this.stakers._createStake({from: firstStaker, value: ether('1.0')});
+      await this.stakers.addStashedRewards(firstStaker, ether('0.5'));
+
+      const balanceBefore = await balance.current(firstStaker);
+
+      await expectRevert(this.stakers.unstashRewards(secondStaker, {from: secondStaker}), 'no rewards');
+      await this.stakers.unstashRewards(firstStaker, {from: secondStaker});
+      await expectRevert(this.stakers.unstashRewards(firstStaker, {from: secondStaker}), 'no rewards');
+
+      let base = ether('0.5');
+      let fee = ether('0.005');
+      const balanceAfter = await balance.current(firstStaker);
+      expect(balanceAfter.sub(balanceBefore)).to.be.bignumber.least(base.sub(fee));
+      expect(balanceAfter.sub(balanceBefore)).to.be.bignumber.most(base);
+    });
   });
 });
