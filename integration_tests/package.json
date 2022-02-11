@@ -12,7 +12,7 @@
     "flatten": "rm -rf contracts/Flattened.sol && truffle-flattener contracts/Staker.sol >> contracts/Flattened.sol"
   },
   "dependencies": {
-    "@openzeppelin/contracts": "^2.3.0",
+    "@openzeppelin/contracts": "^4.4.2",
     "axios": "^0.19.2",
     "ethereumjs-util": "^6.2.0",
     "keythereum-pure-js": "^1.1.7",
